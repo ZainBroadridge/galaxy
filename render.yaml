@@ -1,0 +1,53 @@
+services:
+  - type: web
+    name: mini-galaxy-pv-v2
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm install --omit=dev --workspace ./apps/api --workspace ./packages/shared --no-audit --no-fund
+    startCommand: npm run db:migrate && npm run start --workspace ./apps/api
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: NODE_ENV
+        value: production
+      - key: CHAIN_ID
+        value: "80002"
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_DIRECT
+        sync: false
+      - key: RPC_HTTP_URL
+        sync: false
+      - key: RELAYER_PRIVATE_KEY
+        sync: false
+      - key: BLOCK_EXPLORER_URL
+        value: https://amoy.polygonscan.com
+      - key: ETHERSCAN_API_KEY
+        sync: false
+      - key: VERIFY_CONTRACTS
+        value: "true"
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SESSION_TTL_HOURS
+        value: "24"
+      - key: AUTH_NONCE_TTL_MINUTES
+        value: "10"
+      - key: MAX_EVENTS_PER_WALLET_PER_DAY
+        value: "5"
+      - key: JOB_LOCK_MINUTES
+        value: "8"
+      - key: JOB_IDLE_DELAY_MS
+        value: "1500"
+      - key: TRANSACTION_WAIT_TIMEOUT_MS
+        value: "180000"
+      - key: ALCHEMY_PAGE_SIZE
+        value: "1000"
+      - key: ALCHEMY_MAX_PAGES
+        value: "100"
+      - key: ALCHEMY_MAX_RETRIES
+        value: "6"
+      - key: CONFIRMATION_BLOCKS
+        value: "8"

@@ -1,0 +1,37 @@
+{
+  "name": "mini-galaxy-pv-v2",
+  "version": "2.1.0",
+  "private": true,
+  "description": "Lightweight proxy voting on Polygon Amoy: one VoteEvent contract per event, Neon snapshots, one Render web service with a durable Neon job runner, Reown AppKit, and dApp-triggered MetaMask Snap communications.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.18.0 <23"
+  },
+  "scripts": {
+    "compile": "npm run build --workspace ./packages/contracts",
+    "test": "npm run test --workspace ./packages/contracts && npm run test --workspace ./packages/shared",
+    "build:web": "npm run build --workspace ./apps/web",
+    "build:snap": "npm run build --workspace ./apps/snap",
+    "build": "npm run compile && npm run build:web && npm run build:snap",
+    "db:migrate": "npm run migrate --workspace ./apps/api",
+    "db:reset": "npm run reset --workspace ./apps/api",
+    "dev:api": "npm run dev --workspace ./apps/api",
+    "dev:web": "npm run dev --workspace ./apps/web",
+    "dev:snap": "npm run dev --workspace ./apps/snap",
+    "dev": "concurrently -k -n API,WEB \"npm run dev:api\" \"npm run dev:web\"",
+    "check:syntax": "node scripts/check-syntax.mjs",
+    "check:imports": "node scripts/check-imports.mjs",
+    "check:structure": "node scripts/validate-structure.mjs",
+    "audit:architecture": "node scripts/audit-project.mjs",
+    "check": "npm run check:syntax && npm run check:imports && npm run check:structure && npm run audit:architecture && npm run compile && npm run test && npm run build:web && npm run build:snap",
+    "snap:configure": "node scripts/configure-snap.mjs",
+    "clean": "npm run clean --workspace ./packages/contracts && node scripts/clean.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "9.2.1",
+    "typescript": "5.8.3"
+  }
+}

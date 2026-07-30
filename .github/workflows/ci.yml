@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.18.0
+      - run: npm install --include=dev --no-audit --no-fund
+      - run: npm run check
+      - name: Ensure generated contract artifacts are committed
+        run: git diff --exit-code -- packages/contracts/generated
