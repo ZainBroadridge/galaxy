@@ -5,7 +5,7 @@ services:
     plan: free
     region: singapore
     buildCommand: npm install --omit=dev --workspace ./apps/api --workspace ./packages/shared --no-audit --no-fund
-    startCommand: startCommand: npm run start --workspace ./apps/api
+    startCommand: npm run start --workspace ./apps/api
     healthCheckPath: /health
     autoDeployTrigger: checksPass
     envVars:
