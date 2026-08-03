@@ -6,19 +6,44 @@ import { useWallet } from '../wallet.jsx';
 
 export default function ResultsPage() {
   const { account } = useWallet();
-  const results = useLoad(() => api(`/v1/dashboard/results${account ? `?wallet=${account}` : ''}`, { auth: false }), [account]);
-  return <Page title="Results" intro="Final tallies read directly from each completed VoteEvent contract."
-    actions={<button className="button secondary" onClick={() => results.reload().catch(() => {})}>Refresh</button>}>
+  const results = useLoad(
+    () => (account
+      ? api(`/v1/dashboard/results?wallet=${encodeURIComponent(account)}`, { auth: false })
+      : Promise.resolve([])),
+    [account],
+  );
+
+  return <Page title="Results" intro="Final tallies for events you created or voted in."
+    actions={<button className="button secondary" onClick={() => results.reload().catch(() => {})} disabled={!account}>Refresh</button>}>
     <ErrorBox error={results.error} />
-    {results.loading ? <Spinner /> : results.data?.length ? <div className="card-grid">{results.data.map((event) => <EventCard key={event.id} event={event} to={`/results/${event.id}`} action="View results" />)}</div> : <Panel><Empty>No completed events.</Empty></Panel>}
+    {!account
+      ? <Panel><Empty>Connect the wallet that created or voted in an event to view its results.</Empty></Panel>
+      : results.loading
+        ? <Spinner />
+        : results.data?.length
+          ? <div className="card-grid">{results.data.map((event) => <EventCard key={event.id} event={event} to={`/results/${event.id}`} action="View results" />)}</div>
+          : <Panel><Empty>No completed events for this wallet.</Empty></Panel>}
   </Page>;
 }
 
 export function EventResultsPage() {
   const { eventId } = useParams();
-  const result = useLoad(() => api(`/v1/events/${eventId}/results`, { auth: false }), [eventId]);
+  const { account } = useWallet();
+  const result = useLoad(
+    () => (account
+      ? api(`/v1/events/${eventId}/results?wallet=${encodeURIComponent(account)}`, { auth: false })
+      : Promise.resolve(null)),
+    [account, eventId],
+  );
+
+  if (!account) {
+    return <Page title="Results" actions={<Link className="button secondary" to="/results">Back</Link>}>
+      <Panel><Empty>Connect the creator or participating wallet to view these results.</Empty></Panel>
+    </Page>;
+  }
   if (result.loading) return <Page title="Results"><Spinner label="Reading contract tallies" /></Page>;
   if (result.error) return <Page title="Results"><ErrorBox error={result.error} /></Page>;
+  if (!result.data) return <Page title="Results"><Panel><Empty>No results are available.</Empty></Panel></Page>;
   return <Page title={result.data.event.title} intro={`${result.data.event.tokenName} final result`} actions={<Link className="button secondary" to="/results">Back</Link>}>
     <Panel><div className="status-line"><Status value={result.data.event.verificationStatus} /><a href={result.data.event.contractExplorerUrl} target="_blank" rel="noreferrer">View verified VoteEvent</a></div></Panel>
     {result.data.proposals.map((proposal, proposalIndex) => {
