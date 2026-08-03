@@ -79,7 +79,7 @@ app.post('/v1/events/:id/retry', requireAuth, writeLimiter, async (request, resp
   try { response.json(await retryEvent(request.params.id, request.auth.wallet_address)); } catch (error) { next(error); }
 });
 app.get('/v1/events/:id/results', async (request, response, next) => {
-  try { response.json(await eventResults(request.params.id)); } catch (error) { next(error); }
+  try { response.json(await eventResults(request.params.id, request.query.wallet)); } catch (error) { next(error); }
 });
 
 app.get('/v1/dashboard/voting', async (request, response, next) => {
