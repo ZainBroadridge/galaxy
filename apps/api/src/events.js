@@ -126,20 +126,43 @@ export async function organiserDashboard(wallet) {
 }
 
 export async function resultsDashboard(walletInput) {
-  const wallet = walletInput ? normalizeAddress(walletInput, 'wallet') : null;
+  if (!walletInput) return [];
+  const wallet = normalizeAddress(walletInput, 'wallet');
   const rows = await query(
-    `SELECT DISTINCT e.* FROM events e
-     LEFT JOIN snapshot_entries se ON se.event_id=e.id AND se.wallet_address=$1
+    `SELECT e.* FROM events e
      WHERE e.deployment_block IS NOT NULL AND e.voting_end_at<=now()
-       AND (e.discovery_mode='PUBLIC_ELIGIBLE' OR e.creator_address=$1 OR se.wallet_address IS NOT NULL)
+       AND (
+         e.creator_address=$1
+         OR EXISTS (
+           SELECT 1 FROM votes v
+           WHERE v.event_id=e.id AND v.voter_address=$1 AND v.status='CONFIRMED'
+         )
+       )
      ORDER BY e.voting_end_at DESC`,
     [wallet],
   );
   return rows.rows.map((row) => serializeEvent(row));
 }
 
-export async function eventResults(id) {
-  const event = await getEventRow(id);
+export async function eventResults(id, walletInput) {
+  if (!walletInput) throw new HttpError(401, 'Connect the creator or participating wallet to view results.', 'WALLET_REQUIRED');
+  const wallet = normalizeAddress(walletInput, 'wallet');
+  const found = await query(
+    `SELECT e.*,
+            (
+              e.creator_address=$2
+              OR EXISTS (
+                SELECT 1 FROM votes v
+                WHERE v.event_id=e.id AND v.voter_address=$2 AND v.status='CONFIRMED'
+              )
+            ) AS can_view_results
+       FROM events e
+      WHERE e.id=$1`,
+    [id, wallet],
+  );
+  if (!found.rowCount) throw new HttpError(404, 'Event not found.', 'EVENT_NOT_FOUND');
+  const event = found.rows[0];
+  if (!event.can_view_results) throw new HttpError(403, 'Results are available only to the event creator and confirmed voters.', 'RESULTS_FORBIDDEN');
   if (!event.contract_address || event.deployment_block === null) throw new HttpError(409, 'Event contract is not deployed.', 'EVENT_NOT_DEPLOYED');
   if (new Date(event.voting_end_at).getTime() > Date.now()) throw new HttpError(409, 'Results publish after voting closes.', 'VOTING_OPEN');
   const contract = new Contract(event.contract_address, VOTE_EVENT_ABI, provider);
