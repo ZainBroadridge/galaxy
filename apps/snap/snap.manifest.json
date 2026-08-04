@@ -4,26 +4,26 @@
   "proposedName": "PV Investor Communications",
   "repository": {
     "type": "git",
-    "url": "https://github.com/REPLACE_ME/mini-galaxy-pv-v2.git"
+    "url": "https://github.com/ZainBroadridge/galaxy.git"
   },
   "source": {
-    "shasum": "eHOI5KgQICqDG5XEw1rOyaFMR3Wr6rjQ04MyDtGZVjk=",
+    "shasum": "gkZSHf1AvicmbYwdoQvnjVusH4oe3uuU6g2GhYH1xKY=",
     "location": {
       "npm": {
         "filePath": "dist/bundle.js",
-        "packageName": "@replace-me/pv-communications-snap",
+        "packageName": "@zainbroadridge/pv-communications-snap",
         "registry": "https://registry.npmjs.org/"
       }
     }
   },
   "initialConnections": {
-    "http://localhost:5173": {}
+    "https://galaxy-api-ten.vercel.app": {}
   },
   "initialPermissions": {
     "endowment:rpc": {
       "dapps": true,
       "snaps": false,
-      "allowedOrigins": ["http://localhost:5173"]
+      "allowedOrigins": ["https://galaxy-api-ten.vercel.app"]
     },
     "snap_manageState": {},
     "snap_notify": {},
