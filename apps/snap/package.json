@@ -1,10 +1,10 @@
 {
-  "name": "@replace-me/pv-communications-snap",
+  "name": "@zainbroadridge/pv-communications-snap",
   "version": "0.2.0",
   "description": "Dapp-triggered, creator-signed proxy-voting communications inside MetaMask.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/REPLACE_ME/mini-galaxy-pv-v2.git"
+    "url": "https://github.com/ZainBroadridge/galaxy.git"
   },
   "license": "MIT",
   "main": "./dist/bundle.js",
