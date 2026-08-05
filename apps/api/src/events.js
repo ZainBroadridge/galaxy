@@ -186,7 +186,7 @@ export async function retryEvent(id, wallet) {
     await query("UPDATE events SET status='SNAPSHOT_READY',failure_reason=NULL WHERE id=$1", [id]);
   } else if (event.verification_status === 'FAILED') {
     type = 'VERIFY_CONTRACT'; dedupeKey = `verify:${id}`; message = 'Verification retry queued';
-    await query("UPDATE events SET verification_status='PENDING',verification_error=NULL WHERE id=$1", [id]);
+    await query("UPDATE events SET verification_status='PENDING',verification_guid=NULL,verification_error=NULL WHERE id=$1", [id]);
   } else {
     throw new HttpError(409, 'There is nothing to retry for this event.', 'NOT_RETRYABLE');
   }
