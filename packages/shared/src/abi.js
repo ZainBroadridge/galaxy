@@ -23,6 +23,7 @@ export const VOTE_EVENT_ABI = [
   { type: 'function', name: 'metadataHash', stateMutability: 'view', inputs: [], outputs: [{ type: 'bytes32' }] },
   { type: 'function', name: 'proposalConfig', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'hasVoted', stateMutability: 'view', inputs: [{ name: 'voter', type: 'address' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'ballotVersion', stateMutability: 'pure', inputs: [], outputs: [{ type: 'uint8' }] },
   { type: 'function', name: 'proposalCount', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] },
   { type: 'function', name: 'optionCount', stateMutability: 'view', inputs: [{ name: 'proposalIndex', type: 'uint256' }], outputs: [{ type: 'uint8' }] },
   { type: 'function', name: 'getProposalTallies', stateMutability: 'view', inputs: [{ name: 'proposalIndex', type: 'uint256' }], outputs: [{ type: 'uint256[]' }] },

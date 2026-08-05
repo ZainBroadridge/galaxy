@@ -1,5 +1,5 @@
 import { getAddress, verifyMessage } from 'ethers';
-import { buildCommunicationSigningMessage } from '@pv/shared';
+import { buildCommunicationSigningMessage, buildTokenCommunicationSigningMessage } from '@pv/shared';
 import { api } from './api.js';
 
 const configuredId = import.meta.env.VITE_SNAP_ID?.trim();
@@ -96,7 +96,10 @@ async function assertMetaMaskWallet(walletAddress) {
 function verifiedMessages(messages) {
   return messages.filter((message) => {
     try {
-      return getAddress(verifyMessage(buildCommunicationSigningMessage(message), message.signature)).toLowerCase()
+      const signingMessage = message.scope === 'TOKEN'
+        ? buildTokenCommunicationSigningMessage(message)
+        : buildCommunicationSigningMessage(message);
+      return getAddress(verifyMessage(signingMessage, message.signature)).toLowerCase()
         === getAddress(message.creatorAddress).toLowerCase();
     } catch { return false; }
   });

@@ -61,47 +61,70 @@ export const subscriptionInput = z.object({
   enabled: z.boolean(),
 });
 
-const communicationContent = z.object({
-  messageId: z.string().uuid(),
+const eventAudience = z.enum([
+  COMMUNICATION_AUDIENCE.ALL_ELIGIBLE,
+  COMMUNICATION_AUDIENCE.NOT_VOTED,
+  COMMUNICATION_AUDIENCE.SUBSCRIBERS,
+]);
+const tokenAudience = z.enum([
+  COMMUNICATION_AUDIENCE.CURRENT_HOLDERS,
+  COMMUNICATION_AUDIENCE.SUBSCRIBERS,
+]);
+const communicationFields = z.object({
   category: z.enum(Object.values(COMMUNICATION_CATEGORY)),
-  audience: z.enum(Object.values(COMMUNICATION_AUDIENCE)),
   title: z.string().trim().min(1).max(180),
   body: z.string().trim().min(1).max(12_000),
   actionUrl: z.string().url(),
   publishedAt: isoDate,
   expiresAt: isoDate,
 });
-
 function validateCommunicationDates(value, context) {
-  const publishedAt = Date.parse(value.publishedAt);
-  const expiresAt = Date.parse(value.expiresAt);
-
-  if (expiresAt <= Math.max(Date.now(), publishedAt)) {
+  if (Date.parse(value.expiresAt) <= Math.max(Date.now(), Date.parse(value.publishedAt))) {
     context.addIssue({
-      code: 'custom',
-      path: ['expiresAt'],
-      message: 'Expiry must be in the future and after publication.',
+      code: 'custom', path: ['expiresAt'], message: 'Expiry must be in the future and after publication.',
     });
   }
 }
 
-export const communicationDraftInput = communicationContent
-  .omit({ messageId: true })
+export const communicationDraftInput = communicationFields
+  .extend({ audience: eventAudience })
   .superRefine(validateCommunicationDates);
 
-const signedCommunication = communicationContent
-  .extend({
-    chainId: z.number().int().positive(),
-    eventId: z.string().uuid(),
-    eventTitle: z.string().min(1).max(180),
-    tokenSymbol: z.string().min(1).max(40),
-    contractAddress: address,
-    creatorAddress: address,
-    authenticityStatus: z.enum(Object.values(AUTHENTICITY_STATUS)),
-  })
-  .superRefine(validateCommunicationDates);
+const signedCommunication = communicationFields.extend({
+  messageId: z.string().uuid(),
+  audience: eventAudience,
+  chainId: z.number().int().positive(),
+  eventId: z.string().uuid(),
+  eventTitle: z.string().min(1).max(180),
+  tokenSymbol: z.string().min(1).max(40),
+  contractAddress: address,
+  creatorAddress: address,
+  authenticityStatus: z.enum(Object.values(AUTHENTICITY_STATUS)),
+}).superRefine(validateCommunicationDates);
 
 export const communicationPublishInput = z.object({
   message: signedCommunication,
+  signature,
+});
+
+export const tokenCommunicationDraftInput = communicationFields.extend({
+  tokenAddress: address,
+  audience: tokenAudience,
+}).superRefine(validateCommunicationDates);
+
+const signedTokenCommunication = communicationFields.extend({
+  scope: z.literal('TOKEN'),
+  messageId: z.string().uuid(),
+  audience: tokenAudience,
+  chainId: z.number().int().positive(),
+  tokenAddress: address,
+  tokenName: z.string().min(1).max(120),
+  tokenSymbol: z.string().min(1).max(40),
+  creatorAddress: address,
+  authenticityStatus: z.enum(Object.values(AUTHENTICITY_STATUS)),
+}).superRefine(validateCommunicationDates);
+
+export const tokenCommunicationPublishInput = z.object({
+  message: signedTokenCommunication,
   signature,
 });

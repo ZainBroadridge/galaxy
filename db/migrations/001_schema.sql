@@ -159,9 +159,18 @@ CREATE TABLE snap_subscriptions (
 CREATE TABLE communications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   message_id uuid NOT NULL UNIQUE,
-  event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  event_id uuid REFERENCES events(id) ON DELETE CASCADE,
+  scope varchar(12) NOT NULL DEFAULT 'EVENT' CHECK (scope IN ('EVENT','TOKEN')),
+  chain_id integer CHECK (chain_id IS NULL OR chain_id = 80002),
+  token_address varchar(42),
+  token_name varchar(120),
+  token_symbol varchar(40),
+  creator_address varchar(42),
+  authenticity_status varchar(24) CHECK (
+    authenticity_status IS NULL OR authenticity_status IN ('COMMUNITY','SELF_CLAIMED','TOKEN_OWNER_VERIFIED')
+  ),
   category varchar(32) NOT NULL CHECK (category IN ('EVENT_ANNOUNCEMENT','VOTING_OPEN','DEADLINE_REMINDER','DOCUMENT_UPDATE','RESULTS_AVAILABLE','GENERAL')),
-  audience varchar(24) NOT NULL CHECK (audience IN ('ALL_ELIGIBLE','NOT_VOTED','SUBSCRIBERS')),
+  audience varchar(24) NOT NULL CHECK (audience IN ('ALL_ELIGIBLE','NOT_VOTED','SUBSCRIBERS','CURRENT_HOLDERS')),
   title varchar(180) NOT NULL,
   body text NOT NULL,
   action_url text NOT NULL,
@@ -170,6 +179,14 @@ CREATE TABLE communications (
   creator_signature text NOT NULL,
   revoked_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
-  CHECK (expires_at > published_at)
+  CHECK (expires_at > published_at),
+  CHECK (
+    (scope = 'EVENT' AND event_id IS NOT NULL)
+    OR
+    (scope = 'TOKEN' AND event_id IS NULL AND chain_id IS NOT NULL AND token_address IS NOT NULL
+      AND token_name IS NOT NULL AND token_symbol IS NOT NULL AND creator_address IS NOT NULL
+      AND authenticity_status IS NOT NULL)
+  )
 );
-CREATE INDEX communications_event_idx ON communications(event_id, published_at DESC);
+CREATE INDEX communications_event_idx ON communications(event_id, published_at DESC) WHERE scope='EVENT';
+CREATE INDEX communications_token_idx ON communications(token_address, published_at DESC) WHERE scope='TOKEN';

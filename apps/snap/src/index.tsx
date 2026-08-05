@@ -10,18 +10,21 @@ const CATEGORIES = new Set([
   'EVENT_ANNOUNCEMENT', 'VOTING_OPEN', 'DEADLINE_REMINDER',
   'DOCUMENT_UPDATE', 'RESULTS_AVAILABLE', 'GENERAL',
 ]);
-const AUDIENCES = new Set(['ALL_ELIGIBLE', 'NOT_VOTED', 'SUBSCRIBERS']);
+const AUDIENCES = new Set(['ALL_ELIGIBLE', 'NOT_VOTED', 'SUBSCRIBERS', 'CURRENT_HOLDERS']);
 const AUTHENTICITY = new Set([
   'COMMUNITY', 'SELF_CLAIMED', 'TOKEN_OWNER_VERIFIED',
 ]);
 
 type Communication = {
+  scope: 'EVENT' | 'TOKEN';
   chainId: number;
   messageId: string;
-  eventId: string;
-  eventTitle: string;
+  eventId: string | null;
+  eventTitle: string | null;
+  contractAddress: string | null;
+  tokenAddress: string | null;
+  tokenName: string | null;
   tokenSymbol: string;
-  contractAddress: string;
   creatorAddress: string;
   authenticityStatus: string;
   title: string;
@@ -110,7 +113,7 @@ function bodyHash(body: string): string {
   return keccak256(toUtf8Bytes(body.replace(/\r\n/gu, '\n')));
 }
 
-function signingMessage(message: Omit<Communication, 'read' | 'receivedAt'>): string {
+function eventSigningMessage(message: Communication): string {
   return [
     'PV_COMMUNICATION_V2',
     `chainId:${oneLine(message.chainId)}`,
@@ -131,10 +134,31 @@ function signingMessage(message: Omit<Communication, 'read' | 'receivedAt'>): st
   ].join('\n');
 }
 
+function tokenSigningMessage(message: Communication): string {
+  return [
+    'PV_TOKEN_COMMUNICATION_V1',
+    `chainId:${oneLine(message.chainId)}`,
+    `tokenAddress:${oneLine(message.tokenAddress).toLowerCase()}`,
+    `tokenName:${oneLine(message.tokenName)}`,
+    `tokenSymbol:${oneLine(message.tokenSymbol)}`,
+    `creator:${oneLine(message.creatorAddress).toLowerCase()}`,
+    `authenticityStatus:${oneLine(message.authenticityStatus)}`,
+    `messageId:${oneLine(message.messageId)}`,
+    `title:${oneLine(message.title)}`,
+    `bodyHash:${bodyHash(message.body)}`,
+    `category:${oneLine(message.category)}`,
+    `audience:${oneLine(message.audience)}`,
+    `publishedAt:${oneLine(message.publishedAt)}`,
+    `expiresAt:${oneLine(message.expiresAt)}`,
+    `actionUrl:${oneLine(message.actionUrl)}`,
+  ].join('\n');
+}
+
 function verifiedCommunication(value: unknown, dappOrigin: string): Communication {
   const input = object(value, 'communication');
   const chainId = Number(input.chainId);
   if (chainId !== CHAIN_ID) throw new Error('Only Polygon Amoy communications are accepted.');
+  const scope = input.scope === 'TOKEN' ? 'TOKEN' : 'EVENT';
 
   const actionUrl = text(input.actionUrl, 'actionUrl', 2_000);
   let parsedAction: URL;
@@ -150,13 +174,11 @@ function verifiedCommunication(value: unknown, dappOrigin: string): Communicatio
   if (Date.parse(expiresAt) <= Date.now()) throw new Error('Expired communication rejected.');
   if (Date.parse(expiresAt) <= Date.parse(publishedAt)) throw new Error('Invalid communication expiry.');
 
-  const unsigned = {
+  const common = {
+    scope,
     chainId,
     messageId: uuid(input.messageId, 'messageId'),
-    eventId: uuid(input.eventId, 'eventId'),
-    eventTitle: text(input.eventTitle, 'eventTitle', 180),
     tokenSymbol: text(input.tokenSymbol, 'tokenSymbol', 40),
-    contractAddress: address(input.contractAddress, 'contractAddress'),
     creatorAddress: address(input.creatorAddress, 'creatorAddress'),
     authenticityStatus: enumValue(input.authenticityStatus, 'authenticityStatus', AUTHENTICITY),
     title: text(input.title, 'title', 180),
@@ -168,15 +190,42 @@ function verifiedCommunication(value: unknown, dappOrigin: string): Communicatio
     actionUrl,
     signature: text(input.signature, 'signature', 512),
   };
+  const unsigned: Communication = scope === 'TOKEN'
+    ? {
+        ...common,
+        eventId: null,
+        eventTitle: null,
+        contractAddress: null,
+        tokenAddress: address(input.tokenAddress, 'tokenAddress'),
+        tokenName: text(input.tokenName, 'tokenName', 120),
+        read: false,
+        receivedAt: new Date().toISOString(),
+      }
+    : {
+        ...common,
+        eventId: uuid(input.eventId, 'eventId'),
+        eventTitle: text(input.eventTitle, 'eventTitle', 180),
+        contractAddress: address(input.contractAddress, 'contractAddress'),
+        tokenAddress: null,
+        tokenName: null,
+        read: false,
+        receivedAt: new Date().toISOString(),
+      };
 
   let recovered: string;
-  try { recovered = getAddress(verifyMessage(signingMessage(unsigned), unsigned.signature)).toLowerCase(); }
+  const messageToVerify = scope === 'TOKEN' ? tokenSigningMessage(unsigned) : eventSigningMessage(unsigned);
+  try { recovered = getAddress(verifyMessage(messageToVerify, unsigned.signature)).toLowerCase(); }
   catch { throw new Error('Communication creator signature is invalid.'); }
   if (recovered !== unsigned.creatorAddress) {
-    throw new UnauthorizedError('Communication was not signed by the event creator.');
+    throw new UnauthorizedError('Communication was not signed by the declared creator.');
   }
+  return unsigned;
+}
 
-  return { ...unsigned, read: false, receivedAt: new Date().toISOString() };
+function contextTitle(message: Communication): string {
+  return message.scope === 'TOKEN'
+    ? `${message.tokenName} (${message.tokenSymbol})`
+    : String(message.eventTitle);
 }
 
 async function notify(message: Communication): Promise<void> {
@@ -188,13 +237,16 @@ async function notify(message: Communication): Promise<void> {
       title: message.title.slice(0, 80),
       content: (
         <Box>
-          <Text><Bold>{message.eventTitle}</Bold></Text>
+          <Text><Bold>{contextTitle(message)}</Bold></Text>
           <Text>{message.body.slice(0, 1_200)}</Text>
           <Text>Creator signature verified</Text>
           <Text>{message.authenticityStatus.replaceAll('_', ' ')}</Text>
         </Box>
       ),
-      footerLink: { href: message.actionUrl, text: 'Open voting event' },
+      footerLink: {
+        href: message.actionUrl,
+        text: message.scope === 'TOKEN' ? 'Open communication' : 'Open voting event',
+      },
     },
   });
 }
@@ -202,7 +254,7 @@ async function notify(message: Communication): Promise<void> {
 export const onRpcRequest: OnRpcRequestHandler = async ({ origin, request }) => {
   switch (request.method) {
     case 'ping':
-      return { ok: true, version: '0.2.0', chainId: CHAIN_ID };
+      return { ok: true, protocolVersion: 3, chainId: CHAIN_ID };
 
     case 'setWalletContext': {
       const params = object(request.params, 'params');
@@ -288,10 +340,10 @@ export const onHomePage: OnHomePageHandler = async () => {
         ) : state.messages.slice(0, 10).map((message) => (
           <Box key={message.messageId}>
             <Heading>{message.title}</Heading>
-            <Text>{message.eventTitle} · {message.tokenSymbol}</Text>
+            <Text>{contextTitle(message)}</Text>
             <Text>{message.body.slice(0, 500)}</Text>
             <Text>Creator signature verified</Text>
-            <Link href={message.actionUrl}>Open voting event</Link>
+            <Link href={message.actionUrl}>{message.scope === 'TOKEN' ? 'Open communication' : 'Open voting event'}</Link>
           </Box>
         ))}
       </Box>

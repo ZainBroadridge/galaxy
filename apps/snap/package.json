@@ -1,6 +1,6 @@
 {
   "name": "@zainbroadridge/pv-communications-snap",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Dapp-triggered, creator-signed proxy-voting communications inside MetaMask.",
   "repository": {
     "type": "git",

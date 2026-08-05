@@ -1,20 +1,21 @@
 import { randomUUID } from 'node:crypto';
-import { verifyMessage } from 'ethers';
-import { buildCommunicationSigningMessage } from '@pv/shared';
+import { Contract, verifyMessage } from 'ethers';
+import {
+  AUTHENTICITY_STATUS,
+  COMMUNICATION_AUDIENCE,
+  STANDARD_ERC20_ABI,
+  buildCommunicationSigningMessage,
+  buildTokenCommunicationSigningMessage,
+} from '@pv/shared';
 import { config } from './config.js';
 import { query } from './db.js';
 import { HttpError, normalizeAddress } from './errors.js';
 import { getEventRow } from './events.js';
+import { provider } from './rpc.js';
+import { inspectToken } from './tokens.js';
 
-function messageFor(event, input) {
+function commonMessage(input) {
   return {
-    chainId: Number(event.chain_id),
-    eventId: event.id,
-    eventTitle: event.title,
-    tokenSymbol: event.token_symbol,
-    contractAddress: event.contract_address,
-    creatorAddress: event.creator_address,
-    authenticityStatus: event.authenticity_status,
     messageId: input.messageId ?? randomUUID(),
     category: input.category,
     audience: input.audience,
@@ -26,6 +27,32 @@ function messageFor(event, input) {
   };
 }
 
+function eventMessageFor(event, input) {
+  return {
+    chainId: Number(event.chain_id),
+    eventId: event.id,
+    eventTitle: event.title,
+    tokenSymbol: event.token_symbol,
+    contractAddress: event.contract_address,
+    creatorAddress: event.creator_address,
+    authenticityStatus: event.authenticity_status,
+    ...commonMessage(input),
+  };
+}
+
+function tokenMessageFor(token, creator, authenticityStatus, input) {
+  return {
+    scope: 'TOKEN',
+    chainId: config.chainId,
+    tokenAddress: token.tokenAddress,
+    tokenName: token.name,
+    tokenSymbol: token.symbol,
+    creatorAddress: creator,
+    authenticityStatus,
+    ...commonMessage(input),
+  };
+}
+
 function validateActionUrl(value) {
   let url;
   try { url = new URL(value); } catch { throw new HttpError(400, 'Invalid communication action URL.', 'INVALID_ACTION_URL'); }
@@ -34,12 +61,24 @@ function validateActionUrl(value) {
   }
 }
 
+function tokenAuthenticity(token, creator, audience) {
+  if (token.owner === creator) return AUTHENTICITY_STATUS.TOKEN_OWNER_VERIFIED;
+  if (audience === COMMUNICATION_AUDIENCE.CURRENT_HOLDERS) {
+    throw new HttpError(
+      403,
+      'Current-holder broadcasts require a token whose owner() address matches the connected wallet. Use Subscribers for self-claimed token news.',
+      'TOKEN_OWNER_REQUIRED',
+    );
+  }
+  return AUTHENTICITY_STATUS.SELF_CLAIMED;
+}
+
 export async function draftCommunication(eventId, wallet, input) {
   const event = await getEventRow(eventId);
   if (event.creator_address !== normalizeAddress(wallet)) throw new HttpError(403, 'Only the event creator can publish communications.', 'FORBIDDEN');
   if (!event.contract_address || event.deployment_block === null) throw new HttpError(409, 'Deploy the event before publishing communications.', 'EVENT_NOT_READY');
   validateActionUrl(input.actionUrl);
-  const message = messageFor(event, input);
+  const message = eventMessageFor(event, input);
   return { message, signingMessage: buildCommunicationSigningMessage(message) };
 }
 
@@ -50,7 +89,7 @@ export async function publishCommunication(eventId, wallet, input) {
   if (!event.contract_address || event.deployment_block === null) {
     throw new HttpError(409, 'Deploy the event before publishing communications.', 'EVENT_NOT_READY');
   }
-  const expected = messageFor(event, input.message);
+  const expected = eventMessageFor(event, input.message);
   validateActionUrl(expected.actionUrl);
   if (buildCommunicationSigningMessage(expected) !== buildCommunicationSigningMessage(input.message)) {
     throw new HttpError(400, 'Signed communication fields do not match the event.', 'COMMUNICATION_MISMATCH');
@@ -59,10 +98,44 @@ export async function publishCommunication(eventId, wallet, input) {
   try { signer = normalizeAddress(verifyMessage(buildCommunicationSigningMessage(expected), input.signature)); } catch { signer = null; }
   if (signer !== creator) throw new HttpError(401, 'Communication signature is invalid.', 'INVALID_SIGNATURE');
   await query(
-    `INSERT INTO communications(message_id,event_id,category,audience,title,body,action_url,published_at,expires_at,creator_signature)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(message_id) DO NOTHING`,
+    `INSERT INTO communications(message_id,event_id,scope,category,audience,title,body,action_url,published_at,expires_at,creator_signature)
+     VALUES ($1,$2,'EVENT',$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(message_id) DO NOTHING`,
     [expected.messageId, eventId, expected.category, expected.audience, expected.title, expected.body,
       expected.actionUrl, expected.publishedAt, expected.expiresAt, input.signature],
+  );
+  return expected;
+}
+
+export async function draftTokenCommunication(wallet, input) {
+  const creator = normalizeAddress(wallet);
+  const token = await inspectToken(input.tokenAddress);
+  const authenticityStatus = tokenAuthenticity(token, creator, input.audience);
+  validateActionUrl(input.actionUrl);
+  const message = tokenMessageFor(token, creator, authenticityStatus, input);
+  return { message, signingMessage: buildTokenCommunicationSigningMessage(message) };
+}
+
+export async function publishTokenCommunication(wallet, input) {
+  const creator = normalizeAddress(wallet);
+  const token = await inspectToken(input.message.tokenAddress);
+  const authenticityStatus = tokenAuthenticity(token, creator, input.message.audience);
+  const expected = tokenMessageFor(token, creator, authenticityStatus, input.message);
+  validateActionUrl(expected.actionUrl);
+  if (buildTokenCommunicationSigningMessage(expected) !== buildTokenCommunicationSigningMessage(input.message)) {
+    throw new HttpError(400, 'Signed communication fields do not match the token.', 'COMMUNICATION_MISMATCH');
+  }
+  let signer;
+  try { signer = normalizeAddress(verifyMessage(buildTokenCommunicationSigningMessage(expected), input.signature)); } catch { signer = null; }
+  if (signer !== creator) throw new HttpError(401, 'Communication signature is invalid.', 'INVALID_SIGNATURE');
+  await query(
+    `INSERT INTO communications(
+       message_id,event_id,scope,chain_id,token_address,token_name,token_symbol,creator_address,authenticity_status,
+       category,audience,title,body,action_url,published_at,expires_at,creator_signature
+     ) VALUES ($1,NULL,'TOKEN',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+     ON CONFLICT(message_id) DO NOTHING`,
+    [expected.messageId, expected.chainId, expected.tokenAddress, expected.tokenName, expected.tokenSymbol,
+      expected.creatorAddress, expected.authenticityStatus, expected.category, expected.audience, expected.title,
+      expected.body, expected.actionUrl, expected.publishedAt, expected.expiresAt, input.signature],
   );
   return expected;
 }
@@ -85,23 +158,9 @@ export async function saveSubscription(wallet, input) {
   return result.rows[0];
 }
 
-export async function inbox(wallet) {
-  const address = normalizeAddress(wallet);
-  const rows = await query(
-    `SELECT c.*,e.chain_id,e.title AS event_title,e.token_symbol,e.contract_address,e.creator_address,e.authenticity_status
-     FROM communications c JOIN events e ON e.id=c.event_id
-     JOIN snapshot_entries se ON se.event_id=e.id AND se.wallet_address=$1
-     LEFT JOIN votes v ON v.event_id=e.id AND v.voter_address=$1 AND v.status<>'FAILED'
-     LEFT JOIN snap_subscriptions s ON s.wallet_address=$1 AND s.token_address=e.token_address AND s.enabled=true
-     WHERE c.revoked_at IS NULL AND c.published_at<=now() AND c.expires_at>now()
-       AND e.snap_delivery_mode<>'DISABLED'
-       AND (e.snap_delivery_mode='ELIGIBLE' OR s.wallet_address IS NOT NULL)
-       AND (c.audience='ALL_ELIGIBLE' OR (c.audience='NOT_VOTED' AND v.id IS NULL) OR (c.audience='SUBSCRIBERS' AND s.wallet_address IS NOT NULL))
-       AND (s.categories IS NULL OR s.categories='[]'::jsonb OR s.categories ? c.category)
-     ORDER BY c.published_at DESC LIMIT 100`,
-    [address],
-  );
-  return rows.rows.map((row) => ({
+function serializeEventCommunication(row) {
+  return {
+    scope: 'EVENT',
     chainId: Number(row.chain_id),
     eventId: row.event_id,
     eventTitle: row.event_title,
@@ -118,5 +177,83 @@ export async function inbox(wallet) {
     publishedAt: row.published_at,
     expiresAt: row.expires_at,
     signature: row.creator_signature,
-  }));
+  };
+}
+
+function serializeTokenCommunication(row) {
+  return {
+    scope: 'TOKEN',
+    chainId: Number(row.chain_id),
+    tokenAddress: row.token_address,
+    tokenName: row.token_name,
+    tokenSymbol: row.token_symbol,
+    creatorAddress: row.creator_address,
+    authenticityStatus: row.authenticity_status,
+    messageId: row.message_id,
+    category: row.category,
+    audience: row.audience,
+    title: row.title,
+    body: row.body,
+    actionUrl: row.action_url,
+    publishedAt: row.published_at,
+    expiresAt: row.expires_at,
+    signature: row.creator_signature,
+  };
+}
+
+export async function inbox(wallet) {
+  const address = normalizeAddress(wallet);
+  const [eventRows, tokenRows] = await Promise.all([
+    query(
+      `SELECT c.*,e.chain_id,e.title AS event_title,e.token_symbol,e.contract_address,e.creator_address,e.authenticity_status
+       FROM communications c JOIN events e ON e.id=c.event_id
+       JOIN snapshot_entries se ON se.event_id=e.id AND se.wallet_address=$1
+       LEFT JOIN votes v ON v.event_id=e.id AND v.voter_address=$1 AND v.status<>'FAILED'
+       LEFT JOIN snap_subscriptions s ON s.wallet_address=$1 AND s.token_address=e.token_address AND s.enabled=true
+       WHERE c.scope='EVENT' AND c.revoked_at IS NULL AND c.published_at<=now() AND c.expires_at>now()
+         AND e.snap_delivery_mode<>'DISABLED'
+         AND (e.snap_delivery_mode='ELIGIBLE' OR s.wallet_address IS NOT NULL)
+         AND (c.audience='ALL_ELIGIBLE' OR (c.audience='NOT_VOTED' AND v.id IS NULL) OR (c.audience='SUBSCRIBERS' AND s.wallet_address IS NOT NULL))
+         AND (s.categories IS NULL OR s.categories='[]'::jsonb OR s.categories ? c.category)
+       ORDER BY c.published_at DESC LIMIT 100`,
+      [address],
+    ),
+    query(
+      `SELECT c.*,s.wallet_address AS subscribed_wallet,s.categories AS subscription_categories
+       FROM communications c
+       LEFT JOIN snap_subscriptions s ON s.wallet_address=$1 AND s.token_address=c.token_address AND s.enabled=true
+       WHERE c.scope='TOKEN' AND c.revoked_at IS NULL AND c.published_at<=now() AND c.expires_at>now()
+         AND (
+           c.audience='CURRENT_HOLDERS'
+           OR (
+             c.audience='SUBSCRIBERS' AND s.wallet_address IS NOT NULL
+             AND (s.categories='[]'::jsonb OR s.categories ? c.category)
+           )
+         )
+       ORDER BY c.published_at DESC LIMIT 100`,
+      [address],
+    ),
+  ]);
+
+  const balanceChecks = new Map();
+  const isCurrentHolder = (tokenAddress) => {
+    if (!balanceChecks.has(tokenAddress)) {
+      const check = new Contract(tokenAddress, STANDARD_ERC20_ABI, provider)
+        .balanceOf(address)
+        .then((balance) => balance > 0n)
+        .catch(() => false);
+      balanceChecks.set(tokenAddress, check);
+    }
+    return balanceChecks.get(tokenAddress);
+  };
+  const tokenVisibility = await Promise.all(tokenRows.rows.map(async (row) => (
+    row.audience !== COMMUNICATION_AUDIENCE.CURRENT_HOLDERS || await isCurrentHolder(row.token_address)
+  )));
+  const messages = [
+    ...eventRows.rows.map(serializeEventCommunication),
+    ...tokenRows.rows.filter((_row, index) => tokenVisibility[index]).map(serializeTokenCommunication),
+  ];
+  return messages
+    .sort((left, right) => new Date(right.publishedAt).getTime() - new Date(left.publishedAt).getTime())
+    .slice(0, 100);
 }

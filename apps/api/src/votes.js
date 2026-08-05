@@ -8,6 +8,19 @@ import { serializeVote } from './serializers.js';
 import { getEventRow } from './events.js';
 import { kickJobRunner } from './runner.js';
 
+async function ballotVersion(contractAddress) {
+  const contract = new Contract(contractAddress, VOTE_EVENT_ABI, provider);
+  try {
+    const version = Number(await contract.ballotVersion());
+    if (version !== 3) throw new HttpError(409, `Unsupported ballot version ${version}.`, 'UNSUPPORTED_BALLOT_VERSION');
+    return version;
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    if (['CALL_EXCEPTION', 'BAD_DATA'].includes(error?.code)) return 2;
+    throw error;
+  }
+}
+
 async function votingContext(eventId, walletInput) {
   const wallet = normalizeAddress(walletInput);
   const event = await getEventRow(eventId);
@@ -27,7 +40,8 @@ export async function ballot(eventId, walletInput) {
   if (existing.rowCount && existing.rows[0].status !== 'FAILED') {
     return { alreadyVoted: true, vote: serializeVote(existing.rows[0], event) };
   }
-  if (await new Contract(event.contract_address, VOTE_EVENT_ABI, provider).hasVoted(wallet)) {
+  const contract = new Contract(event.contract_address, VOTE_EVENT_ABI, provider);
+  if (await contract.hasVoted(wallet)) {
     throw new HttpError(409, 'This wallet has already voted on-chain.', 'ALREADY_VOTED');
   }
   return {
@@ -36,6 +50,7 @@ export async function ballot(eventId, walletInput) {
     contractAddress: event.contract_address,
     snapshotBalance: String(entry.raw_balance),
     votingPower: String(entry.voting_power),
+    ballotVersion: await ballotVersion(event.contract_address),
   };
 }
 
@@ -45,7 +60,10 @@ export async function submitVote(eventId, walletInput, choices, signature) {
   choices.forEach((choice, index) => {
     if (choice >= event.proposals[index].options.length) throw new HttpError(400, `Invalid option for proposal ${index + 1}.`, 'INVALID_CHOICES');
   });
-  const typed = ballotTypedData({ chainId: event.chain_id, contractAddress: event.contract_address, voter: wallet, choices });
+  const version = await ballotVersion(event.contract_address);
+  const typed = ballotTypedData({
+    chainId: event.chain_id, contractAddress: event.contract_address, voter: wallet, choices, ballotVersion: version,
+  });
   let signer;
   try { signer = normalizeAddress(verifyTypedData(typed.domain, typed.types, typed.message, signature)); } catch { signer = null; }
   if (signer !== wallet) throw new HttpError(401, 'Ballot signature is invalid.', 'INVALID_SIGNATURE');

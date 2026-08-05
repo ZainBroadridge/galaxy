@@ -10,11 +10,15 @@ import { HttpError } from './errors.js';
 import {
   createEvent, eventResults, eventView, organiserDashboard, resultsDashboard, retryEvent, votingDashboard,
 } from './events.js';
-import { draftCommunication, inbox, publishCommunication, saveSubscription, subscriptions } from './communications.js';
+import {
+  draftCommunication, draftTokenCommunication, inbox, publishCommunication, publishTokenCommunication,
+  saveSubscription, subscriptions,
+} from './communications.js';
 import { inspectToken } from './tokens.js';
 import { ballot, submitVote } from './votes.js';
 import {
-  communicationDraftInput, communicationPublishInput, eventInput, subscriptionInput, voteInput,
+  communicationDraftInput, communicationPublishInput, eventInput, subscriptionInput, tokenCommunicationDraftInput,
+  tokenCommunicationPublishInput, voteInput,
 } from './validation.js';
 import { jobRunnerStatus, startJobRunner } from './runner.js';
 import { logger } from './logger.js';
@@ -117,6 +121,12 @@ app.put('/v1/communications/subscriptions', requireAuth, writeLimiter, async (re
 });
 app.get('/v1/communications/inbox', requireAuth, async (request, response, next) => {
   try { response.json(await inbox(request.auth.wallet_address)); } catch (error) { next(error); }
+});
+app.post('/v1/communications/token/draft', requireAuth, writeLimiter, async (request, response, next) => {
+  try { response.json(await draftTokenCommunication(request.auth.wallet_address, parse(tokenCommunicationDraftInput, request.body))); } catch (error) { next(error); }
+});
+app.post('/v1/communications/token', requireAuth, writeLimiter, async (request, response, next) => {
+  try { response.status(201).json(await publishTokenCommunication(request.auth.wallet_address, parse(tokenCommunicationPublishInput, request.body))); } catch (error) { next(error); }
 });
 app.post('/v1/events/:id/communications/draft', requireAuth, writeLimiter, async (request, response, next) => {
   try { response.json(await draftCommunication(request.params.id, request.auth.wallet_address, parse(communicationDraftInput, request.body))); } catch (error) { next(error); }

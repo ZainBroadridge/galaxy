@@ -92,17 +92,20 @@ describe('VoteEvent', function () {
     const signature = await signer.signTypedData(
       {
         name: 'PV VoteEvent',
-        version: '2',
+        version: '3',
         chainId: network.chainId,
         verifyingContract: await contract.getAddress(),
       },
       {
         Ballot: [
           { name: 'voter', type: 'address' },
-          { name: 'choicesHash', type: 'bytes32' },
+          { name: 'selectedOptions', type: 'string' },
         ],
       },
-      { voter: signer.address, choicesHash: ethers.keccak256(choicesBytes) },
+      {
+        voter: signer.address,
+        selectedOptions: choices.map((choice, index) => `Proposal ${index + 1} = Option ${choice + 1}`).join('; '),
+      },
     );
     return { choicesBytes, signature };
   }
@@ -132,6 +135,7 @@ describe('VoteEvent', function () {
       ),
     ).to.emit(contract, 'VoteCast').withArgs(voter.address, 20, ballot.choicesBytes);
 
+    expect(await contract.ballotVersion()).to.equal(3);
     expect(await contract.hasVoted(voter.address)).to.equal(true);
     expect(await contract.getProposalTallies(0)).to.deep.equal([20n, 0n, 0n]);
     expect(await contract.getProposalTallies(1)).to.deep.equal([0n, 20n]);

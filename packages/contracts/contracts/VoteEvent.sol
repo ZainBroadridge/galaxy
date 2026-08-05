@@ -22,7 +22,7 @@ contract VoteEvent is EIP712 {
     error InvalidOption();
 
     bytes32 private constant BALLOT_TYPEHASH =
-        keccak256("Ballot(address voter,bytes32 choicesHash)");
+        keccak256("Ballot(address voter,string selectedOptions)");
 
     address public immutable creator;
     address public immutable tokenAddress;
@@ -57,7 +57,7 @@ contract VoteEvent is EIP712 {
         uint256 voteUnit_,
         bytes32 metadataHash_,
         uint256 proposalConfig_
-    ) EIP712("PV VoteEvent", "2") {
+    ) EIP712("PV VoteEvent", "3") {
         if (
             creator_ == address(0) ||
             tokenAddress_ == address(0) ||
@@ -104,8 +104,13 @@ contract VoteEvent is EIP712 {
             revert InvalidSnapshotProof();
         }
 
+        bytes memory selectedOptions = _selectedOptions(choices);
         bytes32 structHash = keccak256(
-            abi.encode(BALLOT_TYPEHASH, voter, keccak256(choices))
+            abi.encode(
+                BALLOT_TYPEHASH,
+                voter,
+                keccak256(selectedOptions)
+            )
         );
         if (ECDSA.recover(_hashTypedDataV4(structHash), signature) != voter) {
             revert InvalidSignature();
@@ -127,6 +132,11 @@ contract VoteEvent is EIP712 {
         }
 
         emit VoteCast(voter, votingPower, choices);
+    }
+
+    /// @notice Ballot signing format used by this deployment.
+    function ballotVersion() external pure returns (uint8) {
+        return 3;
     }
 
     function proposalCount() public view returns (uint8) {
@@ -152,6 +162,36 @@ contract VoteEvent is EIP712 {
                 ++optionIndex;
             }
         }
+    }
+
+    function _selectedOptions(bytes calldata choices)
+        private
+        pure
+        returns (bytes memory result)
+    {
+        for (uint256 proposalIndex; proposalIndex < choices.length; ) {
+            if (proposalIndex != 0) result = abi.encodePacked(result, "; ");
+            result = abi.encodePacked(
+                result,
+                "Proposal ",
+                _decimal(proposalIndex + 1),
+                " = Option ",
+                _decimal(uint8(choices[proposalIndex]) + 1)
+            );
+            unchecked {
+                ++proposalIndex;
+            }
+        }
+    }
+
+    function _decimal(uint256 value) private pure returns (bytes memory) {
+        if (value < 10) {
+            return abi.encodePacked(bytes1(uint8(48 + value)));
+        }
+        return abi.encodePacked(
+            bytes1(uint8(48 + value / 10)),
+            bytes1(uint8(48 + value % 10))
+        );
     }
 
     function _optionCountUnchecked(uint256 proposalIndex) private view returns (uint8) {

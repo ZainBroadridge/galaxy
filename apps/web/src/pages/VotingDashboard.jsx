@@ -57,7 +57,10 @@ export function VoteEventPage() {
       await ensureAuthenticated();
       const ballot = await api(`/v1/events/${eventId}/ballot`);
       if (ballot.alreadyVoted) { await view.reload(); return; }
-      const typed = ballotTypedData({ chainId: ballot.chainId, contractAddress: ballot.contractAddress, voter: account, choices });
+      const typed = ballotTypedData({
+        chainId: ballot.chainId, contractAddress: ballot.contractAddress, voter: account, choices,
+        ballotVersion: ballot.ballotVersion,
+      });
       const signer = await getSigner();
       const signature = await signer.signTypedData(typed.domain, typed.types, typed.message);
       const vote = await api(`/v1/events/${eventId}/votes`, { method: 'POST', body: { choices, signature } });

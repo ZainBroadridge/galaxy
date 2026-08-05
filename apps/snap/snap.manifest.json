@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Verified proxy-voting notices delivered through the Mini Galaxy PV dApp.",
   "proposedName": "PV Investor Communications",
   "repository": {
@@ -7,7 +7,7 @@
     "url": "https://github.com/ZainBroadridge/galaxy.git"
   },
   "source": {
-    "shasum": "gkZSHf1AvicmbYwdoQvnjVusH4oe3uuU6g2GhYH1xKY=",
+    "shasum": "hqLYf78JjtJ3tMmqAeWJTI7VaUXU0aRLlepggJyUpO4=",
     "location": {
       "npm": {
         "filePath": "dist/bundle.js",

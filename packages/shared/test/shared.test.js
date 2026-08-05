@@ -4,6 +4,7 @@ import { Wallet, verifyMessage, verifyTypedData } from 'ethers';
 import {
   ballotTypedData,
   buildCommunicationSigningMessage,
+  buildTokenCommunicationSigningMessage,
   buildSnapshotTree,
   hashEventMetadata,
   packProposalConfig,
@@ -56,13 +57,32 @@ test('produces recoverable ballot typed data', async () => {
     chainId: 80002,
     contractAddress: '0x0000000000000000000000000000000000000010',
     voter: wallet.address,
-    choices: [0, 1],
+    choices: [0, 1, 2, 3],
+    ballotVersion: 3,
   });
+  assert.equal(
+    ballot.message.selectedOptions,
+    'Proposal 1 = Option 1; Proposal 2 = Option 2; Proposal 3 = Option 3; Proposal 4 = Option 4',
+  );
   const ballotSignature = await wallet.signTypedData(ballot.domain, ballot.types, ballot.message);
   assert.equal(
     verifyTypedData(ballot.domain, ballot.types, ballot.message, ballotSignature),
     wallet.address,
   );
+});
+
+
+test('keeps the legacy v2 choices hash for already-deployed events', () => {
+  const ballot = ballotTypedData({
+    chainId: 80002,
+    contractAddress: '0x0000000000000000000000000000000000000010',
+    voter: '0x0000000000000000000000000000000000000020',
+    choices: [3, 0],
+    ballotVersion: 2,
+  });
+  assert.equal(ballot.domain.version, '2');
+  assert.equal(ballot.message.selectedOptions, undefined);
+  assert.match(ballot.message.choicesHash, /^0x[0-9a-f]{64}$/u);
 });
 
 
@@ -91,6 +111,39 @@ test('creator-signed communications bind every displayed field', async () => {
   assert.notEqual(
     verifyMessage(
       buildCommunicationSigningMessage({ ...communication, body: 'Altered body' }),
+      signature,
+    ),
+    wallet.address,
+  );
+});
+
+
+
+test('creator-signed token communications bind token identity and content', async () => {
+  const wallet = Wallet.createRandom();
+  const communication = {
+    scope: 'TOKEN',
+    chainId: 80002,
+    tokenAddress: '0x0000000000000000000000000000000000000020',
+    tokenName: 'Example Token',
+    tokenSymbol: 'TEST',
+    creatorAddress: wallet.address,
+    authenticityStatus: 'TOKEN_OWNER_VERIFIED',
+    messageId: '123e4567-e89b-42d3-a456-426614174002',
+    title: 'Quarterly issuer update',
+    body: 'A regular token-holder announcement.',
+    category: 'GENERAL',
+    audience: 'CURRENT_HOLDERS',
+    publishedAt: '2026-07-29T10:00:00.000Z',
+    expiresAt: '2026-08-01T10:00:00.000Z',
+    actionUrl: 'https://example.test/comms',
+  };
+  const signingMessage = buildTokenCommunicationSigningMessage(communication);
+  const signature = await wallet.signMessage(signingMessage);
+  assert.equal(verifyMessage(signingMessage, signature), wallet.address);
+  assert.notEqual(
+    verifyMessage(
+      buildTokenCommunicationSigningMessage({ ...communication, tokenAddress: '0x0000000000000000000000000000000000000030' }),
       signature,
     ),
     wallet.address,
