@@ -122,8 +122,12 @@ app.get('/v1/communications/subscriptions', requireAuth, async (request, respons
 app.put('/v1/communications/subscriptions', requireAuth, writeLimiter, async (request, response, next) => {
   try { response.json(await saveSubscription(request.auth.wallet_address, parse(subscriptionInput, request.body))); } catch (error) { next(error); }
 });
-app.get('/v1/communications/inbox', requireAuth, async (request, response, next) => {
-  try { response.json(await inbox(request.auth.wallet_address)); } catch (error) { next(error); }
+app.get('/v1/communications/inbox', async (request, response, next) => {
+  try {
+    const wallet = request.query.wallet ?? request.auth?.wallet_address;
+    if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
+    response.json(await inbox(wallet));
+  } catch (error) { next(error); }
 });
 app.post('/v1/communications/token/draft', requireAuth, writeLimiter, async (request, response, next) => {
   try { response.json(await draftTokenCommunication(request.auth.wallet_address, parse(tokenCommunicationDraftInput, request.body))); } catch (error) { next(error); }

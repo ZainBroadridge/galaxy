@@ -69,13 +69,13 @@ export default function WalletComms() {
   async function sync() {
     setBusy(true); setError(null);
     try {
-      const result = await syncSnap({ walletAddress: wallet.account, ensureAuthenticated: wallet.ensureAuthenticated, install: false });
+      const result = await syncSnap({ walletAddress: wallet.account, install: false });
       setSnapInstalled(result.installed);
       if (result.installed) {
         const inbox = await snapInbox();
         setMessages(inbox?.messages ?? inbox ?? result.messages ?? []);
       }
-      await loadPortalData();
+      if (wallet.authenticated) await loadPortalData();
     } catch (value) { setError(value); } finally { setBusy(false); }
   }
 

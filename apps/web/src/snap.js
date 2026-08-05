@@ -105,13 +105,14 @@ function verifiedMessages(messages) {
   });
 }
 
-export async function syncSnap({ walletAddress, ensureAuthenticated, install = false }) {
-  await ensureAuthenticated();
+export async function syncSnap({ walletAddress, install = false }) {
   await assertMetaMaskWallet(walletAddress);
   let snap = await getInstalledSnap();
   if (!snap && install) snap = await installSnap();
   if (!snap) return { installed: false, messages: [], accepted: 0 };
-  const messages = verifiedMessages(await api('/v1/communications/inbox'));
+
+  const query = new URLSearchParams({ wallet: walletAddress });
+  const messages = verifiedMessages(await api(`/v1/communications/inbox?${query}`, { auth: false }));
   await invokeSnap('setWalletContext', { walletAddress });
   const result = await invokeSnap('ingestCommunications', { messages });
   return { installed: true, messages, accepted: result?.acceptedMessageIds?.length ?? 0, ...result };
