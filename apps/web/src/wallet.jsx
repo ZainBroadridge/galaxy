@@ -1,4 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
+} from 'react';
 import { useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react';
 import { BrowserProvider } from 'ethers';
 import { api, readSession, saveSession } from './api.js';
@@ -13,6 +15,9 @@ export function WalletProvider({ children }) {
   const account = address?.toLowerCase() ?? null;
   const [session, setSession] = useState(readSession());
   const [authBusy, setAuthBusy] = useState(false);
+  const authRequest = useRef(null);
+  const activeAccount = useRef(account);
+
   const authenticated = Boolean(
     account
     && session?.walletAddress?.toLowerCase() === account
@@ -20,21 +25,35 @@ export function WalletProvider({ children }) {
   );
 
   useEffect(() => {
+    activeAccount.current = account;
     const current = readSession();
-    if (!account || (current?.walletAddress && current.walletAddress.toLowerCase() !== account)) {
-      saveSession(null);
-      setSession(null);
-    } else {
+
+    // Reown can briefly report no account while a wallet request is open.
+    // Preserve the portal session during that transient state.
+    if (!account) {
       setSession(current);
+      return;
     }
+
+    if (current?.walletAddress?.toLowerCase() === account) {
+      setSession(current);
+      return;
+    }
+
+    saveSession(null);
+    setSession(null);
   }, [account]);
 
   const ensureAmoy = useCallback(async () => {
     if (!walletProvider?.request) throw new Error('Connect an EVM wallet first.');
     const current = await walletProvider.request({ method: 'eth_chainId' });
     if (String(current).toLowerCase() === AMOY_HEX) return;
+
     try {
-      await walletProvider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: AMOY_HEX }] });
+      await walletProvider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: AMOY_HEX }],
+      });
     } catch (error) {
       if (error.code !== 4902) throw error;
       await walletProvider.request({
@@ -50,31 +69,56 @@ export function WalletProvider({ children }) {
     }
   }, [walletProvider]);
 
+  const getSigner = useCallback(async () => {
+    if (!isConnected || !account || !walletProvider) throw new Error('Connect your wallet first.');
+    await ensureAmoy();
+
+    const signer = await new BrowserProvider(walletProvider, 'any').getSigner(account);
+    const signerAddress = (await signer.getAddress()).toLowerCase();
+    if (signerAddress !== account) {
+      throw new Error('The selected wallet account changed. Reconnect and try again.');
+    }
+    return signer;
+  }, [account, ensureAmoy, isConnected, walletProvider]);
+
   const ensureAuthenticated = useCallback(async () => {
     if (!isConnected || !account || !walletProvider) throw new Error('Connect your wallet first.');
+
     const stored = readSession();
     if (stored?.walletAddress?.toLowerCase() === account) {
       setSession(stored);
       return stored;
     }
-    setAuthBusy(true);
-    try {
-      await ensureAmoy();
-      const challenge = await api('/v1/auth/nonce', { method: 'POST', body: { walletAddress: account } });
-      const signer = await new BrowserProvider(walletProvider).getSigner();
+    if (authRequest.current?.account === account) return authRequest.current.promise;
+
+    const request = (async () => {
+      setAuthBusy(true);
+      const challenge = await api('/v1/auth/nonce', {
+        method: 'POST',
+        body: { walletAddress: account },
+      });
+      const signer = await getSigner();
       const signature = await signer.signMessage(challenge.message);
-      const next = await api('/v1/auth/verify', { method: 'POST', body: { walletAddress: account, signature } });
+      const next = await api('/v1/auth/verify', {
+        method: 'POST',
+        body: { walletAddress: account, signature },
+      });
+      if (activeAccount.current !== account) {
+        throw new Error('The selected wallet account changed during authentication.');
+      }
       saveSession(next);
       setSession(next);
       return next;
-    } finally { setAuthBusy(false); }
-  }, [account, ensureAmoy, isConnected, walletProvider]);
+    })();
 
-  const getSigner = useCallback(async () => {
-    await ensureAuthenticated();
-    await ensureAmoy();
-    return new BrowserProvider(walletProvider).getSigner();
-  }, [ensureAmoy, ensureAuthenticated, walletProvider]);
+    authRequest.current = { account, promise: request };
+    try {
+      return await request;
+    } finally {
+      if (authRequest.current?.promise === request) authRequest.current = null;
+      setAuthBusy(false);
+    }
+  }, [account, getSigner, isConnected, walletProvider]);
 
   const logoutPortal = useCallback(async () => {
     await api('/v1/auth/logout', { method: 'POST' }).catch(() => {});
@@ -92,7 +136,10 @@ export function WalletProvider({ children }) {
     getSigner,
     logoutPortal,
     walletProvider,
-  }), [account, authBusy, authenticated, ensureAuthenticated, getSigner, isConnected, logoutPortal, open, walletProvider]);
+  }), [
+    account, authBusy, authenticated, ensureAuthenticated, getSigner,
+    isConnected, logoutPortal, open, walletProvider,
+  ]);
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }

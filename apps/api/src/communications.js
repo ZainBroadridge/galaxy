@@ -64,10 +64,18 @@ function validateActionUrl(value) {
 function tokenAuthenticity(token, creator, audience) {
   if (token.owner === creator) return AUTHENTICITY_STATUS.TOKEN_OWNER_VERIFIED;
   if (audience === COMMUNICATION_AUDIENCE.CURRENT_HOLDERS) {
+    const authority = token.owner
+      ? ` Verified ${token.authoritySource?.toLowerCase() ?? 'authority'}: ${token.owner}.`
+      : '';
     throw new HttpError(
       403,
-      'Current-holder broadcasts require a token whose owner() address matches the connected wallet. Use Subscribers for self-claimed token news.',
-      'TOKEN_OWNER_REQUIRED',
+      `Current-holder broadcasts require the connected wallet to match the token owner() address or, when owner() is unavailable, the verified deployment creator.${authority} Use Subscribers for self-claimed token news.`,
+      'TOKEN_AUTHORITY_REQUIRED',
+      {
+        connectedWallet: creator,
+        verifiedAuthority: token.owner,
+        authoritySource: token.authoritySource,
+      },
     );
   }
   return AUTHENTICITY_STATUS.SELF_CLAIMED;

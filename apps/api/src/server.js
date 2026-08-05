@@ -51,6 +51,7 @@ const limiter = (limit, keyGenerator = undefined) => rateLimit({
 const authIpLimiter = limiter(120);
 const authWalletLimiter = limiter(12, (request) => String(request.body?.walletAddress ?? 'invalid-wallet').toLowerCase());
 const writeLimiter = limiter(40, (request) => request.auth?.wallet_address ?? 'anonymous');
+const voteLimiter = limiter(20, (request) => String(request.body?.voterAddress ?? 'invalid-voter').toLowerCase());
 const parse = (schema, value) => schema.parse(value);
 
 app.get('/health', async (_request, response, next) => {
@@ -96,13 +97,15 @@ app.get('/v1/dashboard/organiser', requireAuth, async (request, response, next) 
   try { response.json(await organiserDashboard(request.auth.wallet_address)); } catch (error) { next(error); }
 });
 
-app.get('/v1/events/:id/ballot', requireAuth, async (request, response, next) => {
-  try { response.json(await ballot(request.params.id, request.auth.wallet_address)); } catch (error) { next(error); }
+app.get('/v1/events/:id/ballot', async (request, response, next) => {
+  try { response.json(await ballot(request.params.id, request.query.wallet)); } catch (error) { next(error); }
 });
-app.post('/v1/events/:id/votes', requireAuth, writeLimiter, async (request, response, next) => {
+app.post('/v1/events/:id/votes', voteLimiter, async (request, response, next) => {
   try {
     const input = parse(voteInput, request.body);
-    response.status(202).json(await submitVote(request.params.id, request.auth.wallet_address, input.choices, input.signature));
+    response.status(202).json(await submitVote(
+      request.params.id, input.voterAddress, input.choices, input.signature,
+    ));
   } catch (error) { next(error); }
 });
 

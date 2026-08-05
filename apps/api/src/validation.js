@@ -14,7 +14,6 @@ import {
 const isoDate = z.string().datetime({ offset: true });
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
 const signature = z.string().regex(/^0x[0-9a-fA-F]+$/);
-
 const proposal = z.object({
   title: z.string().trim().min(1).max(220),
   description: z.string().trim().max(5000).default(''),
@@ -51,6 +50,7 @@ export const eventInput = z.object({
 });
 
 export const voteInput = z.object({
+  voterAddress: address,
   choices: z.array(z.number().int().min(0).max(MAX_OPTIONS - 1)).min(1).max(MAX_PROPOSALS),
   signature,
 });
@@ -78,6 +78,7 @@ const communicationFields = z.object({
   publishedAt: isoDate,
   expiresAt: isoDate,
 });
+
 function validateCommunicationDates(value, context) {
   if (Date.parse(value.expiresAt) <= Math.max(Date.now(), Date.parse(value.publishedAt))) {
     context.addIssue({
@@ -89,7 +90,6 @@ function validateCommunicationDates(value, context) {
 export const communicationDraftInput = communicationFields
   .extend({ audience: eventAudience })
   .superRefine(validateCommunicationDates);
-
 const signedCommunication = communicationFields.extend({
   messageId: z.string().uuid(),
   audience: eventAudience,
@@ -101,7 +101,6 @@ const signedCommunication = communicationFields.extend({
   creatorAddress: address,
   authenticityStatus: z.enum(Object.values(AUTHENTICITY_STATUS)),
 }).superRefine(validateCommunicationDates);
-
 export const communicationPublishInput = z.object({
   message: signedCommunication,
   signature,
@@ -111,7 +110,6 @@ export const tokenCommunicationDraftInput = communicationFields.extend({
   tokenAddress: address,
   audience: tokenAudience,
 }).superRefine(validateCommunicationDates);
-
 const signedTokenCommunication = communicationFields.extend({
   scope: z.literal('TOKEN'),
   messageId: z.string().uuid(),
@@ -123,7 +121,6 @@ const signedTokenCommunication = communicationFields.extend({
   creatorAddress: address,
   authenticityStatus: z.enum(Object.values(AUTHENTICITY_STATUS)),
 }).superRefine(validateCommunicationDates);
-
 export const tokenCommunicationPublishInput = z.object({
   message: signedTokenCommunication,
   signature,
