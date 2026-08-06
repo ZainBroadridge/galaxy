@@ -6,19 +6,23 @@ import { provider } from './rpc.js';
 
 const CACHE_TTL_MS = 60_000;
 const cache = new Map();
+const deploymentCache = new Map();
 
 async function optional(contract, method, fallback) {
   try { return await contract[method](); } catch { return fallback; }
 }
 
-async function creatorFromExplorer(tokenAddress) {
+export async function tokenDeployment(tokenAddress) {
+  const normalized = normalizeAddress(tokenAddress, 'tokenAddress');
+  const cached = deploymentCache.get(normalized);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
   if (!config.polygonScanApiKey) return null;
 
   const query = new URLSearchParams({
     chainid: String(config.chainId),
     module: 'contract',
     action: 'getcontractcreation',
-    contractaddresses: tokenAddress,
+    contractaddresses: normalized,
     apikey: config.polygonScanApiKey,
   });
   const controller = new AbortController();
@@ -31,8 +35,17 @@ async function creatorFromExplorer(tokenAddress) {
     if (!response.ok) return null;
 
     const payload = await response.json();
-    const creator = payload?.status === '1' ? payload.result?.[0]?.contractCreator : null;
-    return creator ? normalizeAddress(creator) : null;
+    const row = payload?.status === '1' ? payload.result?.[0] : null;
+    const blockNumber = Number(row?.blockNumber);
+    const value = row?.contractCreator && Number.isSafeInteger(blockNumber)
+      ? {
+          creator: normalizeAddress(row.contractCreator),
+          blockNumber,
+          transactionHash: row.txHash ?? null,
+        }
+      : null;
+    deploymentCache.set(normalized, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+    return value;
   } catch {
     return null;
   } finally {
@@ -67,8 +80,8 @@ async function creatorFromRpc(tokenAddress) {
 }
 
 async function deploymentCreator(tokenAddress) {
-  return await creatorFromExplorer(tokenAddress)
-    ?? await creatorFromRpc(tokenAddress).catch(() => null);
+  const deployment = await tokenDeployment(tokenAddress);
+  return deployment?.creator ?? await creatorFromRpc(tokenAddress).catch(() => null);
 }
 
 export async function inspectToken(input) {

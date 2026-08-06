@@ -72,18 +72,29 @@ export async function completeJob(id, result = {}) {
   );
 }
 
+function providerOutage(error) {
+  const text = errorText(error).toLowerCase();
+  return Number(error?.httpStatus) >= 500
+    || Number(error?.rpcCode) === -32001
+    || text.includes('unable to complete request');
+}
+
 export async function failJob(job, error) {
   const message = errorText(error).slice(0, 4000);
   const final = Boolean(error?.permanent) || Number(job.attempts) >= Number(job.max_attempts);
   if (!final) {
-    const delay = Math.min(120, 2 ** Math.max(1, Number(job.attempts)));
+    const attempt = Math.max(1, Number(job.attempts));
+    const delay = providerOutage(error)
+      ? Math.min(120, 15 * 2 ** (attempt - 1))
+      : Math.min(120, 2 ** attempt);
     await query(
       `UPDATE jobs SET status='PENDING',available_at=now()+($2*interval '1 second'),
-       message='Retry scheduled',error=$3,locked_at=NULL,locked_by=NULL WHERE id=$1`,
-      [job.id, delay, message],
+       message=$3,error=$4,locked_at=NULL,locked_by=NULL WHERE id=$1`,
+      [job.id, delay, `Retry scheduled in ${delay} seconds`, message],
     );
-    return;
+    return { final: false, delay };
   }
+
   await transaction(async (client) => {
     await client.query(
       `UPDATE jobs SET status='FAILED',message='Failed',error=$2,locked_at=NULL,locked_by=NULL WHERE id=$1`,
@@ -99,6 +110,7 @@ export async function failJob(job, error) {
       await client.query("UPDATE events SET verification_status='FAILED',verification_error=$2 WHERE id=$1", [job.event_id, message]);
     }
   });
+  return { final: true, delay: null };
 }
 
 export async function recoverJobs() {

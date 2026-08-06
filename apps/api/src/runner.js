@@ -31,6 +31,20 @@ async function nextDelay() {
   return Number.isFinite(delay) ? Math.max(250, Math.min(30_000, delay)) : null;
 }
 
+function errorContext(job, error) {
+  return {
+    jobId: job.id,
+    type: job.type,
+    eventId: job.event_id,
+    attempt: Number(job.attempts),
+    maxAttempts: Number(job.max_attempts),
+    rpcMethod: error?.rpcMethod,
+    rpcCode: error?.rpcCode,
+    httpStatus: error?.httpStatus,
+    error: error?.message,
+  };
+}
+
 async function loop() {
   if (running) return;
   running = true;
@@ -46,8 +60,10 @@ async function loop() {
         const result = await handler(job);
         await completeJob(job.id, result);
       } catch (error) {
-        await failJob(job, error);
-        logger.warn?.({ jobId: job.id, type: job.type, error: error.message }, 'Job failed or will retry');
+        const outcome = await failJob(job, error);
+        const context = { ...errorContext(job, error), retryDelaySeconds: outcome.delay };
+        if (outcome.final) logger.error?.(context, 'Job failed permanently');
+        else logger.warn?.(context, 'Job retry scheduled');
       }
     }
   } finally {

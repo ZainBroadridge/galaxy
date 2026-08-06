@@ -5,6 +5,7 @@ import { query, transaction } from './db.js';
 import { permanentError } from './errors.js';
 import { enqueueJob, updateJob } from './jobs.js';
 import { erc20Interface, rpc, rpcBlock } from './rpc.js';
+import { tokenDeployment } from './tokens.js';
 
 const zero = ZERO_ADDRESS.toLowerCase();
 
@@ -35,7 +36,7 @@ function applyTransfer(balances, from, to, value) {
   if (to && to !== zero) balances.set(to, (balances.get(to) ?? 0n) + value);
 }
 
-async function transfersAt(tokenAddress, recordBlock, jobId) {
+async function transfersAt(tokenAddress, startBlock, recordBlock, jobId) {
   const balances = new Map();
   const seen = new Set();
   let pageKey;
@@ -49,7 +50,7 @@ async function transfersAt(tokenAddress, recordBlock, jobId) {
       );
     }
     const request = {
-      fromBlock: '0x0',
+      fromBlock: toQuantity(startBlock),
       toBlock: toQuantity(recordBlock),
       contractAddresses: [tokenAddress],
       category: ['erc20'],
@@ -106,7 +107,14 @@ async function transfersAt(tokenAddress, recordBlock, jobId) {
 async function totalSupplyAt(tokenAddress, blockNumber) {
   const data = erc20Interface.encodeFunctionData('totalSupply');
   const raw = await rpc('eth_call', [{ to: tokenAddress, data }, toQuantity(blockNumber)]);
-  return erc20Interface.decodeFunctionResult('totalSupply', raw)[0];
+  if (!raw || raw === '0x') {
+    throw permanentError('The token did not expose totalSupply at the selected record date.');
+  }
+  try {
+    return erc20Interface.decodeFunctionResult('totalSupply', raw)[0];
+  } catch {
+    throw permanentError('The token returned an invalid totalSupply value at the selected record date.');
+  }
 }
 
 async function reuseSnapshot(event, block, jobId) {
@@ -204,12 +212,24 @@ export async function buildSnapshot(job) {
   const reused = await reuseSnapshot(event, block, job.id);
   if (reused) return reused;
 
-  const historicalCode = await rpc('eth_getCode', [event.token_address, toQuantity(block.number)]);
-  if (!historicalCode || historicalCode === '0x') {
-    throw permanentError('The ERC-20 contract did not exist at the selected record date.');
+  // Historical eth_getCode is an unnecessary archive-state dependency and can
+  // fail upstream even for valid contracts. Prefer the explorer's creation
+  // block when available, then let indexed transfers and historical supply
+  // validation establish snapshot compatibility.
+  const deployment = await tokenDeployment(event.token_address);
+  if (deployment?.blockNumber > block.number) {
+    throw permanentError(
+      `The ERC-20 contract was deployed at block ${deployment.blockNumber}, after the selected record-date block ${block.number}.`,
+    );
   }
 
-  const { balances, transferCount } = await transfersAt(event.token_address, block.number, job.id);
+  const startBlock = deployment?.blockNumber ?? 0;
+  const { balances, transferCount } = await transfersAt(
+    event.token_address,
+    startBlock,
+    block.number,
+    job.id,
+  );
   const negative = [...balances.entries()].find(([, value]) => value < 0n);
   if (negative) {
     throw permanentError(`Transfer history produced a negative balance for ${negative[0]}; this is not a compatible standard ERC-20 history.`);

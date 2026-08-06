@@ -12,8 +12,30 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function retryable(status, payload) {
   const code = payload?.error?.code;
   const text = String(payload?.error?.message ?? '').toLowerCase();
-  return status === 429 || status >= 500 || code === 429 || code === -32005
-    || text.includes('rate limit') || text.includes('too many requests') || text.includes('timeout');
+  return status === 429
+    || status >= 500
+    || code === 429
+    || code === -32001
+    || code === -32005
+    || text.includes('rate limit')
+    || text.includes('too many requests')
+    || text.includes('timeout')
+    || text.includes('unable to complete request');
+}
+
+function retryDelay(response, attempt) {
+  const retryAfter = Number(response?.headers?.get('retry-after'));
+  if (Number.isFinite(retryAfter) && retryAfter >= 0) return retryAfter * 1000;
+  return Math.min(8_000, 500 * 2 ** attempt) + Math.random() * 250;
+}
+
+function rpcError(method, status, payload) {
+  const message = payload?.error?.message || `RPC HTTP ${status}`;
+  const error = new Error(`${method} failed: ${message}`);
+  error.rpcMethod = method;
+  error.rpcCode = payload?.error?.code;
+  error.httpStatus = status;
+  return error;
 }
 
 export async function rpc(method, params, { retries = config.alchemyMaxRetries } = {}) {
@@ -29,17 +51,18 @@ export async function rpc(method, params, { retries = config.alchemyMaxRetries }
       let payload;
       try { payload = JSON.parse(text); } catch { payload = { error: { message: text } }; }
       if (response.ok && !payload.error) return payload.result;
-      const error = new Error(payload?.error?.message || `RPC HTTP ${response.status}`);
-      error.rpcCode = payload?.error?.code;
-      error.httpStatus = response.status;
-      if (!retryable(response.status, payload) || attempt === retries) throw error;
-      const retryAfter = Number(response.headers.get('retry-after'));
-      await wait(Number.isFinite(retryAfter) ? retryAfter * 1000 : Math.min(8000, 500 * 2 ** attempt) + Math.random() * 250);
+
+      const error = rpcError(method, response.status, payload);
       lastError = error;
+      if (!retryable(response.status, payload) || attempt === retries) throw error;
+      await wait(retryDelay(response, attempt));
     } catch (error) {
       lastError = error;
-      if (attempt === retries || (error.httpStatus && !retryable(error.httpStatus, { error }))) throw error;
-      await wait(Math.min(8000, 500 * 2 ** attempt) + Math.random() * 250);
+      if (attempt === retries) throw error;
+      if (error.httpStatus && !retryable(error.httpStatus, { error: { code: error.rpcCode, message: error.message } })) {
+        throw error;
+      }
+      await wait(Math.min(8_000, 500 * 2 ** attempt) + Math.random() * 250);
     }
   }
   throw new Error(errorText(lastError));
