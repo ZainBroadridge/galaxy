@@ -8,10 +8,6 @@ import { erc20Interface, rpc, rpcBlock } from './rpc.js';
 import { tokenDeployment } from './tokens.js';
 
 const zero = ZERO_ADDRESS.toLowerCase();
-const transferTopic = erc20Interface.getEvent('Transfer').topicHash;
-const MAX_LOG_BLOCK_RANGE = 10_000;
-const MIN_LOG_BLOCK_RANGE = 1;
-const LOG_RANGE_GROW_THRESHOLD = 1_000;
 
 async function resolveRecordBlock(recordDateAt) {
   const latest = Number(BigInt(await rpc('eth_blockNumber', [])));
@@ -40,90 +36,70 @@ function applyTransfer(balances, from, to, value) {
   if (to && to !== zero) balances.set(to, (balances.get(to) ?? 0n) + value);
 }
 
-function isLogRangeError(error) {
-  const message = String(error?.message ?? '').toLowerCase();
-  return error?.rpcCode === -32005
-    || error?.httpStatus === 413
-    || message.includes('query timeout')
-    || message.includes('more than 10000 results')
-    || message.includes('too many results')
-    || message.includes('block range')
-    || message.includes('range is too large')
-    || message.includes('response size')
-    || message.includes('limit exceeded');
-}
-
 async function transfersAt(tokenAddress, startBlock, recordBlock, jobId) {
   const balances = new Map();
   const seen = new Set();
-  const totalBlocks = Math.max(1, recordBlock - startBlock + 1);
-  let fromBlock = startBlock;
-  let blockRange = Math.min(MAX_LOG_BLOCK_RANGE, totalBlocks);
-  let requests = 0;
+  let pageKey;
+  let page = 0;
 
-  while (fromBlock <= recordBlock) {
-    const toBlock = Math.min(recordBlock, fromBlock + blockRange - 1);
-    let logs;
-
-    try {
-      logs = await rpc(
-        'eth_getLogs',
-        [{
-          address: tokenAddress,
-          fromBlock: toQuantity(fromBlock),
-          toBlock: toQuantity(toBlock),
-          topics: [transferTopic],
-        }],
-        { retries: 1 },
+  do {
+    page += 1;
+    if (page > config.alchemyMaxPages) {
+      throw permanentError(
+        `Token history exceeds the configured ${config.alchemyMaxPages * config.alchemyPageSize} indexed-transfer limit. Increase ALCHEMY_MAX_PAGES only after confirming the event can finish before voting opens.`,
       );
-      if (!Array.isArray(logs)) throw new Error('eth_getLogs returned an invalid response.');
+    }
+    const request = {
+      fromBlock: toQuantity(startBlock),
+      toBlock: toQuantity(recordBlock),
+      contractAddresses: [tokenAddress],
+      category: ['erc20'],
+      excludeZeroValue: false,
+      withMetadata: false,
+      order: 'asc',
+      maxCount: toQuantity(config.alchemyPageSize),
+      ...(pageKey ? { pageKey } : {}),
+    };
+
+    let response;
+    try {
+      response = await rpc('alchemy_getAssetTransfers', [request]);
     } catch (error) {
-      if (!isLogRangeError(error)) throw error;
-      if (blockRange === MIN_LOG_BLOCK_RANGE) {
-        throw permanentError(`The ERC-20 emitted too many Transfer logs in block ${fromBlock} for the RPC log limit.`);
+      if (error.rpcCode === -32601) {
+        throw permanentError('RPC_HTTP_URL must be an Alchemy Polygon Amoy HTTPS endpoint with alchemy_getAssetTransfers support.');
       }
-      blockRange = Math.max(MIN_LOG_BLOCK_RANGE, Math.floor(blockRange / 2));
-      continue;
+      if (error.httpStatus === 400 || error.rpcCode === -32602) {
+        throw permanentError(`Alchemy rejected the indexed-transfer request: ${error.message}`);
+      }
+      throw error;
     }
 
-    for (const log of logs) {
-      if (log.removed) continue;
-      const key = `${log.blockHash ?? log.blockNumber}:${log.transactionHash}:${log.logIndex}`;
+    const transfers = Array.isArray(response?.transfers) ? response.transfers : [];
+    for (const transfer of transfers) {
+      const raw = transfer?.rawContract?.value;
+      if (raw === null || raw === undefined) {
+        throw permanentError('Alchemy omitted a raw ERC-20 transfer value, so this token cannot be snapshotted safely.');
+      }
+      const key = transfer.uniqueId ?? `${transfer.hash}:${transfer.logIndex ?? ''}:${transfer.blockNum}:${transfer.from}:${transfer.to}:${raw}`;
       if (seen.has(key)) continue;
       seen.add(key);
-
-      let decoded;
-      try {
-        decoded = erc20Interface.decodeEventLog('Transfer', log.data, log.topics);
-      } catch {
-        throw permanentError(`Unable to decode ERC-20 Transfer log ${key}.`);
-      }
-
       applyTransfer(
         balances,
-        normalizeAddress(decoded.from),
-        normalizeAddress(decoded.to),
-        BigInt(decoded.value),
+        normalizeAddress(transfer.from),
+        normalizeAddress(transfer.to),
+        BigInt(raw),
       );
     }
 
-    requests += 1;
-    fromBlock = toBlock + 1;
-    const completedBlocks = Math.min(totalBlocks, fromBlock - startBlock);
-    const progress = Math.min(55, 10 + Math.round((completedBlocks / totalBlocks) * 45));
-
-    if (requests === 1 || requests % 10 === 0 || fromBlock > recordBlock) {
+    pageKey = response?.pageKey ?? null;
+    if (page === 1 || page % 5 === 0 || !pageKey) {
       await updateJob(
         jobId,
-        progress,
-        `Read ${seen.size.toLocaleString()} ERC-20 transfers`,
+        Math.min(55, 10 + Math.round((page / config.alchemyMaxPages) * 45)),
+        `Read ${seen.size.toLocaleString()} indexed ERC-20 transfers`,
       );
     }
-
-    if (logs.length < LOG_RANGE_GROW_THRESHOLD) {
-      blockRange = Math.min(MAX_LOG_BLOCK_RANGE, blockRange * 2);
-    }
-  }
+  } while (pageKey);
 
   return { balances, transferCount: seen.size };
 }
