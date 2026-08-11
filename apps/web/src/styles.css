@@ -377,10 +377,23 @@ progress::-moz-progress-bar { background: var(--blue); }
 }
 .comms-panel-heading h2 { margin: 3px 0 0; }
 .comms-panel-heading p { margin: 7px 0 0; color: var(--muted); }
-.organiser-access { max-width: 720px; }
 .organiser-access h2 { margin: 5px 0 8px; }
 .organiser-access p { max-width: 620px; color: var(--muted); }
-.organiser-comms-panel { max-width: 960px; }
+#comms-panel-organiser {
+  width: 100%;
+}
+
+.organiser-access {
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+.organiser-comms-panel {
+  width: 100%;
+  max-width: 960px;
+  margin-inline: auto;
+}
 .organiser-comms-panel > .notice, .organiser-access > .notice { width: 100%; margin: 0 0 16px; }
 .organiser-comms-form { gap: 16px; }
 .form-section {
