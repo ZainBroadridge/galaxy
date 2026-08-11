@@ -57,7 +57,6 @@ export const voteInput = z.object({
 
 export const subscriptionInput = z.object({
   tokenAddress: address,
-  categories: z.array(z.enum(Object.values(COMMUNICATION_CATEGORY))).min(1).max(6),
   enabled: z.boolean(),
 });
 

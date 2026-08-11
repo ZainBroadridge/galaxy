@@ -3,6 +3,7 @@ import { Contract, verifyMessage } from 'ethers';
 import {
   AUTHENTICITY_STATUS,
   COMMUNICATION_AUDIENCE,
+  COMMUNICATION_CATEGORY,
   STANDARD_ERC20_ABI,
   buildCommunicationSigningMessage,
   buildTokenCommunicationSigningMessage,
@@ -13,6 +14,11 @@ import { HttpError, normalizeAddress } from './errors.js';
 import { getEventRow } from './events.js';
 import { provider } from './rpc.js';
 import { inspectToken } from './tokens.js';
+
+const NON_HOLDER_SUBSCRIBER_CATEGORIES = new Set([
+  COMMUNICATION_CATEGORY.GENERAL,
+  COMMUNICATION_CATEGORY.RESULTS_AVAILABLE,
+]);
 
 function commonMessage(input) {
   return {
@@ -149,8 +155,18 @@ export async function publishTokenCommunication(wallet, input) {
 }
 
 export async function subscriptions(wallet) {
-  const rows = await query('SELECT token_address,categories,enabled,updated_at FROM snap_subscriptions WHERE wallet_address=$1 ORDER BY updated_at DESC', [normalizeAddress(wallet)]);
-  return rows.rows.map((row) => ({ tokenAddress: row.token_address, categories: row.categories, enabled: row.enabled, updatedAt: row.updated_at }));
+  const rows = await query(
+    `SELECT token_address,enabled,updated_at
+       FROM snap_subscriptions
+      WHERE wallet_address=$1
+      ORDER BY updated_at DESC`,
+    [normalizeAddress(wallet)],
+  );
+  return rows.rows.map((row) => ({
+    tokenAddress: row.token_address,
+    enabled: row.enabled,
+    updatedAt: row.updated_at,
+  }));
 }
 
 export async function saveSubscription(wallet, input) {
@@ -158,12 +174,14 @@ export async function saveSubscription(wallet, input) {
   const token = normalizeAddress(input.tokenAddress, 'tokenAddress');
   const result = await query(
     `INSERT INTO snap_subscriptions(wallet_address,token_address,categories,enabled)
-     VALUES ($1,$2,$3::jsonb,$4)
-     ON CONFLICT(wallet_address,token_address) DO UPDATE SET categories=EXCLUDED.categories,enabled=EXCLUDED.enabled,updated_at=now()
-     RETURNING *`,
-    [address, token, JSON.stringify(input.categories), input.enabled],
+     VALUES ($1,$2,'[]'::jsonb,$3)
+     ON CONFLICT(wallet_address,token_address) DO UPDATE
+       SET categories='[]'::jsonb,enabled=EXCLUDED.enabled,updated_at=now()
+     RETURNING token_address,enabled,updated_at`,
+    [address, token, input.enabled],
   );
-  return result.rows[0];
+  const row = result.rows[0];
+  return { tokenAddress: row.token_address, enabled: row.enabled, updatedAt: row.updated_at };
 }
 
 function serializeEventCommunication(row) {
@@ -222,21 +240,17 @@ export async function inbox(wallet) {
          AND e.snap_delivery_mode<>'DISABLED'
          AND (e.snap_delivery_mode='ELIGIBLE' OR s.wallet_address IS NOT NULL)
          AND (c.audience='ALL_ELIGIBLE' OR (c.audience='NOT_VOTED' AND v.id IS NULL) OR (c.audience='SUBSCRIBERS' AND s.wallet_address IS NOT NULL))
-         AND (s.categories IS NULL OR s.categories='[]'::jsonb OR s.categories ? c.category)
        ORDER BY c.published_at DESC LIMIT 100`,
       [address],
     ),
     query(
-      `SELECT c.*,s.wallet_address AS subscribed_wallet,s.categories AS subscription_categories
+      `SELECT c.*,s.wallet_address AS subscribed_wallet
        FROM communications c
        LEFT JOIN snap_subscriptions s ON s.wallet_address=$1 AND s.token_address=c.token_address AND s.enabled=true
        WHERE c.scope='TOKEN' AND c.revoked_at IS NULL AND c.published_at<=now() AND c.expires_at>now()
          AND (
            c.audience='CURRENT_HOLDERS'
-           OR (
-             c.audience='SUBSCRIBERS' AND s.wallet_address IS NOT NULL
-             AND (s.categories='[]'::jsonb OR s.categories ? c.category)
-           )
+           OR (c.audience='SUBSCRIBERS' AND s.wallet_address IS NOT NULL)
          )
        ORDER BY c.published_at DESC LIMIT 100`,
       [address],
@@ -254,9 +268,14 @@ export async function inbox(wallet) {
     }
     return balanceChecks.get(tokenAddress);
   };
-  const tokenVisibility = await Promise.all(tokenRows.rows.map(async (row) => (
-    row.audience !== COMMUNICATION_AUDIENCE.CURRENT_HOLDERS || await isCurrentHolder(row.token_address)
-  )));
+  const tokenVisibility = await Promise.all(tokenRows.rows.map(async (row) => {
+    if (row.audience === COMMUNICATION_AUDIENCE.CURRENT_HOLDERS) {
+      return isCurrentHolder(row.token_address);
+    }
+    if (!row.subscribed_wallet) return false;
+    if (NON_HOLDER_SUBSCRIBER_CATEGORIES.has(row.category)) return true;
+    return isCurrentHolder(row.token_address);
+  }));
   const messages = [
     ...eventRows.rows.map(serializeEventCommunication),
     ...tokenRows.rows.filter((_row, index) => tokenVisibility[index]).map(serializeTokenCommunication),

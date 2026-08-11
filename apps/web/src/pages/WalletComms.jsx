@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
-import { Empty, ErrorBox, Notice, Page, Panel, Spinner, Status } from '../components/UI.jsx';
+import { ErrorBox, Notice, Panel, Spinner, Status } from '../components/UI.jsx';
 import { useNotifications } from '../notifications.jsx';
 import { getInstalledSnap, installSnap, snapConfiguration, syncSnap } from '../snap.js';
 import { useWallet } from '../wallet.jsx';
 
-const categoryOptions = [
+const communicationCategories = [
   { value: 'EVENT_ANNOUNCEMENT', label: 'Event announcements' },
   { value: 'VOTING_OPEN', label: 'Voting opens' },
   { value: 'DEADLINE_REMINDER', label: 'Deadline reminders' },
@@ -13,7 +13,8 @@ const categoryOptions = [
   { value: 'RESULTS_AVAILABLE', label: 'Results available' },
   { value: 'GENERAL', label: 'General issuer news' },
 ];
-const categoryValues = categoryOptions.map(({ value }) => value);
+
+const categoryLabels = new Map(communicationCategories.map(({ value, label }) => [value, label]));
 const localDate = (date) => new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 const initialCommunication = () => ({
   scope: 'EVENT',
@@ -25,36 +26,7 @@ const initialCommunication = () => ({
   body: '',
   expiresAt: localDate(new Date(Date.now() + 7 * 24 * 60 * 60_000)),
 });
-
-function CategoryPicker({ selected, onChange, disabled = false }) {
-  const summary = selected.length === categoryOptions.length
-    ? 'All notification categories'
-    : `${selected.length} categor${selected.length === 1 ? 'y' : 'ies'} selected`;
-
-  function toggle(value, checked) {
-    const next = checked
-      ? categoryValues.filter((item) => item === value || selected.includes(item))
-      : selected.filter((item) => item !== value);
-    onChange(next);
-  }
-
-  return <details className={`category-select${disabled ? ' disabled' : ''}`}>
-    <summary aria-disabled={disabled} onClick={(event) => disabled && event.preventDefault()}>
-      <span>{selected.length ? summary : 'Select notification categories'}</span>
-      <span className="category-select-count">{selected.length}</span>
-    </summary>
-    <div className="category-select-menu" role="group" aria-label="Notification categories">
-      {categoryOptions.map((option) => <label className="category-option" key={option.value}>
-        <input
-          type="checkbox"
-          checked={selected.includes(option.value)}
-          onChange={(event) => toggle(option.value, event.target.checked)}
-        />
-        <span>{option.label}</span>
-      </label>)}
-    </div>
-  </details>;
-}
+const shortAddress = (value) => value ? `${value.slice(0, 8)}…${value.slice(-6)}` : '';
 
 export default function WalletComms() {
   const wallet = useWallet();
@@ -67,13 +39,14 @@ export default function WalletComms() {
   const [pendingAction, setPendingAction] = useState(null);
   const [error, setError] = useState(null);
   const [feedback, setFeedback] = useState(null);
-  const [subscription, setSubscription] = useState({ tokenAddress: '', categories: categoryValues, enabled: true });
+  const [subscription, setSubscription] = useState({ tokenAddress: '', enabled: true });
   const [communication, setCommunication] = useState(initialCommunication);
 
   useEffect(() => {
     setActiveTab('investor');
     setSubscriptions([]);
     setOrganisedEvents([]);
+    setSubscription({ tokenAddress: '', enabled: true });
     setCommunication(initialCommunication());
     setError(null);
     setFeedback(null);
@@ -89,8 +62,10 @@ export default function WalletComms() {
   }, [activeTab, snapInstalled]);
 
   useEffect(() => {
-    if (wallet.connected && notifications.messages.length) notifications.markAllRead();
-  }, [notifications.markAllRead, notifications.messages, wallet.connected]);
+    if (wallet.connected && activeTab === 'investor' && notifications.messages.length) {
+      notifications.markAllRead();
+    }
+  }, [activeTab, notifications.markAllRead, notifications.messages, wallet.connected]);
 
   const loadPortalData = useCallback(async () => {
     if (!wallet.connected) return;
@@ -171,8 +146,8 @@ export default function WalletComms() {
         action: 'subscription',
         tone: 'success',
         message: subscription.enabled
-          ? 'Subscription preferences saved successfully.'
-          : 'Notifications disabled for this token.',
+          ? 'Token subscription saved successfully.'
+          : 'Token notifications disabled successfully.',
       });
     });
   }
@@ -242,17 +217,17 @@ export default function WalletComms() {
     ? <Notice tone={feedback.tone}>{feedback.message}</Notice>
     : null;
   const lastUpdated = notifications.lastUpdatedAt
-    ? `Updated ${new Date(notifications.lastUpdatedAt).toLocaleTimeString()}`
-    : 'Waiting for the first update';
+    ? new Date(notifications.lastUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : null;
+  const notificationCount = notifications.messages.length;
 
-  return <Page title="Wallet Comms" intro="A verified inbox for investor notices, subscription preferences and organiser communications.">
-    {!configuration.ready && <Notice tone="error">{configuration.message}</Notice>}
-    {!wallet.connected && <Panel><Empty><p>Connect a wallet to view and manage notifications.</p><button className="button" onClick={wallet.openWallet}>Connect wallet</button></Empty></Panel>}
-    <ErrorBox error={error} />
-    <ErrorBox error={notifications.error} />
-
-    {wallet.connected && <>
-      <div className="comms-tabs" role="tablist" aria-label="Wallet communications">
+  return <main className="page wallet-comms-page">
+    <header className="wallet-comms-header">
+      <div>
+        <span className="wallet-comms-kicker">Investor communications</span>
+        <h1>Wallet Comms</h1>
+      </div>
+      {wallet.connected && <div className="comms-tabs" role="tablist" aria-label="Wallet communications">
         <button
           type="button"
           id="comms-tab-investor"
@@ -261,7 +236,10 @@ export default function WalletComms() {
           aria-selected={activeTab === 'investor'}
           className={`comms-tab${activeTab === 'investor' ? ' active' : ''}`}
           onClick={() => setActiveTab('investor')}
-        >Investor</button>
+        >
+          Notifications
+          {notifications.unreadCount > 0 && <span className="comms-tab-count">{notifications.unreadCount > 99 ? '99+' : notifications.unreadCount}</span>}
+        </button>
         {snapInstalled && <button
           type="button"
           id="comms-tab-organiser"
@@ -271,113 +249,155 @@ export default function WalletComms() {
           className={`comms-tab${activeTab === 'organiser' ? ' active' : ''}`}
           onClick={() => setActiveTab('organiser')}
         >Organiser</button>}
-      </div>
+      </div>}
+    </header>
 
-      {activeTab === 'investor' && <div id="comms-panel-investor" className="comms-layout" role="tabpanel" aria-labelledby="comms-tab-investor">
-        <Panel className="comms-inbox-panel">
-          <div className="comms-panel-heading">
-            <div>
-              <span className="panel-eyebrow">Investor inbox</span>
-              <h2>Notifications</h2>
-              <p>Verified notices load automatically and update while the dApp is open.</p>
+    {!configuration.ready && <Notice tone="error">{configuration.message}</Notice>}
+    <ErrorBox error={error} />
+    <ErrorBox error={notifications.error} />
+
+    {!wallet.connected && <Panel className="comms-connect-panel">
+      <div>
+        <h2>Connect your wallet</h2>
+        <p>View verified notices and follow token updates without sharing an email address.</p>
+      </div>
+      <button className="button" onClick={wallet.openWallet}>Connect wallet</button>
+    </Panel>}
+
+    {wallet.connected && activeTab === 'investor' && <div id="comms-panel-investor" className="notification-workspace" role="tabpanel" aria-labelledby="comms-tab-investor">
+      <section className="notification-center" aria-labelledby="notification-center-title">
+        <header className="notification-toolbar">
+          <div>
+            <div className="notification-title-line">
+              <h2 id="notification-center-title">Notifications</h2>
+              <span className="notification-total">{notificationCount}</span>
             </div>
-            <div className="comms-panel-tools">
-              <div className="inbox-status"><Status value={notifications.live ? 'LIVE' : 'POLLING'} /><span>{lastUpdated}</span></div>
-              <button className="button secondary compact" onClick={sync} disabled={busy} title="Copy current notifications to MetaMask">{pendingAction === 'sync' ? 'Syncing…' : 'Sync now'}</button>
+            <p>Verified notices for this wallet appear here automatically.</p>
+          </div>
+          <div className="notification-actions">
+            <span className={`live-indicator${notifications.live ? ' online' : ''}`}>
+              <span aria-hidden="true" />{notifications.live ? 'Live' : 'Refreshing'}
+            </span>
+            {lastUpdated && <span className="notification-updated">Updated {lastUpdated}</span>}
+            <button className="button secondary compact" onClick={sync} disabled={busy} title="Copy current notifications to MetaMask">
+              {pendingAction === 'sync' ? 'Syncing…' : 'Sync now'}
+            </button>
+          </div>
+        </header>
+
+        {actionNotice('sync')}
+        <div className="notification-feed" aria-live="polite">
+          {notifications.loading && !notificationCount
+            ? <Spinner />
+            : notificationCount
+              ? notifications.messages.map((message) => <article className="notification-row" key={message.messageId}>
+                <div className="notification-token-mark" aria-hidden="true">{message.tokenSymbol?.slice(0, 2) || 'PV'}</div>
+                <div className="notification-row-body">
+                  <div className="notification-row-meta">
+                    <span className="notification-token-name">{message.tokenSymbol}</span>
+                    <span>{categoryLabels.get(message.category) ?? String(message.category).replaceAll('_', ' ')}</span>
+                    <time dateTime={message.publishedAt}>{new Date(message.publishedAt).toLocaleString()}</time>
+                  </div>
+                  <h3>{message.title}</h3>
+                  <p>{message.body}</p>
+                  {message.scope === 'EVENT' && message.actionUrl && <a className="notification-action" href={message.actionUrl}>Open event</a>}
+                </div>
+              </article>)
+              : <div className="notification-empty">
+                <strong>You’re all caught up</strong>
+                <span>New verified notices will appear here automatically.</span>
+              </div>}
+        </div>
+      </section>
+
+      <div className="comms-utilities">
+        <section className="comms-utility-card">
+          <div className="utility-card-heading">
+            <div>
+              <span className="panel-eyebrow">MetaMask</span>
+              <h2>Wallet inbox</h2>
+            </div>
+            <Status value={snapInstalled ? 'INSTALLED' : 'NOT_INSTALLED'} />
+          </div>
+          <p>Install the Snap to keep a verified copy of notices inside MetaMask and unlock organiser tools.</p>
+          <button className="button" onClick={install} disabled={!configuration.ready || busy}>
+            {pendingAction === 'install' ? (snapInstalled ? 'Updating…' : 'Installing…') : (snapInstalled ? 'Update Snap' : 'Install Snap')}
+          </button>
+          {actionNotice('install')}
+        </section>
+
+        <section className="comms-utility-card">
+          <div className="utility-card-heading">
+            <div>
+              <span className="panel-eyebrow">Token updates</span>
+              <h2>Follow a token</h2>
             </div>
           </div>
-          {actionNotice('sync')}
-          {notifications.loading && !notifications.messages.length
-            ? <Spinner />
-            : notifications.messages.length
-              ? <div className="notification-list">{notifications.messages.map((message) => <article className="notification-card" key={message.messageId}>
-                <div className="notification-card-meta">
-                  <div className="notification-card-tags"><span className="token-tag">{message.tokenSymbol}</span><Status value={message.category} /></div>
-                  <time dateTime={message.publishedAt}>{new Date(message.publishedAt).toLocaleString()}</time>
-                </div>
-                <h3>{message.title}</h3>
-                <p>{message.body}</p>
-                {message.scope === 'EVENT' && message.actionUrl && <a className="notification-action" href={message.actionUrl}>Open event</a>}
-              </article>)}</div>
-              : <Empty>No notifications for this wallet.</Empty>}
+          <p>Followers receive general issuer news and published results. Holder-only notices are matched from blockchain balances automatically.</p>
+          <div className="subscription-form">
+            <label>Token address<input value={subscription.tokenAddress} onChange={(event) => setSubscription({ ...subscription, tokenAddress: event.target.value })} placeholder="0x…" /></label>
+            <label>Delivery<select value={subscription.enabled ? 'on' : 'off'} onChange={(event) => setSubscription({ ...subscription, enabled: event.target.value === 'on' })}><option value="on">Subscribed</option><option value="off">Unsubscribed</option></select></label>
+          </div>
+          <button className="button secondary" onClick={saveSubscription} disabled={!subscription.tokenAddress || busy}>
+            {pendingAction === 'subscription' ? 'Saving…' : 'Save subscription'}
+          </button>
+          {actionNotice('subscription')}
+          {activeSubscriptions.length > 0 && <div className="subscription-list">
+            <span>Following</span>
+            <div>{activeSubscriptions.map((item) => <code key={item.tokenAddress} title={item.tokenAddress}>{shortAddress(item.tokenAddress)}</code>)}</div>
+          </div>}
+        </section>
+      </div>
+    </div>}
+
+    {wallet.connected && activeTab === 'organiser' && snapInstalled && <div id="comms-panel-organiser" role="tabpanel" aria-labelledby="comms-tab-organiser">
+      {!wallet.authenticated
+        ? <Panel className="organiser-access">
+          <span className="panel-eyebrow">Organiser access</span>
+          <h2>Unlock communication tools</h2>
+          <p>Authenticate the connected wallet once to load its organised events and publish verified communications.</p>
+          <button className="button" onClick={unlockOrganiser} disabled={busy}>{pendingAction === 'organiser' ? 'Unlocking…' : 'Unlock organiser tools'}</button>
+          {actionNotice('organiser')}
         </Panel>
-
-        <aside className="comms-sidebar">
-          <Panel className="comms-side-card">
-            <div className="comms-card-header">
-              <div><span className="panel-eyebrow">Wallet extension</span><h2>MetaMask Snap</h2></div>
-              <Status value={snapInstalled ? 'INSTALLED' : 'NOT_INSTALLED'} />
+        : <Panel className="organiser-comms-panel">
+          <div className="comms-panel-heading">
+            <div>
+              <span className="panel-eyebrow">Organiser tools</span>
+              <h2>Issue a communication</h2>
+              <p>Publish a signed notice for a voting event or an ERC-20 token audience.</p>
             </div>
-            <p className="muted package-id">{configuration.ready ? configuration.id : 'Production package not configured'}</p>
-            <button className="button" onClick={install} disabled={!configuration.ready || busy}>{pendingAction === 'install' ? (snapInstalled ? 'Updating…' : 'Installing…') : (snapInstalled ? 'Update Snap' : 'Install Snap')}</button>
-            {actionNotice('install')}
-            <p className="muted">Sync copies the current inbox to MetaMask. Installing the Snap also unlocks organiser publishing tools on this page.</p>
-          </Panel>
-
-          <Panel className="comms-side-card">
-            <div className="comms-card-header">
-              <div><span className="panel-eyebrow">Preferences</span><h2>Subscriptions</h2></div>
-            </div>
-            <div className="settings-stack">
-              <label>Token address<input value={subscription.tokenAddress} onChange={(event) => setSubscription({ ...subscription, tokenAddress: event.target.value })} placeholder="0x…" /></label>
-              <label>Delivery<select value={subscription.enabled ? 'on' : 'off'} onChange={(event) => setSubscription({ ...subscription, enabled: event.target.value === 'on' })}><option value="on">Subscribed</option><option value="off">Unsubscribed</option></select></label>
-              <div className="field"><span className="field-label">Notification categories</span><CategoryPicker selected={subscription.categories} onChange={(next) => setSubscription({ ...subscription, categories: next })} disabled={busy} /></div>
-            </div>
-            <button className="button secondary" onClick={saveSubscription} disabled={!subscription.tokenAddress || !subscription.categories.length || busy}>{pendingAction === 'subscription' ? 'Saving…' : 'Save preferences'}</button>
-            {actionNotice('subscription')}
-            {activeSubscriptions.length > 0 && <div className="subscription-list"><span className="muted">Active token subscriptions</span>{activeSubscriptions.map((item) => <code key={item.tokenAddress}>{item.tokenAddress}</code>)}</div>}
-          </Panel>
-        </aside>
-      </div>}
-
-      {activeTab === 'organiser' && snapInstalled && <div id="comms-panel-organiser" role="tabpanel" aria-labelledby="comms-tab-organiser">
-        {!wallet.authenticated
-          ? <Panel className="organiser-access">
-            <span className="panel-eyebrow">Organiser access</span>
-            <h2>Unlock communication tools</h2>
-            <p>Authenticate the connected wallet once to load its organised events and publish verified communications.</p>
-            <button className="button" onClick={unlockOrganiser} disabled={busy}>{pendingAction === 'organiser' ? 'Unlocking…' : 'Unlock organiser tools'}</button>
-            {actionNotice('organiser')}
-          </Panel>
-          : <Panel className="organiser-comms-panel">
-            <div className="comms-panel-heading">
-              <div>
-                <span className="panel-eyebrow">Organiser tools</span>
-                <h2>Issue a communication</h2>
-                <p>Publish a signed notice for a voting event or an ERC-20 token audience.</p>
+          </div>
+          <form className="form organiser-comms-form" onSubmit={publish}>
+            <section className="form-section">
+              <div className="form-section-heading"><span>1</span><div><h3>Audience</h3><p>Choose the asset context and recipients.</p></div></div>
+              <div className="field-grid three">
+                <label>Communication for<select value={communication.scope} onChange={(event) => changeScope(event.target.value)}><option value="EVENT">Voting event</option><option value="TOKEN">Token news / announcement</option></select></label>
+                {tokenScoped
+                  ? <label>ERC-20 token address<input value={communication.tokenAddress} onChange={(event) => setCommunication({ ...communication, tokenAddress: event.target.value })} placeholder="0x…" required /></label>
+                  : <label>Event<select value={communication.eventId} onChange={(event) => setCommunication({ ...communication, eventId: event.target.value })} required><option value="">Select an event</option>{organisedEvents.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}
+                <label>Category<select value={communication.category} onChange={(event) => setCommunication({ ...communication, category: event.target.value })}>{communicationCategories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
               </div>
+              <label>Audience<select value={communication.audience} onChange={(event) => setCommunication({ ...communication, audience: event.target.value })}>
+                {tokenScoped ? <><option value="SUBSCRIBERS">Subscribed investors</option><option value="CURRENT_HOLDERS">Current token holders</option></> : <><option value="ALL_ELIGIBLE">All eligible</option><option value="NOT_VOTED">Not voted</option><option value="SUBSCRIBERS">Subscribers</option></>}
+              </select></label>
+              {tokenScoped && communication.audience === 'SUBSCRIBERS' && <Notice>General news and published results reach all subscribers. Other categories are delivered only to subscribers who currently hold the token.</Notice>}
+              {tokenScoped && communication.audience === 'CURRENT_HOLDERS' && <Notice>Current-holder broadcasts require a verified token authority: the standard <code>owner()</code> address, or the deployment creator when the token does not expose <code>owner()</code>.</Notice>}
+              {!tokenScoped && !organisedEvents.length && <Notice>No organised event is available. Select “Token news / announcement” to publish independently using an ERC-20 address.</Notice>}
+            </section>
+
+            <section className="form-section">
+              <div className="form-section-heading"><span>2</span><div><h3>Message</h3><p>Keep the title concise and the action clear.</p></div></div>
+              <label>Title<input value={communication.title} onChange={(event) => setCommunication({ ...communication, title: event.target.value })} required /></label>
+              <label>Message<textarea rows="5" value={communication.body} onChange={(event) => setCommunication({ ...communication, body: event.target.value })} required /></label>
+              <label>Expires<input type="datetime-local" value={communication.expiresAt} onChange={(event) => setCommunication({ ...communication, expiresAt: event.target.value })} required /></label>
+            </section>
+
+            <div className="form-actions">
+              <button className="button" disabled={busy || !canPublish}>{pendingAction === 'publish' ? 'Signing and publishing…' : 'Sign and publish'}</button>
+              {actionNotice('publish')}
             </div>
-            <form className="form organiser-comms-form" onSubmit={publish}>
-              <section className="form-section">
-                <div className="form-section-heading"><span>1</span><div><h3>Audience</h3><p>Choose the asset context and recipients.</p></div></div>
-                <div className="field-grid three">
-                  <label>Communication for<select value={communication.scope} onChange={(event) => changeScope(event.target.value)}><option value="EVENT">Voting event</option><option value="TOKEN">Token news / announcement</option></select></label>
-                  {tokenScoped
-                    ? <label>ERC-20 token address<input value={communication.tokenAddress} onChange={(event) => setCommunication({ ...communication, tokenAddress: event.target.value })} placeholder="0x…" required /></label>
-                    : <label>Event<select value={communication.eventId} onChange={(event) => setCommunication({ ...communication, eventId: event.target.value })} required><option value="">Select an event</option>{organisedEvents.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}
-                  <label>Category<select value={communication.category} onChange={(event) => setCommunication({ ...communication, category: event.target.value })}>{categoryOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-                </div>
-                <label>Audience<select value={communication.audience} onChange={(event) => setCommunication({ ...communication, audience: event.target.value })}>
-                  {tokenScoped ? <><option value="SUBSCRIBERS">Subscribed investors</option><option value="CURRENT_HOLDERS">Current token holders</option></> : <><option value="ALL_ELIGIBLE">All eligible</option><option value="NOT_VOTED">Not voted</option><option value="SUBSCRIBERS">Subscribers</option></>}
-                </select></label>
-                {tokenScoped && <Notice>Current-holder broadcasts require a verified token authority: the standard <code>owner()</code> address, or the deployment creator when the token does not expose <code>owner()</code>. Unverified senders can still publish clearly labelled notices to subscribers.</Notice>}
-                {!tokenScoped && !organisedEvents.length && <Notice>No organised event is available. Select “Token news / announcement” to publish independently using an ERC-20 address.</Notice>}
-              </section>
-
-              <section className="form-section">
-                <div className="form-section-heading"><span>2</span><div><h3>Message</h3><p>Keep the title concise and the action clear.</p></div></div>
-                <label>Title<input value={communication.title} onChange={(event) => setCommunication({ ...communication, title: event.target.value })} required /></label>
-                <label>Message<textarea rows="5" value={communication.body} onChange={(event) => setCommunication({ ...communication, body: event.target.value })} required /></label>
-                <label>Expires<input type="datetime-local" value={communication.expiresAt} onChange={(event) => setCommunication({ ...communication, expiresAt: event.target.value })} required /></label>
-              </section>
-
-              <div className="form-actions">
-                <button className="button" disabled={busy || !canPublish}>{pendingAction === 'publish' ? 'Signing and publishing…' : 'Sign and publish'}</button>
-                {actionNotice('publish')}
-              </div>
-            </form>
-          </Panel>}
-      </div>}
-    </>}
-  </Page>;
+          </form>
+        </Panel>}
+    </div>}
+  </main>;
 }
