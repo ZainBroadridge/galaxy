@@ -1,188 +1,250 @@
 import { getAddress, toQuantity } from 'ethers';
-import { ZERO_ADDRESS, buildSnapshotTree } from '@pv/shared';
+import { buildSnapshotTree } from '@pv/shared';
 import { config } from './config.js';
 import { query, transaction } from './db.js';
+import {
+  applyLedgerTransfer,
+  assertLedgerConsistent,
+  cloneLedger,
+  createLedger,
+  ledgerBalances,
+} from './erc20-ledger.js';
 import { permanentError } from './errors.js';
 import { enqueueJob, updateJob } from './jobs.js';
 import { erc20Interface, rpc, rpcBlock } from './rpc.js';
 import { tokenDeployment } from './tokens.js';
 
-const zero = ZERO_ADDRESS.toLowerCase();
-const transferTopic = erc20Interface.getEvent('Transfer').topicHash;
-const MAX_LOG_BLOCK_RANGE = 10_000;
-const MIN_LOG_BLOCK_RANGE = 1;
-const LOG_RANGE_GROW_THRESHOLD = 1_000;
+const BALANCE_CHECK_CONCURRENCY = 8;
+const BALANCE_PROGRESS_INTERVAL = BALANCE_CHECK_CONCURRENCY * 5;
 
-async function resolveRecordBlock(recordDateAt) {
+async function resolveSnapshotBlocks(recordDateAt) {
   const latest = Number(BigInt(await rpc('eth_blockNumber', [])));
-  const safeNumber = Math.max(0, latest - config.confirmations);
-  const safe = await rpcBlock(safeNumber);
+  const validationNumber = Math.max(0, latest - config.confirmations);
+  const validationBlock = await rpcBlock(validationNumber);
   const requested = Math.floor(new Date(recordDateAt).getTime() / 1000);
-  const target = Math.min(requested, safe.timestamp);
+  const target = Math.min(requested, validationBlock.timestamp);
+
   let low = 0;
-  let high = safeNumber;
+  let high = validationNumber;
   while (low < high) {
     const middle = Math.ceil((low + high) / 2);
     const block = await rpcBlock(middle);
     if (block.timestamp <= target) low = middle;
     else high = middle - 1;
   }
-  return rpcBlock(low);
+
+  const recordBlock = low === validationNumber
+    ? validationBlock
+    : await rpcBlock(low);
+
+  return { recordBlock, validationBlock };
 }
 
 function normalizeAddress(value) {
-  try { return getAddress(value).toLowerCase(); } catch { return null; }
+  try {
+    return getAddress(value).toLowerCase();
+  } catch {
+    return null;
+  }
 }
 
-function applyTransfer(balances, from, to, value) {
-  if (value === 0n) return;
-  if (from && from !== zero) balances.set(from, (balances.get(from) ?? 0n) - value);
-  if (to && to !== zero) balances.set(to, (balances.get(to) ?? 0n) + value);
+function parseBlockNumber(value) {
+  try {
+    const blockNumber = Number(BigInt(value));
+    if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) throw new Error();
+    return blockNumber;
+  } catch {
+    throw permanentError('Alchemy returned an invalid ERC-20 transfer block number.');
+  }
 }
 
-function isLogRangeError(error) {
-  const message = String(error?.message ?? '').toLowerCase();
-  return error?.rpcCode === -32005
-    || error?.httpStatus === 413
-    || message.includes('query timeout')
-    || message.includes('more than 10000 results')
-    || message.includes('too many results')
-    || message.includes('block range')
-    || message.includes('range is too large')
-    || message.includes('response size')
-    || message.includes('limit exceeded');
+function parseTransfer(transfer) {
+  const from = normalizeAddress(transfer?.from);
+  const to = normalizeAddress(transfer?.to);
+  if (!from || !to) {
+    throw permanentError('Alchemy returned an ERC-20 transfer with an invalid address.');
+  }
+
+  const rawValue = transfer?.rawContract?.value;
+  if (rawValue === null || rawValue === undefined) {
+    throw permanentError('Alchemy omitted a raw ERC-20 transfer value.');
+  }
+
+  let value;
+  try {
+    value = BigInt(rawValue);
+  } catch {
+    throw permanentError('Alchemy returned an invalid raw ERC-20 transfer value.');
+  }
+
+  const blockNumber = parseBlockNumber(transfer?.blockNum);
+  const identity = transfer?.uniqueId
+    ?? (transfer?.hash && transfer?.logIndex != null
+      ? `${transfer.hash}:${transfer.logIndex}`
+      : null);
+  if (!identity) {
+    throw permanentError('Alchemy omitted the identity of an ERC-20 transfer.');
+  }
+
+  return {
+    blockNumber,
+    identity,
+    from,
+    to,
+    value,
+  };
 }
 
-async function transfersAt(tokenAddress, startBlock, recordBlock, jobId) {
-  const balances = new Map();
+function ledgerError(message, error) {
+  return permanentError(`${message}: ${error.message}`);
+}
+
+async function replayTransferHistory({
+  tokenAddress,
+  startBlock,
+  recordBlock,
+  validationBlock,
+  jobId,
+}) {
+  const current = createLedger();
   const seen = new Set();
-  const totalBlocks = Math.max(1, recordBlock - startBlock + 1);
-  let fromBlock = startBlock;
-  let blockRange = Math.min(MAX_LOG_BLOCK_RANGE, totalBlocks);
-  let requests = 0;
+  let recordDate = null;
+  let pageKey;
+  let page = 0;
 
-  while (fromBlock <= recordBlock) {
-    const toBlock = Math.min(recordBlock, fromBlock + blockRange - 1);
-    let logs;
+  do {
+    page += 1;
+    if (page > config.alchemyMaxPages) {
+      throw permanentError(
+        `Token history exceeds the configured ${config.alchemyMaxPages * config.alchemyPageSize} transfer limit.`,
+      );
+    }
 
+    const request = {
+      fromBlock: toQuantity(startBlock),
+      toBlock: toQuantity(validationBlock),
+      contractAddresses: [tokenAddress],
+      category: ['erc20'],
+      excludeZeroValue: false,
+      withMetadata: false,
+      order: 'asc',
+      maxCount: toQuantity(config.alchemyPageSize),
+      ...(pageKey ? { pageKey } : {}),
+    };
+
+    let response;
     try {
-      logs = await rpc(
-        'eth_getLogs',
-        [{
-          address: tokenAddress,
-          fromBlock: toQuantity(fromBlock),
-          toBlock: toQuantity(toBlock),
-          topics: [transferTopic],
-        }],
-        { retries: 1 },
-      );
-      if (!Array.isArray(logs)) throw new Error('eth_getLogs returned an invalid response.');
+      response = await rpc('alchemy_getAssetTransfers', [request]);
     } catch (error) {
-      if (!isLogRangeError(error)) throw error;
-      if (blockRange === MIN_LOG_BLOCK_RANGE) {
-        throw permanentError(`The ERC-20 emitted too many Transfer logs in block ${fromBlock} for the RPC log limit.`);
+      if (error.rpcCode === -32601) {
+        throw permanentError(
+          'RPC_HTTP_URL must support alchemy_getAssetTransfers on Polygon Amoy.',
+        );
       }
-      blockRange = Math.max(MIN_LOG_BLOCK_RANGE, Math.floor(blockRange / 2));
-      continue;
+      if (error.httpStatus === 400 || error.rpcCode === -32602) {
+        throw permanentError(`Alchemy rejected the transfer-history request: ${error.message}`);
+      }
+      throw error;
     }
 
-    for (const log of logs) {
-      if (log.removed) continue;
-      const key = `${log.blockHash ?? log.blockNumber}:${log.transactionHash}:${log.logIndex}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      let decoded;
-      try {
-        decoded = erc20Interface.decodeEventLog('Transfer', log.data, log.topics);
-      } catch {
-        throw permanentError(`Unable to decode ERC-20 Transfer log ${key}.`);
+    const transfers = Array.isArray(response?.transfers) ? response.transfers : [];
+    for (const rawTransfer of transfers) {
+      const transfer = parseTransfer(rawTransfer);
+      if (transfer.blockNumber < startBlock || transfer.blockNumber > validationBlock) {
+        throw permanentError('Alchemy returned a transfer outside the requested block range.');
       }
+      if (seen.has(transfer.identity)) continue;
+      seen.add(transfer.identity);
+      if (recordDate && transfer.blockNumber <= recordBlock) {
+        throw permanentError('Alchemy returned transfer history out of ascending block order.');
+      }
+      if (!recordDate && transfer.blockNumber > recordBlock) {
+        recordDate = cloneLedger(current);
+      }
+      applyLedgerTransfer(current, transfer);
+    }
 
-      applyTransfer(
-        balances,
-        normalizeAddress(decoded.from),
-        normalizeAddress(decoded.to),
-        BigInt(decoded.value),
+    pageKey = response?.pageKey ?? null;
+    const progress = pageKey ? Math.min(54, 10 + page * 4) : 55;
+    await updateJob(
+      jobId,
+      progress,
+      `Read ${seen.size.toLocaleString()} indexed ERC-20 transfers`,
+    );
+  } while (pageKey);
+
+  return {
+    recordDate: recordDate ?? cloneLedger(current),
+    current,
+    transferCount: seen.size,
+  };
+}
+
+async function readUint256(tokenAddress, method, args, blockNumber) {
+  const data = erc20Interface.encodeFunctionData(method, args);
+  const raw = await rpc('eth_call', [
+    { to: tokenAddress, data },
+    toQuantity(blockNumber),
+  ]);
+  if (!raw || raw === '0x') {
+    throw permanentError(`The token did not return ${method}() at validation block ${blockNumber}.`);
+  }
+
+  try {
+    return erc20Interface.decodeFunctionResult(method, raw)[0];
+  } catch {
+    throw permanentError(`The token returned an invalid ${method}() value.`);
+  }
+}
+
+async function reconcileCurrentLedger(tokenAddress, ledger, blockNumber, jobId) {
+  try {
+    assertLedgerConsistent(ledger);
+  } catch (error) {
+    throw ledgerError('Token transfer history is incomplete or non-standard', error);
+  }
+
+  const totalSupply = await readUint256(tokenAddress, 'totalSupply', [], blockNumber);
+  if (totalSupply !== ledger.supply) {
+    throw permanentError(
+      `Token is not event-replay compatible: derived current supply (${ledger.supply}) does not equal totalSupply (${totalSupply}) at validation block ${blockNumber}.`,
+    );
+  }
+
+  const balances = ledgerBalances(ledger);
+  for (let offset = 0; offset < balances.length; offset += BALANCE_CHECK_CONCURRENCY) {
+    const batch = balances.slice(offset, offset + BALANCE_CHECK_CONCURRENCY);
+    const actualBalances = await Promise.all(
+      batch.map(([walletAddress]) => readUint256(
+        tokenAddress,
+        'balanceOf',
+        [walletAddress],
+        blockNumber,
+      )),
+    );
+
+    const mismatchIndex = batch.findIndex(([, expected], index) => (
+      actualBalances[index] !== expected
+    ));
+    if (mismatchIndex !== -1) {
+      const [walletAddress, expected] = batch[mismatchIndex];
+      throw permanentError(
+        `Token is not event-replay compatible: derived current balance for ${walletAddress} is ${expected}, but balanceOf() returned ${actualBalances[mismatchIndex]}.`,
       );
     }
 
-    requests += 1;
-    fromBlock = toBlock + 1;
-    const completedBlocks = Math.min(totalBlocks, fromBlock - startBlock);
-    const progress = Math.min(55, 10 + Math.round((completedBlocks / totalBlocks) * 45));
-
-    if (requests === 1 || requests % 10 === 0 || fromBlock > recordBlock) {
+    const checked = Math.min(balances.length, offset + batch.length);
+    const shouldReport = checked === balances.length
+      || checked % BALANCE_PROGRESS_INTERVAL === 0;
+    if (shouldReport) {
+      const progress = Math.min(74, 62 + Math.round((checked / balances.length) * 12));
       await updateJob(
         jobId,
         progress,
-        `Read ${seen.size.toLocaleString()} ERC-20 transfers`,
+        `Validated ${checked.toLocaleString()} of ${balances.length.toLocaleString()} current balances`,
       );
     }
-
-    if (logs.length < LOG_RANGE_GROW_THRESHOLD) {
-      blockRange = Math.min(MAX_LOG_BLOCK_RANGE, blockRange * 2);
-    }
   }
-
-  return { balances, transferCount: seen.size };
-}
-
-async function totalSupplyAt(tokenAddress, blockNumber) {
-  const data = erc20Interface.encodeFunctionData('totalSupply');
-  const raw = await rpc('eth_call', [{ to: tokenAddress, data }, toQuantity(blockNumber)]);
-  if (!raw || raw === '0x') {
-    throw permanentError('The token did not expose totalSupply at the selected record date.');
-  }
-  try {
-    return erc20Interface.decodeFunctionResult('totalSupply', raw)[0];
-  } catch {
-    throw permanentError('The token returned an invalid totalSupply value at the selected record date.');
-  }
-}
-
-async function reuseSnapshot(event, block, jobId) {
-  const cached = await query(
-    `SELECT id,snapshot_root,snapshot_holder_count
-       FROM events
-      WHERE id<>$1 AND token_address=$2 AND record_date_block=$3
-        AND vote_unit=$4 AND snapshot_root IS NOT NULL
-      ORDER BY updated_at DESC LIMIT 1`,
-    [event.id, event.token_address, block.number, event.vote_unit],
-  );
-  if (!cached.rowCount) return null;
-
-  const source = cached.rows[0];
-  await transaction(async (client) => {
-    await client.query('DELETE FROM snapshot_entries WHERE event_id=$1', [event.id]);
-    await client.query(
-      `INSERT INTO snapshot_entries(event_id,wallet_address,raw_balance,voting_power,merkle_proof)
-       SELECT $1,wallet_address,raw_balance,voting_power,merkle_proof
-         FROM snapshot_entries WHERE event_id=$2`,
-      [event.id, source.id],
-    );
-    await client.query(
-      `UPDATE events
-          SET record_date_block=$2,snapshot_root=$3,snapshot_holder_count=$4,
-              status='SNAPSHOT_READY',failure_reason=NULL
-        WHERE id=$1`,
-      [event.id, block.number, source.snapshot_root, source.snapshot_holder_count],
-    );
-    await enqueueJob({
-      eventId: event.id,
-      type: 'DEPLOY_EVENT',
-      dedupeKey: `deploy:${event.id}`,
-      message: 'VoteEvent deployment queued',
-      client,
-    });
-  });
-  await updateJob(jobId, 95, 'Reused a validated snapshot for the same token, block, and ratio');
-  return {
-    recordDateBlock: block.number,
-    snapshotRoot: source.snapshot_root,
-    holderCount: Number(source.snapshot_holder_count),
-    reused: true,
-  };
 }
 
 async function storeSnapshot(event, block, tree) {
@@ -194,7 +256,13 @@ async function storeSnapshot(event, block, tree) {
       const params = [];
       const values = batch.map((entry, index) => {
         const base = index * 5;
-        params.push(event.id, entry.walletAddress, entry.rawBalance, entry.votingPower, JSON.stringify(entry.merkleProof));
+        params.push(
+          event.id,
+          entry.walletAddress,
+          entry.rawBalance,
+          entry.votingPower,
+          JSON.stringify(entry.merkleProof),
+        );
         return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5}::jsonb)`;
       });
       await client.query(
@@ -223,75 +291,99 @@ async function storeSnapshot(event, block, tree) {
 export async function buildSnapshot(job) {
   const found = await query('SELECT * FROM events WHERE id=$1', [job.event_id]);
   if (!found.rowCount) throw permanentError('Event no longer exists.');
+
   const event = found.rows[0];
-  if (event.contract_address) return { contractAddress: event.contract_address, alreadyComplete: true };
-  if (new Date(event.record_date_at).getTime() > Date.now() + 15_000) throw permanentError('Record date is in the future.');
-  if (new Date(event.voting_end_at).getTime() <= Date.now()) throw permanentError('Voting ended before deployment.');
+  if (event.contract_address) {
+    return { contractAddress: event.contract_address, alreadyComplete: true };
+  }
+  if (new Date(event.record_date_at).getTime() > Date.now() + 15_000) {
+    throw permanentError('Record date is in the future.');
+  }
+  if (new Date(event.voting_end_at).getTime() <= Date.now()) {
+    throw permanentError('Voting ended before deployment.');
+  }
 
-  await query("UPDATE events SET status='SNAPSHOT_RUNNING',failure_reason=NULL WHERE id=$1", [event.id]);
-  await updateJob(job.id, 3, 'Resolving record-date block');
-  const block = await resolveRecordBlock(event.record_date_at);
-  await updateJob(job.id, 8, `Record date resolved to block ${block.number}`);
+  await query(
+    "UPDATE events SET status='SNAPSHOT_RUNNING',failure_reason=NULL WHERE id=$1",
+    [event.id],
+  );
+  await updateJob(job.id, 3, 'Resolving record-date and validation blocks');
+  const { recordBlock, validationBlock } = await resolveSnapshotBlocks(event.record_date_at);
+  await updateJob(
+    job.id,
+    8,
+    `Record date resolved to block ${recordBlock.number}; validating at recent block ${validationBlock.number}`,
+  );
 
-  const reused = await reuseSnapshot(event, block, job.id);
-  if (reused) return reused;
-
-  // Historical eth_getCode is an unnecessary archive-state dependency and can
-  // fail upstream even for valid contracts. Prefer the explorer's creation
-  // block when available, then let indexed transfers and historical supply
-  // validation establish snapshot compatibility.
   const deployment = await tokenDeployment(event.token_address);
-  if (deployment?.blockNumber > block.number) {
+  if (deployment?.blockNumber > recordBlock.number) {
     throw permanentError(
-      `The ERC-20 contract was deployed at block ${deployment.blockNumber}, after the selected record-date block ${block.number}.`,
+      `The ERC-20 contract was deployed at block ${deployment.blockNumber}, after record-date block ${recordBlock.number}.`,
     );
   }
 
-  const startBlock = deployment?.blockNumber ?? 0;
-  const { balances, transferCount } = await transfersAt(
+  const replay = await replayTransferHistory({
+    tokenAddress: event.token_address,
+    startBlock: deployment?.blockNumber ?? 0,
+    recordBlock: recordBlock.number,
+    validationBlock: validationBlock.number,
+    jobId: job.id,
+  });
+
+  try {
+    assertLedgerConsistent(replay.recordDate);
+  } catch (error) {
+    throw ledgerError('Record-date transfer history is incomplete or non-standard', error);
+  }
+
+  const recordDateBalances = ledgerBalances(replay.recordDate, { positiveOnly: true });
+  if (!recordDateBalances.length) {
+    throw permanentError('No positive token balances existed at the record date.');
+  }
+
+  await updateJob(
+    job.id,
+    62,
+    `Reconciling event-derived balances against recent token state at block ${validationBlock.number}`,
+  );
+  await reconcileCurrentLedger(
     event.token_address,
-    startBlock,
-    block.number,
+    replay.current,
+    validationBlock.number,
     job.id,
   );
-  const negative = [...balances.entries()].find(([, value]) => value < 0n);
-  if (negative) {
-    throw permanentError(`Transfer history produced a negative balance for ${negative[0]}; this is not a compatible standard ERC-20 history.`);
-  }
-
-  const positive = [...balances.entries()].filter(([, value]) => value > 0n);
-  if (!positive.length) throw permanentError('No positive token balances existed at the record date.');
-
-  await updateJob(job.id, 62, 'Validating reconstructed balances against historical total supply');
-  const reconstructed = positive.reduce((sum, [, value]) => sum + value, 0n);
-  const totalSupply = await totalSupplyAt(event.token_address, block.number);
-  if (reconstructed !== totalSupply) {
-    throw permanentError(
-      `Token is not compatible with event-based snapshots: reconstructed balances (${reconstructed}) do not equal totalSupply (${totalSupply}) at block ${block.number}.`,
-    );
-  }
 
   const voteUnit = BigInt(event.vote_unit);
-  const eligible = positive
+  const eligible = recordDateBalances
     .map(([walletAddress, rawBalance]) => ({
       walletAddress,
       rawBalance,
       votingPower: rawBalance / voteUnit,
     }))
     .filter((entry) => entry.votingPower > 0n);
-  if (!eligible.length) throw permanentError('No holder has at least one vote at the selected token-to-vote ratio.');
+  if (!eligible.length) {
+    throw permanentError(
+      'No holder has at least one vote at the selected token-to-vote ratio.',
+    );
+  }
 
-  await updateJob(job.id, 75, `Building Merkle proofs for ${eligible.length.toLocaleString()} eligible wallets`);
+  await updateJob(
+    job.id,
+    75,
+    `Building Merkle proofs for ${eligible.length.toLocaleString()} eligible wallets`,
+  );
   const tree = buildSnapshotTree(eligible);
-  await storeSnapshot(event, block, tree);
+  await storeSnapshot(event, recordBlock, tree);
   await updateJob(job.id, 95, 'Snapshot committed; one-contract deployment queued', {
     snapshotRoot: tree.root,
     holderCount: tree.entries.length,
   });
+
   return {
-    recordDateBlock: block.number,
+    recordDateBlock: recordBlock.number,
+    validationBlock: validationBlock.number,
     snapshotRoot: tree.root,
     holderCount: tree.entries.length,
-    transfersRead: transferCount,
+    transfersRead: replay.transferCount,
   };
 }

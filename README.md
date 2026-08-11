@@ -1,7 +1,6 @@
 # Mini Galaxy Proxy Voting V2
 
 A lightweight Polygon Amoy proxy-voting dApp with:
-
 - exactly one `VoteEvent` contract per event;
 - gasless deployment and voting through one Render relayer wallet;
 - record-date holder snapshots built from Alchemy's indexed ERC-20 transfer history;
@@ -98,15 +97,17 @@ Read [the deployment runbook](docs/DEPLOYMENT.md) before cutover.
 
 ## Snapshot support boundary
 
-This release intentionally supports standard ERC-20 tokens whose balances can be reconstructed from indexed `Transfer` events and whose historical `totalSupply()` matches the reconstructed supply. Rebasing, reflection, non-event balance mutation, malformed transfer history, and tokens that did not exist at the record date are rejected rather than snapshotted incorrectly.
+This release supports event-complete ERC-20 tokens whose balance and supply changes are fully represented by standard `Transfer` events. The API replays indexed transfers through the record-date block, preserves the resulting holder balances, continues the replay to a recent confirmation-safe block, and reconciles the derived current supply and every discovered current balance against `totalSupply()` and `balanceOf()` at that recent block. It does not require archive-state calls at the historical record date.
 
-The default transfer-history cap is `100,000` records (`ALCHEMY_MAX_PAGES=100`, `ALCHEMY_PAGE_SIZE=1000`). A normal test token with modest history should complete quickly once Render is awake. A universal two-minute guarantee is not technically possible for arbitrarily large token histories on free infrastructure; the job reports progress and fails clearly when the configured cap is exceeded.
+Rebasing, reflection, silent balance mutation, incomplete mint/burn history, malformed transfer history, and tokens that did not exist at the record date are rejected rather than snapshotted approximately. This compatibility gate is strong for standard OpenZeppelin-style ERC-20 tokens; arbitrary contracts whose balances can change without `Transfer` events remain outside the supported boundary.
+
+The default transfer-history cap is `100,000` records (`ALCHEMY_MAX_PAGES=100`, `ALCHEMY_PAGE_SIZE=1000`). A normal POC token with modest history should normally complete in one indexed-transfer page plus bounded recent-state reconciliation. A universal two-minute guarantee is not technically possible for arbitrarily large histories or holder sets.
 
 ## Commands
 
 ```text
 npm run compile          Compile/export VoteEvent artifacts
-npm run test             Contract and shared-library tests
+npm run test             Contract, shared-library, and API domain tests
 npm run build:web        Production web build
 npm run build:snap       Production Snap build
 npm run check            Full compile/test/build validation
