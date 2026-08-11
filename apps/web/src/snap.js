@@ -1,6 +1,5 @@
-import { getAddress, verifyMessage } from 'ethers';
-import { buildCommunicationSigningMessage, buildTokenCommunicationSigningMessage } from '@pv/shared';
-import { api } from './api.js';
+import { getAddress } from 'ethers';
+import { fetchCommunications, verifyCommunications } from './communications.js';
 
 const configuredId = import.meta.env.VITE_SNAP_ID?.trim();
 export const SNAP_ID = configuredId || (location.hostname === 'localhost' ? 'local:http://localhost:8080' : null);
@@ -80,7 +79,6 @@ export async function invokeSnap(method, params) {
   }
 }
 
-
 async function assertMetaMaskWallet(walletAddress) {
   const provider = await metamask();
   const accounts = await provider.request({ method: 'eth_accounts' });
@@ -93,31 +91,16 @@ async function assertMetaMaskWallet(walletAddress) {
   }
 }
 
-function verifiedMessages(messages) {
-  return messages.filter((message) => {
-    try {
-      const signingMessage = message.scope === 'TOKEN'
-        ? buildTokenCommunicationSigningMessage(message)
-        : buildCommunicationSigningMessage(message);
-      return getAddress(verifyMessage(signingMessage, message.signature)).toLowerCase()
-        === getAddress(message.creatorAddress).toLowerCase();
-    } catch { return false; }
-  });
-}
-
-export async function syncSnap({ walletAddress, install = false }) {
+export async function syncSnap({ walletAddress, install = false, messages }) {
   await assertMetaMaskWallet(walletAddress);
   let snap = await getInstalledSnap();
   if (!snap && install) snap = await installSnap();
   if (!snap) return { installed: false, messages: [], accepted: 0 };
 
-  const query = new URLSearchParams({ wallet: walletAddress });
-  const messages = verifiedMessages(await api(`/v1/communications/inbox?${query}`, { auth: false }));
+  const verified = messages === undefined
+    ? await fetchCommunications(walletAddress)
+    : verifyCommunications(messages);
   await invokeSnap('setWalletContext', { walletAddress });
-  const result = await invokeSnap('ingestCommunications', { messages });
-  return { installed: true, messages, accepted: result?.acceptedMessageIds?.length ?? 0, ...result };
-}
-
-export async function snapInbox() {
-  return invokeSnap('getInbox');
+  const result = await invokeSnap('ingestCommunications', { messages: verified });
+  return { installed: true, messages: verified, accepted: result?.acceptedMessageIds?.length ?? 0, ...result };
 }

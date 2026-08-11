@@ -110,11 +110,25 @@ export function OrganiserEventPage() {
   const wallet = useWallet();
   const view = useLoad(() => api(`/v1/events/${eventId}/view${wallet.account ? `?wallet=${wallet.account}` : ''}`, { auth: false }), [eventId, wallet.account]);
   const [retryError, setRetryError] = useState(null);
+  const [retrySuccess, setRetrySuccess] = useState(null);
+  const [retrying, setRetrying] = useState(false);
   const jobActive = ['PENDING', 'RUNNING'].includes(view.data?.job?.status);
   useEventPolling(view.refresh, Boolean(jobActive || view.data?.verificationStatus === 'PENDING'));
   async function retry() {
+    if (retrying) return;
+    setRetrying(true);
     setRetryError(null);
-    try { await wallet.ensureAuthenticated(); await api(`/v1/events/${eventId}/retry`, { method: 'POST' }); await view.reload(); } catch (error) { setRetryError(error); }
+    setRetrySuccess(null);
+    try {
+      await wallet.ensureAuthenticated();
+      await api(`/v1/events/${eventId}/retry`, { method: 'POST' });
+      await view.reload();
+      setRetrySuccess('Retry queued successfully. Processing will resume from the last safe step.');
+    } catch (error) {
+      setRetryError(error);
+    } finally {
+      setRetrying(false);
+    }
   }
   if (view.loading) return <Page title="Organiser Dashboard"><Spinner /></Page>;
   if (view.error) return <Page title="Organiser Dashboard"><ErrorBox error={view.error} /></Page>;
@@ -125,8 +139,9 @@ export function OrganiserEventPage() {
       <div className="status-line"><Status value={event.status} /><span>{event.job?.message}</span></div>
       {jobActive && <progress value={event.job?.progress || 0} max="100" />}
       {event.failureReason && <Notice tone="error">{event.failureReason}</Notice>}
-      {canRetry && <button className="button" onClick={retry}>Retry safely</button>}
+      {canRetry && <button className="button" onClick={retry} disabled={retrying}>{retrying ? 'Queuing retry…' : 'Retry safely'}</button>}
       <ErrorBox error={retryError} />
+      {retrySuccess && <Notice tone="success">{retrySuccess}</Notice>}
     </Panel>
     <Panel title="Deployment">
       <dl className="details">

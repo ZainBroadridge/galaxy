@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { Empty, ErrorBox, Notice, Page, Panel, Spinner, Status } from '../components/UI.jsx';
-import { getInstalledSnap, installSnap, snapConfiguration, snapInbox, syncSnap } from '../snap.js';
+import { useNotifications } from '../notifications.jsx';
+import { getInstalledSnap, installSnap, snapConfiguration, syncSnap } from '../snap.js';
 import { useWallet } from '../wallet.jsx';
 
 const categories = [
@@ -22,27 +23,33 @@ const initialCommunication = () => ({
 
 export default function WalletComms() {
   const wallet = useWallet();
+  const notifications = useNotifications();
   const configuration = snapConfiguration();
   const [snapInstalled, setSnapInstalled] = useState(false);
-  const [messages, setMessages] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
   const [organisedEvents, setOrganisedEvents] = useState([]);
-  const [busy, setBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
   const [error, setError] = useState(null);
+  const [feedback, setFeedback] = useState(null);
   const [subscription, setSubscription] = useState({ tokenAddress: '', categories, enabled: true });
   const [communication, setCommunication] = useState(initialCommunication);
 
   useEffect(() => {
-    setMessages([]);
     setSubscriptions([]);
     setOrganisedEvents([]);
     setCommunication(initialCommunication());
+    setError(null);
+    setFeedback(null);
   }, [wallet.account]);
 
   useEffect(() => {
     if (!configuration.ready) return;
     getInstalledSnap().then((value) => setSnapInstalled(Boolean(value))).catch(() => setSnapInstalled(false));
   }, [configuration.ready]);
+
+  useEffect(() => {
+    if (wallet.connected && notifications.messages.length) notifications.markAllRead();
+  }, [notifications.markAllRead, notifications.messages, wallet.connected]);
 
   const loadPortalData = useCallback(async () => {
     if (!wallet.connected) return;
@@ -61,31 +68,73 @@ export default function WalletComms() {
     loadPortalData().catch(setError);
   }, [loadPortalData, wallet.authenticated]);
 
+  const busy = pendingAction !== null;
+
+  async function runAction(name, operation) {
+    if (busy) return;
+    setPendingAction(name);
+    setError(null);
+    setFeedback(null);
+    try {
+      await operation();
+    } catch (value) {
+      setError(value);
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
   async function install() {
-    setBusy(true); setError(null);
-    try { await installSnap(); setSnapInstalled(true); } catch (value) { setError(value); } finally { setBusy(false); }
+    const updating = snapInstalled;
+    await runAction('install', async () => {
+      await installSnap();
+      setSnapInstalled(true);
+      setFeedback({
+        action: 'install',
+        tone: 'success',
+        message: updating ? 'MetaMask Snap updated successfully.' : 'MetaMask Snap installed successfully.',
+      });
+    });
   }
 
   async function sync() {
-    setBusy(true); setError(null);
-    try {
-      const result = await syncSnap({ walletAddress: wallet.account, install: false });
+    await runAction('sync', async () => {
+      const messages = await notifications.refresh({ silent: true });
+      const result = await syncSnap({
+        walletAddress: wallet.account,
+        install: false,
+        messages,
+      });
       setSnapInstalled(result.installed);
-      if (result.installed) {
-        const inbox = await snapInbox();
-        setMessages(inbox?.messages ?? inbox ?? result.messages ?? []);
+      if (!result.installed) {
+        setFeedback({ action: 'sync', tone: 'info', message: 'Install the MetaMask Snap before syncing wallet notices.' });
+        return;
       }
-      if (wallet.authenticated) await loadPortalData();
-    } catch (value) { setError(value); } finally { setBusy(false); }
+      const accepted = Number(result.accepted ?? 0);
+      setFeedback({
+        action: 'sync',
+        tone: 'success',
+        message: accepted > 0
+          ? `${accepted} new notice${accepted === 1 ? '' : 's'} added to the MetaMask inbox.`
+          : 'MetaMask inbox is up to date.',
+      });
+    });
   }
 
   async function saveSubscription() {
-    setBusy(true); setError(null);
-    try {
+    await runAction('subscription', async () => {
       await wallet.ensureAuthenticated();
       await api('/v1/communications/subscriptions', { method: 'PUT', body: subscription });
       await loadPortalData();
-    } catch (value) { setError(value); } finally { setBusy(false); }
+      notifications.refresh({ silent: true }).catch(() => {});
+      setFeedback({
+        action: 'subscription',
+        tone: 'success',
+        message: subscription.enabled
+          ? 'Subscription preferences saved successfully.'
+          : 'Notifications disabled for this token.',
+      });
+    });
   }
 
   function changeScope(scope) {
@@ -98,8 +147,8 @@ export default function WalletComms() {
   }
 
   async function publish(event) {
-    event.preventDefault(); setBusy(true); setError(null);
-    try {
+    event.preventDefault();
+    await runAction('publish', async () => {
       await wallet.ensureAuthenticated();
       const signer = await wallet.getSigner();
       const tokenScoped = communication.scope === 'TOKEN';
@@ -125,7 +174,15 @@ export default function WalletComms() {
       const signature = await signer.signMessage(draft.signingMessage);
       await api(publishPath, { method: 'POST', body: { message: draft.message, signature } });
       setCommunication((current) => ({ ...current, title: '', body: '' }));
-    } catch (value) { setError(value); } finally { setBusy(false); }
+      notifications.refresh({ silent: true }).catch(() => {});
+      setFeedback({
+        action: 'publish',
+        tone: 'success',
+        message: tokenScoped
+          ? 'Token communication signed and published successfully.'
+          : 'Event communication signed and published successfully.',
+      });
+    });
   }
 
   const activeSubscriptions = useMemo(() => subscriptions.filter((item) => item.enabled), [subscriptions]);
@@ -134,33 +191,44 @@ export default function WalletComms() {
     communication.title && communication.body && communication.expiresAt
       && (tokenScoped ? communication.tokenAddress : communication.eventId),
   );
+  const actionNotice = (action) => feedback?.action === action
+    ? <Notice tone={feedback.tone}>{feedback.message}</Notice>
+    : null;
+  const lastUpdated = notifications.lastUpdatedAt
+    ? `Updated ${new Date(notifications.lastUpdatedAt).toLocaleTimeString()}`
+    : 'Waiting for the first update';
 
-  return <Page title="Wallet Comms" intro="Verified organiser notices delivered to MetaMask only when you choose to sync."
-    actions={<button className="button secondary" onClick={sync} disabled={!wallet.connected || busy}>Sync now</button>}>
+  return <Page title="Wallet Comms" intro="Verified notifications load automatically and update live while the dApp is open."
+    actions={<button className="button secondary" onClick={sync} disabled={!wallet.connected || busy} title="Copy current notifications to MetaMask">{pendingAction === 'sync' ? 'Syncing…' : 'Sync now'}</button>}>
     {!configuration.ready && <Notice tone="error">{configuration.message}</Notice>}
-    {!wallet.connected && <Panel><Empty><p>Connect a wallet to manage communications.</p><button className="button" onClick={wallet.openWallet}>Connect wallet</button></Empty></Panel>}
+    {!wallet.connected && <Panel><Empty><p>Connect a wallet to view and manage notifications.</p><button className="button" onClick={wallet.openWallet}>Connect wallet</button></Empty></Panel>}
     <ErrorBox error={error} />
+    <ErrorBox error={notifications.error} />
+    {actionNotice('sync')}
     {wallet.connected && <>
-      <Panel title="MetaMask Snap">
-        <div className="status-line"><Status value={snapInstalled ? 'INSTALLED' : 'NOT_INSTALLED'} /><span>{configuration.ready ? configuration.id : 'Production package not configured'}</span></div>
-        <div className="row wrap"><button className="button" onClick={install} disabled={!configuration.ready || busy}>{snapInstalled ? 'Update Snap' : 'Install Snap'}</button><button className="button secondary" onClick={sync} disabled={!snapInstalled || busy}>Fetch new notices</button></div>
-        <p className="muted">No timer, background fetch, or repeated API polling is used.</p>
+      <Panel title="Notifications">
+        <div className="status-line"><Status value={notifications.live ? 'LIVE' : 'POLLING'} /><span>{lastUpdated}</span></div>
+        {notifications.loading && !notifications.messages.length ? <Spinner /> : notifications.messages.length
+          ? <div className="message-list">{notifications.messages.map((message) => <article className="message" key={message.messageId}>
+            <div className="event-card-top"><Status value={message.category} /><span>{message.tokenSymbol} · <time dateTime={message.publishedAt}>{new Date(message.publishedAt).toLocaleString()}</time></span></div>
+            <h3>{message.title}</h3><p>{message.body}</p>
+            {message.scope === 'EVENT' && message.actionUrl && <a href={message.actionUrl}>Open event</a>}
+          </article>)}</div>
+          : <Empty>No notifications for this wallet.</Empty>}
       </Panel>
 
-      <Panel title="In-wallet inbox">
-        {busy && !messages.length ? <Spinner /> : messages.length
-          ? <div className="message-list">{messages.map((message) => <article className="message" key={message.messageId}>
-            <div className="event-card-top"><Status value={message.category} /><span>{message.tokenSymbol}</span></div>
-            <h3>{message.title}</h3><p>{message.body}</p>
-            <a href={message.actionUrl}>{message.scope === 'TOKEN' ? 'Open communication' : 'Open event'}</a>
-          </article>)}</div>
-          : <Empty>No synced communications.</Empty>}
+      <Panel title="MetaMask Snap">
+        <div className="status-line"><Status value={snapInstalled ? 'INSTALLED' : 'NOT_INSTALLED'} /><span>{configuration.ready ? configuration.id : 'Production package not configured'}</span></div>
+        <button className="button" onClick={install} disabled={!configuration.ready || busy}>{pendingAction === 'install' ? (snapInstalled ? 'Updating…' : 'Installing…') : (snapInstalled ? 'Update Snap' : 'Install Snap')}</button>
+        {actionNotice('install')}
+        <p className="muted">Use Sync now to copy the current notification inbox to MetaMask.</p>
       </Panel>
 
       <Panel title="Subscriptions">
         <div className="field-grid two"><label>Token address<input value={subscription.tokenAddress} onChange={(event) => setSubscription({ ...subscription, tokenAddress: event.target.value })} placeholder="0x…" /></label><label>Delivery<select value={subscription.enabled ? 'on' : 'off'} onChange={(event) => setSubscription({ ...subscription, enabled: event.target.value === 'on' })}><option value="on">Subscribed</option><option value="off">Unsubscribed</option></select></label></div>
         <div className="checks">{categories.map((category) => <label key={category}><input type="checkbox" checked={subscription.categories.includes(category)} onChange={(event) => setSubscription({ ...subscription, categories: event.target.checked ? [...subscription.categories, category] : subscription.categories.filter((item) => item !== category) })} />{category.replaceAll('_', ' ')}</label>)}</div>
-        <button className="button secondary" onClick={saveSubscription} disabled={!subscription.tokenAddress || !subscription.categories.length || busy}>Save subscription</button>
+        <button className="button secondary" onClick={saveSubscription} disabled={!subscription.tokenAddress || !subscription.categories.length || busy}>{pendingAction === 'subscription' ? 'Saving…' : 'Save subscription'}</button>
+        {actionNotice('subscription')}
         {activeSubscriptions.length > 0 && <ul className="compact-list">{activeSubscriptions.map((item) => <li key={item.tokenAddress}><code>{item.tokenAddress}</code></li>)}</ul>}
       </Panel>
 
@@ -181,7 +249,8 @@ export default function WalletComms() {
           <label>Title<input value={communication.title} onChange={(event) => setCommunication({ ...communication, title: event.target.value })} required /></label>
           <label>Message<textarea rows="4" value={communication.body} onChange={(event) => setCommunication({ ...communication, body: event.target.value })} required /></label>
           <label>Expires<input type="datetime-local" value={communication.expiresAt} onChange={(event) => setCommunication({ ...communication, expiresAt: event.target.value })} required /></label>
-          <button className="button" disabled={busy || !canPublish}>Sign and publish</button>
+          <button className="button" disabled={busy || !canPublish}>{pendingAction === 'publish' ? 'Signing and publishing…' : 'Sign and publish'}</button>
+          {actionNotice('publish')}
         </form>
       </Panel>
     </>}

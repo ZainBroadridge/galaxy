@@ -7,6 +7,7 @@ import { createNonce, optionalAuth, requireAuth, revokeSession, verifyNonce } fr
 import { config, assertConfig } from './config.js';
 import { db, query } from './db.js';
 import { HttpError } from './errors.js';
+import { announceCommunication, closeCommunicationStreams, openCommunicationStream } from './communication-stream.js';
 import {
   createEvent, eventResults, eventView, organiserDashboard, resultsDashboard, retryEvent, votingDashboard,
 } from './events.js';
@@ -109,6 +110,8 @@ app.post('/v1/events/:id/votes', voteLimiter, async (request, response, next) =>
   } catch (error) { next(error); }
 });
 
+app.get('/v1/communications/stream', openCommunicationStream);
+
 app.get('/v1/communications/portal', requireAuth, async (request, response, next) => {
   try {
     const wallet = request.auth.wallet_address;
@@ -133,13 +136,28 @@ app.post('/v1/communications/token/draft', requireAuth, writeLimiter, async (req
   try { response.json(await draftTokenCommunication(request.auth.wallet_address, parse(tokenCommunicationDraftInput, request.body))); } catch (error) { next(error); }
 });
 app.post('/v1/communications/token', requireAuth, writeLimiter, async (request, response, next) => {
-  try { response.status(201).json(await publishTokenCommunication(request.auth.wallet_address, parse(tokenCommunicationPublishInput, request.body))); } catch (error) { next(error); }
+  try {
+    const message = await publishTokenCommunication(
+      request.auth.wallet_address,
+      parse(tokenCommunicationPublishInput, request.body),
+    );
+    announceCommunication();
+    response.status(201).json(message);
+  } catch (error) { next(error); }
 });
 app.post('/v1/events/:id/communications/draft', requireAuth, writeLimiter, async (request, response, next) => {
   try { response.json(await draftCommunication(request.params.id, request.auth.wallet_address, parse(communicationDraftInput, request.body))); } catch (error) { next(error); }
 });
 app.post('/v1/events/:id/communications', requireAuth, writeLimiter, async (request, response, next) => {
-  try { response.status(201).json(await publishCommunication(request.params.id, request.auth.wallet_address, parse(communicationPublishInput, request.body))); } catch (error) { next(error); }
+  try {
+    const message = await publishCommunication(
+      request.params.id,
+      request.auth.wallet_address,
+      parse(communicationPublishInput, request.body),
+    );
+    announceCommunication();
+    response.status(201).json(message);
+  } catch (error) { next(error); }
 });
 app.use((_request, _response, next) => next(new HttpError(404, 'Route not found.', 'NOT_FOUND')));
 app.use((error, request, response, _next) => {
@@ -158,6 +176,7 @@ const server = app.listen(config.port, '0.0.0.0', () => {
 
 async function shutdown(signal) {
   logger.info({ signal }, 'Shutting down');
+  closeCommunicationStreams();
   server.close(async () => { await db.end(); process.exit(0); });
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
