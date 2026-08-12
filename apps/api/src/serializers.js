@@ -1,5 +1,6 @@
 import { hashEventMetadata } from '@pv/shared';
 import { config } from './config.js';
+import { eventAnnouncementStatus } from './event-announcements.js';
 
 export function effectiveStatus(row) {
   if (row.status === 'FAILED' || row.deployment_block === null) return row.status;
@@ -38,6 +39,9 @@ export function serializeEvent(row, extras = {}) {
     discoveryMode: row.discovery_mode,
     authenticityStatus: row.authenticity_status,
     snapDeliveryMode: row.snap_delivery_mode,
+    announcementStatus: eventAnnouncementStatus(row),
+    votingUrl: `${config.webAppUrl}/vote/${row.id}`,
+    directVotingUrl: row.discovery_mode === 'DIRECT_LINK' ? `${config.webAppUrl}/vote/${row.id}` : null,
     status: effectiveStatus(row),
     storedStatus: row.status,
     failureReason: row.failure_reason,

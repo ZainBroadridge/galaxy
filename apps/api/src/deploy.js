@@ -1,8 +1,11 @@
 import { Contract, ContractFactory } from 'ethers';
 import { VOTE_EVENT_ABI } from '@pv/shared';
+import { announceCommunication } from './communication-stream.js';
 import { config } from './config.js';
 import { query, transaction } from './db.js';
+import { publishPendingEventAnnouncement } from './event-announcements.js';
 import { permanentError } from './errors.js';
+import { logger } from './logger.js';
 import { enqueueJob, updateJob } from './jobs.js';
 import { loadArtifact } from './artifact.js';
 import { broadcastTransaction, prepareTransaction } from './relayer.js';
@@ -86,6 +89,15 @@ export async function deployEvent(job) {
       await enqueueJob({ eventId: event.id, type: 'VERIFY_CONTRACT', dedupeKey: `verify:${event.id}`, message: 'Source verification queued', client });
     }
   });
+
+  try {
+    if (await publishPendingEventAnnouncement(event.id)) announceCommunication();
+  } catch (error) {
+    logger.warn(
+      { err: error, eventId: event.id },
+      'VoteEvent deployed, but its automatic Wallet Comms announcement needs a manual retry',
+    );
+  }
   await updateJob(job.id, 96, 'VoteEvent mined and validated');
   return {
     contractAddress: address,

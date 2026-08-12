@@ -11,6 +11,8 @@ V2 is deliberately narrow:
 5. Neon is the fast catalogue/read layer, not a replacement for on-chain vote enforcement.
 6. No permanent blockchain log indexer.
 7. No background Snap network polling.
+8. Optional event PDFs are private objects; Neon stores metadata only.
+9. Reports are generated on demand and never persisted.
 
 ## Components
 
@@ -25,7 +27,7 @@ The React/Vite app contains only four primary routes:
 
 Nested event routes stay within those products. Reown AppKit supplies wallet connection. Account changes invalidate wallet-specific state without redirecting or disconnecting the page.
 
-The browser normally makes one dashboard request. Only an event actively snapshotting/deploying, a vote awaiting confirmation, or source verification in progress triggers one consolidated five-second status refresh. Requests never overlap.
+Event workflow pages subscribe to one event-scoped server-sent event stream while work is active. Every persisted job update emits a lightweight refresh signal; a controlled 15-second read is retained only as a recovery fallback. Requests never overlap.
 
 ### One Render web service
 
@@ -44,22 +46,24 @@ Relayer transactions are signed and persisted before broadcast. A transient rest
 
 ### Snapshot pipeline
 
-The previous small-range `eth_getLogs` loop has been removed.
+The snapshot path uses Alchemy's indexed transfer history and does not depend on historical archive state at the record-date block.
 
 For each event:
 
-1. Resolve the finalized Polygon block at or before the selected record date.
-2. Confirm the token contract existed at that block.
-3. Page `alchemy_getAssetTransfers` for that token from genesis to the record block.
-4. Reconstruct balances from standard ERC-20 transfers, mints, and burns.
-5. Reject negative or malformed histories.
-6. Read historical `totalSupply()` once and require equality with reconstructed positive balances.
-7. Calculate `votingPower = rawBalance / voteUnit`.
-8. Exclude holders with zero whole voting units.
-9. Build one Merkle root and store only eligible holder proofs in Neon.
-10. Queue the one-contract deployment.
+1. Resolve the Polygon block at or before the selected record date and a recent confirmation-safe validation block.
+2. Obtain the token deployment block when explorer metadata is available and reject a record date before deployment.
+3. Page `alchemy_getAssetTransfers` from deployment through the validation block.
+4. Replay standard ERC-20 transfers, mints, and burns in raw integer units.
+5. Preserve the event-derived ledger immediately after the record-date block.
+6. Reject negative balances, negative supply, malformed transfers, duplicate ambiguity, and accounting inconsistencies.
+7. Reconcile the event-derived current supply with `totalSupply()` at the recent validation block.
+8. Reconcile every discovered current wallet balance with `balanceOf()` at the same recent block using bounded concurrency.
+9. Calculate `votingPower = recordDateRawBalance / voteUnit`.
+10. Exclude holders with zero whole voting units.
+11. Build one Merkle root and store only eligible holder proofs in Neon.
+12. Queue the one-contract deployment.
 
-A snapshot is reused only for the same token, exact record block, and exact `voteUnit`.
+The recent-state reconciliation is a compatibility gate for event-complete ERC-20 implementations. Rebasing, reflection, hidden balance mutation, and incomplete mint/burn histories are rejected. The POC rebuilds each snapshot rather than reusing unversioned legacy snapshot data.
 
 ### `VoteEvent.sol`
 
@@ -77,6 +81,12 @@ The contract stores only immutable event enforcement data, `hasVoted`, and talli
 
 The ballot signature is EIP-712 domain-separated by chain and contract address. A signature cannot be reused on another event. `hasVoted` prevents a second ballot. There is no update, recall, pause, role, owner action, or stored relayer.
 
+### Documents and generated reports
+
+Optional proxy-voting PDFs are stored in a private Cloudflare R2 Standard bucket through its S3-compatible API. The API validates each PDF before upload, caps an event at three files of 10 MB each, and stores only metadata and the object key in Neon. The bucket is never public; browser open/download requests pass through the API.
+
+Result and voter-receipt PDFs are generated only after the user clicks download. Reports use a shared Broadridge letterhead renderer. Creator result reports include the record-date holder register; voter reports expose only aggregate results and the connected voter's own choices. Supporting PDFs are appended to result reports.
+
 ### Neon
 
 The schema intentionally contains only:
@@ -88,7 +98,8 @@ The schema intentionally contains only:
 - votes/receipts;
 - crash-safe relayer transactions;
 - Snap subscriptions;
-- signed communications.
+- signed communications;
+- event-document metadata and automatic-announcement authorisations.
 
 Results are read directly from the completed `VoteEvent` contract, so there is no mirrored tally table or log index.
 
@@ -110,9 +121,10 @@ The browser and Snap both recover the organiser signature over every displayed f
 - Write limits are keyed by authenticated wallet, not a shared corporate proxy address.
 - Authentication also has a generous IP guard plus a wallet-specific limit.
 - Public event/status reads do not attach a bearer token, avoiding an unnecessary session query.
-- Wallet Comms never runs a timer.
+- Wallet Comms uses a live refresh stream with one bounded fallback refresh; requests never overlap.
 - Result RPC reads are sequential rather than a burst of up to 32 calls.
 - Alchemy retry/backoff is confined to the snapshot job.
+- Current-balance reconciliation uses a fixed small concurrency limit rather than an unbounded RPC burst.
 
 ## Trust boundary
 

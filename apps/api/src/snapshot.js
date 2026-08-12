@@ -165,11 +165,15 @@ async function replayTransferHistory({
     }
 
     pageKey = response?.pageKey ?? null;
-    const progress = pageKey ? Math.min(54, 10 + page * 4) : 55;
+    const progress = pageKey
+      ? Math.min(54, 10 + Math.floor((page / config.alchemyMaxPages) * 44))
+      : 55;
     await updateJob(
       jobId,
       progress,
-      `Read ${seen.size.toLocaleString()} indexed ERC-20 transfers`,
+      pageKey
+        ? `Read ${seen.size.toLocaleString()} indexed ERC-20 transfers across ${page} pages`
+        : `Transfer history complete: ${seen.size.toLocaleString()} transfers`,
     );
   } while (pageKey);
 
@@ -247,7 +251,8 @@ async function reconcileCurrentLedger(tokenAddress, ledger, blockNumber, jobId) 
   }
 }
 
-async function storeSnapshot(event, block, tree) {
+async function storeSnapshot(event, block, tree, jobId) {
+  await updateJob(jobId, 84, 'Saving snapshot proofs');
   await transaction(async (client) => {
     await client.query('DELETE FROM snapshot_entries WHERE event_id=$1', [event.id]);
     const size = 500;
@@ -286,6 +291,7 @@ async function storeSnapshot(event, block, tree) {
       client,
     });
   });
+  await updateJob(jobId, 92, 'Snapshot stored; preparing relayer deployment');
 }
 
 export async function buildSnapshot(job) {
@@ -373,7 +379,7 @@ export async function buildSnapshot(job) {
     `Building Merkle proofs for ${eligible.length.toLocaleString()} eligible wallets`,
   );
   const tree = buildSnapshotTree(eligible);
-  await storeSnapshot(event, recordBlock, tree);
+  await storeSnapshot(event, recordBlock, tree, job.id);
   await updateJob(job.id, 95, 'Snapshot committed; one-contract deployment queued', {
     snapshotRoot: tree.root,
     holderCount: tree.entries.length,

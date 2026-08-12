@@ -23,6 +23,8 @@ services:
         sync: false
       - key: RELAYER_PRIVATE_KEY
         sync: false
+      - key: WEB_APP_URL
+        sync: false
       - key: BLOCK_EXPLORER_URL
         value: https://amoy.polygonscan.com
       - key: ETHERSCAN_API_KEY
@@ -30,6 +32,14 @@ services:
       - key: VERIFY_CONTRACTS
         value: "true"
       - key: CORS_ORIGINS
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
         sync: false
       - key: SESSION_TTL_HOURS
         value: "24"

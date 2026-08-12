@@ -112,10 +112,13 @@ export async function publishCommunication(eventId, wallet, input) {
   try { signer = normalizeAddress(verifyMessage(buildCommunicationSigningMessage(expected), input.signature)); } catch { signer = null; }
   if (signer !== creator) throw new HttpError(401, 'Communication signature is invalid.', 'INVALID_SIGNATURE');
   await query(
-    `INSERT INTO communications(message_id,event_id,scope,category,audience,title,body,action_url,published_at,expires_at,creator_signature)
-     VALUES ($1,$2,'EVENT',$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(message_id) DO NOTHING`,
+    `INSERT INTO communications(
+       message_id,event_id,scope,category,audience,title,body,action_url,published_at,expires_at,
+       creator_signature,signed_contract_address
+     ) VALUES ($1,$2,'EVENT',$3,$4,$5,$6,$7,$8,$9,$10,$11)
+     ON CONFLICT(message_id) DO NOTHING`,
     [expected.messageId, eventId, expected.category, expected.audience, expected.title, expected.body,
-      expected.actionUrl, expected.publishedAt, expected.expiresAt, input.signature],
+      expected.actionUrl, expected.publishedAt, expected.expiresAt, input.signature, expected.contractAddress],
   );
   return expected;
 }
@@ -191,7 +194,7 @@ function serializeEventCommunication(row) {
     eventId: row.event_id,
     eventTitle: row.event_title,
     tokenSymbol: row.token_symbol,
-    contractAddress: row.contract_address,
+    contractAddress: row.signed_contract_address ?? row.contract_address,
     creatorAddress: row.creator_address,
     authenticityStatus: row.authenticity_status,
     messageId: row.message_id,

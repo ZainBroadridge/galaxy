@@ -477,3 +477,45 @@ For Snap changes:
 6. choose **Update Snap** in the dApp.
 
 For database schema changes, add a new numbered migration. Do not edit an already-applied production migration.
+
+## Event documents and report generation
+
+This release adds two server dependencies only:
+
+```text
+@aws-sdk/client-s3   private Cloudflare R2 object access
+pdf-lib              on-demand PDF validation, generation, and merging
+```
+
+Create one **Standard** R2 bucket, for example `mini-galaxy-pv-documents`. Keep the bucket private. Create an R2 API token with **Object Read & Write** permission scoped only to that bucket, then record the Account ID, Access Key ID, and Secret Access Key.
+
+Add these Render environment variables:
+
+```text
+WEB_APP_URL=https://YOUR_APP.vercel.app
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET_NAME=mini-galaxy-pv-documents
+```
+
+No R2 CORS policy or public bucket URL is required because uploads and downloads pass through Render.
+
+Apply only the new migration to an existing V2 database:
+
+```text
+db/migrations/003_event_documents_announcements.sql
+```
+
+Do not rerun `001_schema.sql` or `002_token_communications.sql` on a database where they were already applied.
+
+After copying the release files, update the lockfile and validate:
+
+```cmd
+npm install --include=dev --no-audit --no-fund
+npm run compile
+npm run test
+npm run build:web
+```
+
+Commit the updated `package-lock.json` together with the source changes.

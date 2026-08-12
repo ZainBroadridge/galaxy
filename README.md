@@ -7,6 +7,8 @@ A lightweight Polygon Amoy proxy-voting dApp with:
 - concise Neon storage for events, Merkle proofs, jobs, votes, and wallet communications;
 - Reown AppKit wallet connection;
 - dApp-triggered MetaMask Snap communications;
+- optional private proxy-voting PDFs and on-demand Broadridge-branded reports;
+- event-scoped live progress for snapshots, relayer deployment, and verification;
 - four user-facing areas: Voting Dashboard, Organiser Dashboard, Results, and Wallet Comms.
 
 ## Architecture at a glance
@@ -20,7 +22,9 @@ One Render web service
    |- durable Neon-backed job runner
    |- Alchemy snapshot reader
    |- Polygon Amoy relayer
-   `- Etherscan V2 verification
+   |- Etherscan V2 verification
+   |- on-demand PDF reports
+   `- private R2 document adapter
    |
    +--> Neon PostgreSQL
    `--> Polygon Amoy: one VoteEvent per event

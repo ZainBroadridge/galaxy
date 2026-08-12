@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { API_BASE_URL } from './api.js';
 
 export function useLoad(loader, dependencies = []) {
   const [state, setState] = useState({ loading: true, data: null, error: null });
@@ -50,4 +51,29 @@ export function useEventPolling(refresh, active, interval = 5000) {
       clearTimeout(timer);
     };
   }, [active, interval, refresh]);
+}
+
+export function useEventLiveRefresh(refresh, eventId, active, fallbackInterval = 15_000) {
+  useEffect(() => {
+    if (!active || !eventId) return undefined;
+
+    let closed = false;
+    let refreshing = false;
+    const refreshOnce = async () => {
+      if (refreshing || closed) return;
+      refreshing = true;
+      try { await refresh(); } catch {}
+      finally { refreshing = false; }
+    };
+
+    const source = new EventSource(`${API_BASE_URL}/v1/events/${encodeURIComponent(eventId)}/stream`);
+    source.addEventListener('event-progress', refreshOnce);
+    const fallback = setInterval(refreshOnce, fallbackInterval);
+
+    return () => {
+      closed = true;
+      clearInterval(fallback);
+      source.close();
+    };
+  }, [active, eventId, fallbackInterval, refresh]);
 }

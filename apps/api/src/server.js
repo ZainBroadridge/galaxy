@@ -1,33 +1,61 @@
 import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import helmet from 'helmet';
 import { ZodError } from 'zod';
 import { createNonce, optionalAuth, requireAuth, revokeSession, verifyNonce } from './auth.js';
-import { config, assertConfig } from './config.js';
-import { db, query } from './db.js';
-import { HttpError } from './errors.js';
 import { announceCommunication, closeCommunicationStreams, openCommunicationStream } from './communication-stream.js';
 import {
-  createEvent, eventResults, eventView, organiserDashboard, resultsDashboard, retryEvent, votingDashboard,
-} from './events.js';
-import {
-  draftCommunication, draftTokenCommunication, inbox, publishCommunication, publishTokenCommunication,
-  saveSubscription, subscriptions,
+  draftCommunication,
+  draftTokenCommunication,
+  inbox,
+  publishCommunication,
+  publishTokenCommunication,
+  saveSubscription,
+  subscriptions,
 } from './communications.js';
-import { inspectToken } from './tokens.js';
-import { ballot, submitVote } from './votes.js';
+import { assertConfig, config } from './config.js';
+import { db, query } from './db.js';
 import {
-  communicationDraftInput, communicationPublishInput, eventInput, subscriptionInput, tokenCommunicationDraftInput,
-  tokenCommunicationPublishInput, voteInput,
-} from './validation.js';
-import { jobRunnerStatus, startJobRunner } from './runner.js';
+  deleteEventDocument,
+  readEventDocument,
+  uploadEventDocument,
+} from './documents.js';
+import {
+  announcementDraft,
+  authoriseEventAnnouncement,
+} from './event-announcements.js';
+import { closeEventStreams, openEventStream } from './event-stream.js';
+import { HttpError } from './errors.js';
+import {
+  createEvent,
+  eventResults,
+  eventView,
+  organiserDashboard,
+  resultsDashboard,
+  retryEvent,
+  votingDashboard,
+} from './events.js';
 import { logger } from './logger.js';
+import { createResultsReport, createVoteReceipt } from './reports.js';
+import { jobRunnerStatus, startJobRunner } from './runner.js';
+import { securityHeaders } from './security.js';
+import { inspectToken } from './tokens.js';
+import {
+  announcementSignatureInput,
+  communicationDraftInput,
+  communicationPublishInput,
+  eventInput,
+  subscriptionInput,
+  tokenCommunicationDraftInput,
+  tokenCommunicationPublishInput,
+  voteInput,
+} from './validation.js';
+import { ballot, submitVote } from './votes.js';
 
 assertConfig();
 const app = express();
 app.set('trust proxy', 1);
-app.use(helmet({ crossOriginResourcePolicy: false }));
+app.use(securityHeaders);
 app.use(cors({
   origin(origin, callback) {
     if (!origin || config.corsOrigins.includes(origin)) return callback(null, true);
@@ -44,21 +72,51 @@ const limiter = (limit, keyGenerator = undefined) => rateLimit({
   legacyHeaders: false,
   ...(keyGenerator ? { keyGenerator } : {}),
   handler(_request, response, _next, options) {
-    response.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many write requests. Retry after a short pause.' }, retryAfterMs: options.windowMs });
+    response.status(429).json({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many write requests. Retry after a short pause.',
+      },
+      retryAfterMs: options.windowMs,
+    });
   },
 });
-// IP protection is intentionally generous for corporate proxies; wallet-level
-// limits prevent one address from hammering authentication or write routes.
 const authIpLimiter = limiter(120);
-const authWalletLimiter = limiter(12, (request) => String(request.body?.walletAddress ?? 'invalid-wallet').toLowerCase());
+const authWalletLimiter = limiter(
+  12,
+  (request) => String(request.body?.walletAddress ?? 'invalid-wallet').toLowerCase(),
+);
 const writeLimiter = limiter(40, (request) => request.auth?.wallet_address ?? 'anonymous');
-const voteLimiter = limiter(20, (request) => String(request.body?.voterAddress ?? 'invalid-voter').toLowerCase());
+const voteLimiter = limiter(
+  20,
+  (request) => String(request.body?.voterAddress ?? 'invalid-voter').toLowerCase(),
+);
+const pdfBody = express.raw({
+  type: ['application/pdf', 'application/octet-stream'],
+  limit: '10mb',
+});
 const parse = (schema, value) => schema.parse(value);
+
+function sendPdf(response, report) {
+  response.set({
+    'Content-Type': 'application/pdf',
+    'Content-Length': String(report.bytes.length),
+    'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(report.filename)}`,
+    'Cache-Control': 'private, no-store',
+  });
+  response.send(report.bytes);
+}
 
 app.get('/health', async (_request, response, next) => {
   try {
     await query('SELECT 1');
-    response.json({ ok: true, service: 'mini-galaxy-pv-v2', chainId: config.chainId, jobs: jobRunnerStatus(), time: new Date().toISOString() });
+    response.json({
+      ok: true,
+      service: 'mini-galaxy-pv-v2',
+      chainId: config.chainId,
+      jobs: jobRunnerStatus(),
+      time: new Date().toISOString(),
+    });
   } catch (error) { next(error); }
 });
 
@@ -76,16 +134,77 @@ app.post('/v1/tokens/inspect', requireAuth, writeLimiter, async (request, respon
   try { response.json(await inspectToken(request.body?.tokenAddress)); } catch (error) { next(error); }
 });
 app.post('/v1/events', requireAuth, writeLimiter, async (request, response, next) => {
-  try { response.status(201).json(await createEvent(request.auth.wallet_address, parse(eventInput, request.body))); } catch (error) { next(error); }
+  try {
+    response.status(201).json(await createEvent(
+      request.auth.wallet_address,
+      parse(eventInput, request.body),
+    ));
+  } catch (error) { next(error); }
 });
 app.get('/v1/events/:id/view', async (request, response, next) => {
   try { response.json(await eventView(request.params.id, request.query.wallet)); } catch (error) { next(error); }
 });
+app.get('/v1/events/:id/stream', openEventStream);
 app.post('/v1/events/:id/retry', requireAuth, writeLimiter, async (request, response, next) => {
   try { response.json(await retryEvent(request.params.id, request.auth.wallet_address)); } catch (error) { next(error); }
 });
 app.get('/v1/events/:id/results', async (request, response, next) => {
   try { response.json(await eventResults(request.params.id, request.query.wallet)); } catch (error) { next(error); }
+});
+
+app.get('/v1/events/:id/announcement/draft', requireAuth, async (request, response, next) => {
+  try { response.json(await announcementDraft(request.params.id, request.auth.wallet_address)); } catch (error) { next(error); }
+});
+app.put('/v1/events/:id/announcement', requireAuth, writeLimiter, async (request, response, next) => {
+  try {
+    const result = await authoriseEventAnnouncement(
+      request.params.id,
+      request.auth.wallet_address,
+      parse(announcementSignatureInput, request.body).signature,
+    );
+    if (result.status === 'PUBLISHED') announceCommunication();
+    response.json(result);
+  } catch (error) { next(error); }
+});
+
+app.post('/v1/events/:id/documents', requireAuth, writeLimiter, pdfBody, async (request, response, next) => {
+  try {
+    response.status(201).json(await uploadEventDocument(
+      request.params.id,
+      request.auth.wallet_address,
+      request.get('x-file-name'),
+      request.body,
+    ));
+  } catch (error) { next(error); }
+});
+app.delete('/v1/events/:id/documents/:documentId', requireAuth, writeLimiter, async (request, response, next) => {
+  try {
+    await deleteEventDocument(
+      request.params.id,
+      request.params.documentId,
+      request.auth.wallet_address,
+    );
+    response.status(204).end();
+  } catch (error) { next(error); }
+});
+app.get('/v1/events/:id/documents/:documentId', async (request, response, next) => {
+  try {
+    const document = await readEventDocument(request.params.id, request.params.documentId);
+    const disposition = request.query.download === '1' ? 'attachment' : 'inline';
+    response.set({
+      'Content-Type': 'application/pdf',
+      'Content-Length': String(document.bytes.length),
+      'Content-Disposition': `${disposition}; filename*=UTF-8''${encodeURIComponent(document.fileName)}`,
+      'Cache-Control': 'private, max-age=300',
+    });
+    response.send(document.bytes);
+  } catch (error) { next(error); }
+});
+app.get('/v1/events/:id/reports/results', requireAuth, async (request, response, next) => {
+  try { sendPdf(response, await createResultsReport(request.params.id, request.auth.wallet_address)); } catch (error) { next(error); }
+});
+app.get('/v1/events/:id/reports/receipt', requireAuth, async (request, response, next) => {
+  try { sendPdf(response, await createVoteReceipt(request.params.id, request.auth.wallet_address)); } catch (error) { next(error); }
 });
 
 app.get('/v1/dashboard/voting', async (request, response, next) => {
@@ -105,17 +224,22 @@ app.post('/v1/events/:id/votes', voteLimiter, async (request, response, next) =>
   try {
     const input = parse(voteInput, request.body);
     response.status(202).json(await submitVote(
-      request.params.id, input.voterAddress, input.choices, input.signature,
+      request.params.id,
+      input.voterAddress,
+      input.choices,
+      input.signature,
     ));
   } catch (error) { next(error); }
 });
 
 app.get('/v1/communications/stream', openCommunicationStream);
-
 app.get('/v1/communications/portal', requireAuth, async (request, response, next) => {
   try {
     const wallet = request.auth.wallet_address;
-    const [savedSubscriptions, organisedEvents] = await Promise.all([subscriptions(wallet), organiserDashboard(wallet)]);
+    const [savedSubscriptions, organisedEvents] = await Promise.all([
+      subscriptions(wallet),
+      organiserDashboard(wallet),
+    ]);
     response.json({ subscriptions: savedSubscriptions, organisedEvents });
   } catch (error) { next(error); }
 });
@@ -123,7 +247,12 @@ app.get('/v1/communications/subscriptions', requireAuth, async (request, respons
   try { response.json(await subscriptions(request.auth.wallet_address)); } catch (error) { next(error); }
 });
 app.put('/v1/communications/subscriptions', requireAuth, writeLimiter, async (request, response, next) => {
-  try { response.json(await saveSubscription(request.auth.wallet_address, parse(subscriptionInput, request.body))); } catch (error) { next(error); }
+  try {
+    response.json(await saveSubscription(
+      request.auth.wallet_address,
+      parse(subscriptionInput, request.body),
+    ));
+  } catch (error) { next(error); }
 });
 app.get('/v1/communications/inbox', async (request, response, next) => {
   try {
@@ -133,7 +262,12 @@ app.get('/v1/communications/inbox', async (request, response, next) => {
   } catch (error) { next(error); }
 });
 app.post('/v1/communications/token/draft', requireAuth, writeLimiter, async (request, response, next) => {
-  try { response.json(await draftTokenCommunication(request.auth.wallet_address, parse(tokenCommunicationDraftInput, request.body))); } catch (error) { next(error); }
+  try {
+    response.json(await draftTokenCommunication(
+      request.auth.wallet_address,
+      parse(tokenCommunicationDraftInput, request.body),
+    ));
+  } catch (error) { next(error); }
 });
 app.post('/v1/communications/token', requireAuth, writeLimiter, async (request, response, next) => {
   try {
@@ -146,7 +280,13 @@ app.post('/v1/communications/token', requireAuth, writeLimiter, async (request, 
   } catch (error) { next(error); }
 });
 app.post('/v1/events/:id/communications/draft', requireAuth, writeLimiter, async (request, response, next) => {
-  try { response.json(await draftCommunication(request.params.id, request.auth.wallet_address, parse(communicationDraftInput, request.body))); } catch (error) { next(error); }
+  try {
+    response.json(await draftCommunication(
+      request.params.id,
+      request.auth.wallet_address,
+      parse(communicationDraftInput, request.body),
+    ));
+  } catch (error) { next(error); }
 });
 app.post('/v1/events/:id/communications', requireAuth, writeLimiter, async (request, response, next) => {
   try {
@@ -159,14 +299,27 @@ app.post('/v1/events/:id/communications', requireAuth, writeLimiter, async (requ
     response.status(201).json(message);
   } catch (error) { next(error); }
 });
+
 app.use((_request, _response, next) => next(new HttpError(404, 'Route not found.', 'NOT_FOUND')));
 app.use((error, request, response, _next) => {
   if (error instanceof ZodError) {
-    return response.status(400).json({ error: { code: 'VALIDATION_ERROR', message: error.issues[0]?.message ?? 'Invalid request.', details: error.issues } });
+    return response.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: error.issues[0]?.message ?? 'Invalid request.',
+        details: error.issues,
+      },
+    });
   }
   const status = error.status ?? 500;
   if (status >= 500) logger.error({ err: error, method: request.method, path: request.path }, 'Request failed');
-  return response.status(status).json({ error: { code: error.code ?? 'INTERNAL_ERROR', message: status >= 500 ? 'The service could not complete the request.' : error.message, ...(error.details ? { details: error.details } : {}) } });
+  return response.status(status).json({
+    error: {
+      code: error.code ?? 'INTERNAL_ERROR',
+      message: status >= 500 ? 'The service could not complete the request.' : error.message,
+      ...(error.details ? { details: error.details } : {}),
+    },
+  });
 });
 
 const server = app.listen(config.port, '0.0.0.0', () => {
@@ -177,7 +330,11 @@ const server = app.listen(config.port, '0.0.0.0', () => {
 async function shutdown(signal) {
   logger.info({ signal }, 'Shutting down');
   closeCommunicationStreams();
-  server.close(async () => { await db.end(); process.exit(0); });
+  closeEventStreams();
+  server.close(async () => {
+    await db.end();
+    process.exit(0);
+  });
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));

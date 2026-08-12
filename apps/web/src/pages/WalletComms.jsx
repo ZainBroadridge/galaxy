@@ -174,6 +174,9 @@ export default function WalletComms() {
       await wallet.ensureAuthenticated();
       const signer = await wallet.getSigner();
       const tokenScoped = communication.scope === 'TOKEN';
+      const selectedEvent = tokenScoped
+        ? null
+        : organisedEvents.find((item) => item.id === communication.eventId);
       const input = {
         ...(tokenScoped ? { tokenAddress: communication.tokenAddress } : {}),
         category: communication.category,
@@ -182,7 +185,7 @@ export default function WalletComms() {
         body: communication.body,
         actionUrl: tokenScoped
           ? `${window.location.origin}/comms`
-          : `${window.location.origin}/vote/${communication.eventId}`,
+          : (selectedEvent?.votingUrl ?? `${window.location.origin}/vote/${communication.eventId}`),
         publishedAt: new Date().toISOString(),
         expiresAt: new Date(communication.expiresAt).toISOString(),
       };

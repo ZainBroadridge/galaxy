@@ -124,3 +124,5 @@ export const tokenCommunicationPublishInput = z.object({
   message: signedTokenCommunication,
   signature,
 });
+
+export const announcementSignatureInput = z.object({ signature });
