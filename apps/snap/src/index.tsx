@@ -1,18 +1,39 @@
-import type { OnHomePageHandler, OnRpcRequestHandler } from '@metamask/snaps-sdk';
+import type {
+  OnCronjobHandler,
+  OnHomePageHandler,
+  OnRpcRequestHandler,
+} from '@metamask/snaps-sdk';
 import { UnauthorizedError } from '@metamask/snaps-sdk';
 import { Bold, Box, Heading, Link, Text } from '@metamask/snaps-sdk/jsx';
 import { getAddress, keccak256, toUtf8Bytes, verifyMessage } from 'ethers';
 
 const CHAIN_ID = 80002;
+const DAPP_ORIGIN = 'https://galaxy-api-ten.vercel.app';
+const API_BASE_URL = 'https://mini-galaxy-pv-v2-bz12.onrender.com';
+const POLL_METHOD = 'pollCommunications';
 const MAX_MESSAGES = 100;
-const MAX_NOTIFICATIONS_PER_SYNC = 3;
+const MAX_IN_APP_NOTIFICATIONS = 3;
+const NATIVE_NOTIFICATION_INTERVAL_MS = 5 * 60_000;
+const REQUEST_TIMEOUT_MS = 12_000;
+
 const CATEGORIES = new Set([
-  'EVENT_ANNOUNCEMENT', 'VOTING_OPEN', 'DEADLINE_REMINDER',
-  'DOCUMENT_UPDATE', 'RESULTS_AVAILABLE', 'GENERAL',
+  'EVENT_ANNOUNCEMENT',
+  'VOTING_OPEN',
+  'DEADLINE_REMINDER',
+  'DOCUMENT_UPDATE',
+  'RESULTS_AVAILABLE',
+  'GENERAL',
 ]);
-const AUDIENCES = new Set(['ALL_ELIGIBLE', 'NOT_VOTED', 'SUBSCRIBERS', 'CURRENT_HOLDERS']);
+const AUDIENCES = new Set([
+  'ALL_ELIGIBLE',
+  'NOT_VOTED',
+  'SUBSCRIBERS',
+  'CURRENT_HOLDERS',
+]);
 const AUTHENTICITY = new Set([
-  'COMMUNITY', 'SELF_CLAIMED', 'TOKEN_OWNER_VERIFIED',
+  'COMMUNITY',
+  'SELF_CLAIMED',
+  'TOKEN_OWNER_VERIFIED',
 ]);
 
 type Communication = {
@@ -41,20 +62,45 @@ type Communication = {
 
 type SnapState = {
   walletAddress: string | null;
+  backgroundEnabled: boolean;
   messages: Communication[];
+  lastCheckedAt: string | null;
+  lastError: string | null;
+  lastNativeNotificationAt: string | null;
   updatedAt: string | null;
 };
 
-const EMPTY_STATE: SnapState = { walletAddress: null, messages: [], updatedAt: null };
+type PollResult = {
+  ok: boolean;
+  acceptedMessageIds: string[];
+  total: number;
+  rejected: number;
+  error?: string;
+};
 
-async function readState(): Promise<SnapState> {
+const EMPTY_STATE: SnapState = {
+  walletAddress: null,
+  backgroundEnabled: false,
+  messages: [],
+  lastCheckedAt: null,
+  lastError: null,
+  lastNativeNotificationAt: null,
+  updatedAt: null,
+};
+
+async function readUnencryptedState(): Promise<SnapState> {
   const stored = await snap.request({
     method: 'snap_manageState',
-    params: { operation: 'get' },
+    params: { operation: 'get', encrypted: false },
   }) as Partial<SnapState> | null;
+
   return {
     walletAddress: stored?.walletAddress ?? null,
+    backgroundEnabled: stored?.backgroundEnabled === true,
     messages: Array.isArray(stored?.messages) ? stored.messages : [],
+    lastCheckedAt: stored?.lastCheckedAt ?? null,
+    lastError: stored?.lastError ?? null,
+    lastNativeNotificationAt: stored?.lastNativeNotificationAt ?? null,
     updatedAt: stored?.updatedAt ?? null,
   };
 }
@@ -62,8 +108,47 @@ async function readState(): Promise<SnapState> {
 async function writeState(state: SnapState): Promise<void> {
   await snap.request({
     method: 'snap_manageState',
-    params: { operation: 'update', newState: state },
+    params: {
+      operation: 'update',
+      newState: state,
+      encrypted: false,
+    },
   });
+}
+
+async function migrateLegacyState(): Promise<SnapState> {
+  const current = await readUnencryptedState();
+  if (
+    current.walletAddress
+    || current.messages.length
+    || current.updatedAt
+  ) {
+    return current;
+  }
+
+  try {
+    const legacy = await snap.request({
+      method: 'snap_manageState',
+      params: { operation: 'get' },
+    }) as Partial<SnapState> | null;
+
+    if (!legacy) return current;
+
+    const migrated: SnapState = {
+      ...EMPTY_STATE,
+      walletAddress: legacy.walletAddress ?? null,
+      messages: Array.isArray(legacy.messages) ? legacy.messages : [],
+      updatedAt: legacy.updatedAt ?? null,
+    };
+    await writeState(migrated);
+    await snap.request({
+      method: 'snap_manageState',
+      params: { operation: 'clear' },
+    });
+    return migrated;
+  } catch {
+    return current;
+  }
 }
 
 function object(value: unknown, name: string): Record<string, unknown> {
@@ -89,8 +174,11 @@ function uuid(value: unknown, name: string): string {
 }
 
 function address(value: unknown, name: string): string {
-  try { return getAddress(text(value, name, 42)).toLowerCase(); }
-  catch { throw new Error(`${name} is not a valid EVM address.`); }
+  try {
+    return getAddress(text(value, name, 42)).toLowerCase();
+  } catch {
+    throw new Error(`${name} is not a valid EVM address.`);
+  }
 }
 
 function enumValue(value: unknown, name: string, values: Set<string>): string {
@@ -154,25 +242,36 @@ function tokenSigningMessage(message: Communication): string {
   ].join('\n');
 }
 
-function verifiedCommunication(value: unknown, dappOrigin: string): Communication {
+function verifiedCommunication(value: unknown): Communication {
   const input = object(value, 'communication');
   const chainId = Number(input.chainId);
-  if (chainId !== CHAIN_ID) throw new Error('Only Polygon Amoy communications are accepted.');
-  const scope = input.scope === 'TOKEN' ? 'TOKEN' : 'EVENT';
+  if (chainId !== CHAIN_ID) {
+    throw new Error('Only Polygon Amoy communications are accepted.');
+  }
 
+  const scope: Communication['scope'] = input.scope === 'TOKEN' ? 'TOKEN' : 'EVENT';
   const actionUrl = text(input.actionUrl, 'actionUrl', 2_000);
   let parsedAction: URL;
-  try { parsedAction = new URL(actionUrl); }
-  catch { throw new Error('actionUrl is invalid.'); }
-  if (parsedAction.origin !== dappOrigin) {
-    throw new UnauthorizedError('Communication link is outside the connected PV dApp.');
+  try {
+    parsedAction = new URL(actionUrl);
+  } catch {
+    throw new Error('actionUrl is invalid.');
+  }
+  if (parsedAction.origin !== DAPP_ORIGIN) {
+    throw new UnauthorizedError('Communication link is outside the Mini Galaxy dApp.');
   }
 
   const publishedAt = date(input.publishedAt, 'publishedAt');
   const expiresAt = date(input.expiresAt, 'expiresAt');
-  if (Date.parse(publishedAt) > Date.now() + 5 * 60_000) throw new Error('Future communication rejected.');
-  if (Date.parse(expiresAt) <= Date.now()) throw new Error('Expired communication rejected.');
-  if (Date.parse(expiresAt) <= Date.parse(publishedAt)) throw new Error('Invalid communication expiry.');
+  if (Date.parse(publishedAt) > Date.now() + 5 * 60_000) {
+    throw new Error('Future communication rejected.');
+  }
+  if (Date.parse(expiresAt) <= Date.now()) {
+    throw new Error('Expired communication rejected.');
+  }
+  if (Date.parse(expiresAt) <= Date.parse(publishedAt)) {
+    throw new Error('Invalid communication expiry.');
+  }
 
   const common = {
     scope,
@@ -190,6 +289,7 @@ function verifiedCommunication(value: unknown, dappOrigin: string): Communicatio
     actionUrl,
     signature: text(input.signature, 'signature', 512),
   };
+
   const unsigned: Communication = scope === 'TOKEN'
     ? {
         ...common,
@@ -212,10 +312,16 @@ function verifiedCommunication(value: unknown, dappOrigin: string): Communicatio
         receivedAt: new Date().toISOString(),
       };
 
+  const signingMessage = scope === 'TOKEN'
+    ? tokenSigningMessage(unsigned)
+    : eventSigningMessage(unsigned);
+
   let recovered: string;
-  const messageToVerify = scope === 'TOKEN' ? tokenSigningMessage(unsigned) : eventSigningMessage(unsigned);
-  try { recovered = getAddress(verifyMessage(messageToVerify, unsigned.signature)).toLowerCase(); }
-  catch { throw new Error('Communication creator signature is invalid.'); }
+  try {
+    recovered = getAddress(verifyMessage(signingMessage, unsigned.signature)).toLowerCase();
+  } catch {
+    throw new Error('Communication creator signature is invalid.');
+  }
   if (recovered !== unsigned.creatorAddress) {
     throw new UnauthorizedError('Communication was not signed by the declared creator.');
   }
@@ -228,7 +334,12 @@ function contextTitle(message: Communication): string {
     : String(message.eventTitle);
 }
 
-async function notify(message: Communication): Promise<void> {
+function activeMessages(messages: Communication[]): Communication[] {
+  const now = Date.now();
+  return messages.filter((message) => Date.parse(message.expiresAt) > now);
+}
+
+async function notifyInApp(message: Communication): Promise<void> {
   await snap.request({
     method: 'snap_notify',
     params: {
@@ -245,67 +356,201 @@ async function notify(message: Communication): Promise<void> {
       ),
       footerLink: {
         href: message.actionUrl,
-        text: message.scope === 'TOKEN' ? 'Open communication' : 'Open voting event',
+        text: message.scope === 'TOKEN' ? 'Open Wallet Comms' : 'Open voting event',
       },
     },
   });
 }
 
-export const onRpcRequest: OnRpcRequestHandler = async ({ origin, request }) => {
-  switch (request.method) {
-    case 'ping':
-      return { ok: true, protocolVersion: 3, chainId: CHAIN_ID };
+async function notifyNative(messages: Communication[]): Promise<boolean> {
+  const notification = messages.length === 1
+    ? `${messages[0].tokenSymbol}: ${messages[0].title}`
+    : `${messages.length} new investor communications`;
 
-    case 'setWalletContext': {
-      const params = object(request.params, 'params');
-      const walletAddress = address(params.walletAddress, 'walletAddress');
-      const state = await readState();
-      const changed = Boolean(state.walletAddress && state.walletAddress !== walletAddress);
-      await writeState({
-        walletAddress,
-        messages: changed ? [] : state.messages,
-        updatedAt: new Date().toISOString(),
-      });
-      return { ok: true, walletAddress, walletChanged: changed };
+  try {
+    await snap.request({
+      method: 'snap_notify',
+      params: {
+        type: 'native',
+        message: notification.slice(0, 80),
+      },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchInbox(walletAddress: string): Promise<unknown[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/v1/communications/inbox?wallet=${encodeURIComponent(walletAddress)}`,
+      {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+        cache: 'no-store',
+        signal: controller.signal,
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`Communications API returned HTTP ${response.status}.`);
+    }
+    const payload = await response.json();
+    if (!Array.isArray(payload)) {
+      throw new Error('Communications API returned an invalid response.');
+    }
+    return payload;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function pollCommunications(throwOnError = false): Promise<PollResult> {
+  const state = await readUnencryptedState();
+  if (!state.backgroundEnabled || !state.walletAddress) {
+    return {
+      ok: true,
+      acceptedMessageIds: [],
+      total: state.messages.length,
+      rejected: 0,
+    };
+  }
+
+  const checkedAt = new Date().toISOString();
+  try {
+    const payload = await fetchInbox(state.walletAddress);
+    const incoming: Communication[] = [];
+    let rejected = 0;
+
+    for (const item of payload) {
+      try {
+        incoming.push(verifiedCommunication(item));
+      } catch {
+        rejected += 1;
+      }
     }
 
-    case 'ingestCommunications': {
+    const existingMessages = activeMessages(state.messages);
+    const known = new Set(existingMessages.map((message) => message.messageId));
+    const fresh = incoming.filter((message) => !known.has(message.messageId));
+    const messages = [...fresh, ...existingMessages].slice(0, MAX_MESSAGES);
+
+    let lastNativeNotificationAt = state.lastNativeNotificationAt;
+    const lastNativeTime = lastNativeNotificationAt
+      ? Date.parse(lastNativeNotificationAt)
+      : 0;
+    const canNotifyNatively = fresh.length > 0
+      && Date.now() - lastNativeTime >= NATIVE_NOTIFICATION_INTERVAL_MS;
+
+    const nextState: SnapState = {
+      ...state,
+      messages,
+      lastCheckedAt: checkedAt,
+      lastError: null,
+      updatedAt: checkedAt,
+    };
+    await writeState(nextState);
+
+    for (const message of fresh.slice(0, MAX_IN_APP_NOTIFICATIONS)) {
+      try {
+        await notifyInApp(message);
+      } catch {
+        // The persistent inbox remains authoritative if MetaMask suppresses a notification.
+      }
+    }
+
+    if (canNotifyNatively && await notifyNative(fresh)) {
+      lastNativeNotificationAt = checkedAt;
+      await writeState({ ...nextState, lastNativeNotificationAt });
+    }
+
+    return {
+      ok: true,
+      acceptedMessageIds: fresh.map((message) => message.messageId),
+      total: messages.length,
+      rejected,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await writeState({
+      ...state,
+      lastCheckedAt: checkedAt,
+      lastError: message,
+      updatedAt: checkedAt,
+    });
+    if (throwOnError) throw error;
+    return {
+      ok: false,
+      acceptedMessageIds: [],
+      total: state.messages.length,
+      rejected: 0,
+      error: message,
+    };
+  }
+}
+
+function assertTrustedDapp(origin: string): void {
+  if (origin !== DAPP_ORIGIN) {
+    throw new UnauthorizedError('Only the Mini Galaxy companion dApp may configure this Snap.');
+  }
+}
+
+export const onCronjob: OnCronjobHandler = async ({ request }) => {
+  if (request.method !== POLL_METHOD) {
+    throw new Error(`Method not found: ${request.method}`);
+  }
+  return pollCommunications(false);
+};
+
+export const onRpcRequest: OnRpcRequestHandler = async ({ origin, request }) => {
+  assertTrustedDapp(origin);
+
+  switch (request.method) {
+    case 'ping':
+      return { ok: true, protocolVersion: 4, chainId: CHAIN_ID };
+
+    case 'configureBackgroundAlerts': {
       const params = object(request.params, 'params');
-      if (!Array.isArray(params.messages) || params.messages.length > 100) {
-        throw new Error('messages must contain at most 100 items.');
-      }
-      const state = await readState();
-      if (!state.walletAddress) throw new UnauthorizedError('Set the wallet context before syncing.');
+      const walletAddress = address(params.walletAddress, 'walletAddress');
+      const state = await migrateLegacyState();
+      const walletChanged = Boolean(
+        state.walletAddress && state.walletAddress !== walletAddress,
+      );
+      await writeState({
+        ...state,
+        walletAddress,
+        backgroundEnabled: true,
+        messages: walletChanged ? [] : activeMessages(state.messages),
+        lastError: null,
+        updatedAt: new Date().toISOString(),
+      });
+      const result = await pollCommunications(true);
+      return { ...result, walletAddress, walletChanged, backgroundEnabled: true };
+    }
 
-      const incoming = params.messages.map((item) => verifiedCommunication(item, origin));
-      const existing = new Set(state.messages.map((item) => item.messageId));
-      const fresh = incoming.filter((item) => !existing.has(item.messageId));
-      const messages = [...fresh, ...state.messages].slice(0, MAX_MESSAGES);
-      await writeState({ ...state, messages, updatedAt: new Date().toISOString() });
+    case 'checkNow':
+      return pollCommunications(true);
 
-      let notificationsShown = 0;
-      const notificationErrors: string[] = [];
-      for (const message of fresh.slice(0, MAX_NOTIFICATIONS_PER_SYNC)) {
-        try { await notify(message); notificationsShown += 1; }
-        catch (error) { notificationErrors.push(error instanceof Error ? error.message : String(error)); }
-      }
-
-      return {
-        acceptedMessageIds: fresh.map((item) => item.messageId),
-        acknowledgedMessageIds: incoming.map((item) => item.messageId),
-        total: messages.length,
-        notificationsShown,
-        notificationErrors,
-      };
+    case 'disableBackgroundAlerts': {
+      const state = await readUnencryptedState();
+      await writeState({
+        ...state,
+        backgroundEnabled: false,
+        lastError: null,
+        updatedAt: new Date().toISOString(),
+      });
+      return { ok: true, backgroundEnabled: false };
     }
 
     case 'getInbox':
-      return readState();
+      return readUnencryptedState();
 
     case 'markAsRead': {
       const params = object(request.params, 'params');
       const messageId = uuid(params.messageId, 'messageId');
-      const state = await readState();
+      const state = await readUnencryptedState();
       await writeState({
         ...state,
         messages: state.messages.map((message) => (
@@ -317,8 +562,12 @@ export const onRpcRequest: OnRpcRequestHandler = async ({ origin, request }) => 
     }
 
     case 'clearInbox': {
-      const state = await readState();
-      await writeState({ ...state, messages: [], updatedAt: new Date().toISOString() });
+      const state = await readUnencryptedState();
+      await writeState({
+        ...state,
+        messages: [],
+        updatedAt: new Date().toISOString(),
+      });
       return { ok: true };
     }
 
@@ -328,22 +577,36 @@ export const onRpcRequest: OnRpcRequestHandler = async ({ origin, request }) => 
 };
 
 export const onHomePage: OnHomePageHandler = async () => {
-  const state = await readState().catch(() => EMPTY_STATE);
-  const unread = state.messages.filter((message) => !message.read).length;
+  const state = await readUnencryptedState().catch(() => EMPTY_STATE);
+  const messages = activeMessages(state.messages);
+  const unread = messages.filter((message) => !message.read).length;
+
   return {
     content: (
       <Box>
         <Heading>PV Investor Communications</Heading>
+        <Text>
+          Background alerts: <Bold>{state.backgroundEnabled ? 'Enabled' : 'Disabled'}</Bold>
+        </Text>
+        {state.walletAddress && <Text>Wallet: {state.walletAddress}</Text>}
+        {state.lastCheckedAt && <Text>Last checked: {new Date(state.lastCheckedAt).toLocaleString()}</Text>}
+        {state.lastError && <Text>Last check failed: {state.lastError}</Text>}
         <Text><Bold>{unread}</Bold> unread message(s)</Text>
-        {state.messages.length === 0 ? (
-          <Text>Open the Mini Galaxy PV dApp and choose Sync now.</Text>
-        ) : state.messages.slice(0, 10).map((message) => (
+        {messages.length === 0 ? (
+          <Text>
+            {state.backgroundEnabled
+              ? 'New verified notices are checked automatically every minute.'
+              : 'Open the Mini Galaxy dApp and enable background alerts.'}
+          </Text>
+        ) : messages.slice(0, 10).map((message) => (
           <Box key={message.messageId}>
             <Heading>{message.title}</Heading>
             <Text>{contextTitle(message)}</Text>
             <Text>{message.body.slice(0, 500)}</Text>
             <Text>Creator signature verified</Text>
-            <Link href={message.actionUrl}>{message.scope === 'TOKEN' ? 'Open communication' : 'Open voting event'}</Link>
+            <Link href={message.actionUrl}>
+              {message.scope === 'TOKEN' ? 'Open Wallet Comms' : 'Open voting event'}
+            </Link>
           </Box>
         ))}
       </Box>

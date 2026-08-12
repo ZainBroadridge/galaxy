@@ -1,7 +1,7 @@
 {
   "name": "@zainbroadridge/pv-communications-snap",
-  "version": "0.3.0",
-  "description": "Dapp-triggered, creator-signed proxy-voting communications inside MetaMask.",
+  "version": "0.4.0",
+  "description": "Background, creator-signed investor communications inside MetaMask.",
   "repository": {
     "type": "git",
     "url": "https://github.com/ZainBroadridge/galaxy.git"

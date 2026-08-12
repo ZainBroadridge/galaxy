@@ -1,13 +1,13 @@
 {
-  "version": "0.3.0",
-  "description": "Verified proxy-voting notices delivered through the Mini Galaxy PV dApp.",
+  "version": "0.4.0",
+  "description": "Verified investor communications delivered automatically inside MetaMask.",
   "proposedName": "PV Investor Communications",
   "repository": {
     "type": "git",
     "url": "https://github.com/ZainBroadridge/galaxy.git"
   },
   "source": {
-    "shasum": "hqLYf78JjtJ3tMmqAeWJTI7VaUXU0aRLlepggJyUpO4=",
+    "shasum": "jEDT8iPQUP/vIwYtE73JVRGcSgvpm1183Ei/PNAFQIA=",
     "location": {
       "npm": {
         "filePath": "dist/bundle.js",
@@ -21,10 +21,19 @@
   },
   "initialPermissions": {
     "endowment:rpc": {
-      "dapps": true,
-      "snaps": false,
       "allowedOrigins": ["https://galaxy-api-ten.vercel.app"]
     },
+    "endowment:cronjob": {
+      "jobs": [
+        {
+          "expression": "* * * * *",
+          "request": {
+            "method": "pollCommunications"
+          }
+        }
+      ]
+    },
+    "endowment:network-access": {},
     "snap_manageState": {},
     "snap_notify": {},
     "endowment:page-home": {}

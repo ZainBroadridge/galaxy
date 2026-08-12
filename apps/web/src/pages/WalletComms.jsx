@@ -2,7 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { ErrorBox, Notice, Panel, Spinner, Status } from '../components/UI.jsx';
 import { useNotifications } from '../notifications.jsx';
-import { getInstalledSnap, installSnap, snapConfiguration, syncSnap } from '../snap.js';
+import {
+  disableSnapBackgroundAlerts,
+  getInstalledSnap,
+  installSnap,
+  snapConfiguration,
+  snapInbox,
+  syncSnap,
+} from '../snap.js';
 import { useWallet } from '../wallet.jsx';
 
 const communicationCategories = [
@@ -34,6 +41,7 @@ export default function WalletComms() {
   const configuration = snapConfiguration();
   const [activeTab, setActiveTab] = useState('investor');
   const [snapInstalled, setSnapInstalled] = useState(false);
+  const [snapState, setSnapState] = useState(null);
   const [subscriptions, setSubscriptions] = useState([]);
   const [organisedEvents, setOrganisedEvents] = useState([]);
   const [pendingAction, setPendingAction] = useState(null);
@@ -46,6 +54,7 @@ export default function WalletComms() {
     setActiveTab('investor');
     setSubscriptions([]);
     setOrganisedEvents([]);
+    setSnapState(null);
     setSubscription({ tokenAddress: '', enabled: true });
     setCommunication(initialCommunication());
     setError(null);
@@ -54,7 +63,24 @@ export default function WalletComms() {
 
   useEffect(() => {
     if (!configuration.ready) return;
-    getInstalledSnap().then((value) => setSnapInstalled(Boolean(value))).catch(() => setSnapInstalled(false));
+    let active = true;
+    getInstalledSnap()
+      .then(async (value) => {
+        if (!active) return;
+        const installed = Boolean(value);
+        setSnapInstalled(installed);
+        if (installed) {
+          const state = await snapInbox().catch(() => null);
+          if (active) setSnapState(state);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setSnapInstalled(false);
+          setSnapState(null);
+        }
+      });
+    return () => { active = false; };
   }, [configuration.ready]);
 
   useEffect(() => {
@@ -103,26 +129,26 @@ export default function WalletComms() {
     const updating = snapInstalled;
     await runAction('install', async () => {
       await installSnap();
+      const result = await syncSnap({ walletAddress: wallet.account, install: false });
       setSnapInstalled(true);
+      setSnapState(result.state ?? null);
       setFeedback({
         action: 'install',
         tone: 'success',
-        message: updating ? 'MetaMask Snap updated successfully.' : 'MetaMask Snap installed successfully.',
+        message: updating
+          ? 'MetaMask Snap updated and background alerts enabled.'
+          : 'MetaMask Snap installed and background alerts enabled.',
       });
     });
   }
 
   async function sync() {
     await runAction('sync', async () => {
-      const messages = await notifications.refresh({ silent: true });
-      const result = await syncSnap({
-        walletAddress: wallet.account,
-        install: false,
-        messages,
-      });
+      const result = await syncSnap({ walletAddress: wallet.account, install: false });
       setSnapInstalled(result.installed);
+      setSnapState(result.state ?? null);
       if (!result.installed) {
-        setFeedback({ action: 'sync', tone: 'info', message: 'Install the MetaMask Snap before syncing wallet notices.' });
+        setFeedback({ action: 'sync', tone: 'info', message: 'Install the MetaMask Snap before checking wallet notices.' });
         return;
       }
       const accepted = Number(result.accepted ?? 0);
@@ -131,7 +157,19 @@ export default function WalletComms() {
         tone: 'success',
         message: accepted > 0
           ? `${accepted} new notice${accepted === 1 ? '' : 's'} added to the MetaMask inbox.`
-          : 'MetaMask inbox is up to date.',
+          : 'MetaMask inbox is up to date. Background alerts remain enabled.',
+      });
+    });
+  }
+
+  async function disableBackgroundAlerts() {
+    await runAction('disable-alerts', async () => {
+      const state = await disableSnapBackgroundAlerts(wallet.account);
+      setSnapState(state);
+      setFeedback({
+        action: 'disable-alerts',
+        tone: 'success',
+        message: 'Background MetaMask alerts disabled.',
       });
     });
   }
@@ -223,6 +261,10 @@ export default function WalletComms() {
     ? new Date(notifications.lastUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : null;
   const notificationCount = notifications.messages.length;
+  const backgroundEnabled = snapState?.backgroundEnabled === true;
+  const snapLastChecked = snapState?.lastCheckedAt
+    ? new Date(snapState.lastCheckedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : null;
 
   return <main className="page wallet-comms-page">
     <header className="wallet-comms-header">
@@ -282,8 +324,8 @@ export default function WalletComms() {
               <span aria-hidden="true" />{notifications.live ? 'Live' : 'Refreshing'}
             </span>
             {lastUpdated && <span className="notification-updated">Updated {lastUpdated}</span>}
-            <button className="button secondary compact" onClick={sync} disabled={busy} title="Copy current notifications to MetaMask">
-              {pendingAction === 'sync' ? 'Syncing…' : 'Sync now'}
+            <button className="button secondary compact" onClick={sync} disabled={!snapInstalled || busy} title="Check for new MetaMask notices now">
+              {pendingAction === 'sync' ? 'Checking…' : 'Sync now'}
             </button>
           </div>
         </header>
@@ -318,15 +360,31 @@ export default function WalletComms() {
           <div className="utility-card-heading">
             <div>
               <span className="panel-eyebrow">MetaMask</span>
-              <h2>Wallet inbox</h2>
+              <h2>Background wallet alerts</h2>
             </div>
-            <Status value={snapInstalled ? 'INSTALLED' : 'NOT_INSTALLED'} />
+            <Status value={backgroundEnabled ? 'ACTIVE' : snapInstalled ? 'INSTALLED' : 'NOT_INSTALLED'} />
           </div>
-          <p>Install the Snap to keep a verified copy of notices inside MetaMask and unlock organiser tools.</p>
-          <button className="button" onClick={install} disabled={!configuration.ready || busy}>
-            {pendingAction === 'install' ? (snapInstalled ? 'Updating…' : 'Installing…') : (snapInstalled ? 'Update Snap' : 'Install Snap')}
-          </button>
+          <p>Receive creator-signed notices inside MetaMask automatically, even when this dApp is closed.</p>
+          {snapInstalled && <p className="muted">
+            {backgroundEnabled ? 'Checks every minute' : 'Background alerts are disabled'}
+            {snapLastChecked ? ` · Last checked ${snapLastChecked}` : ''}
+          </p>}
+          <div className="inline-actions">
+            <button className="button" onClick={install} disabled={!configuration.ready || busy}>
+              {pendingAction === 'install'
+                ? (snapInstalled ? 'Updating…' : 'Installing…')
+                : (snapInstalled ? 'Update and enable' : 'Install and enable')}
+            </button>
+            {snapInstalled && backgroundEnabled && <button
+              type="button"
+              className="button secondary"
+              onClick={disableBackgroundAlerts}
+              disabled={busy}
+            >{pendingAction === 'disable-alerts' ? 'Disabling…' : 'Disable alerts'}</button>}
+          </div>
           {actionNotice('install')}
+          {actionNotice('disable-alerts')}
+          {snapState?.lastError && <Notice tone="error">Last background check: {snapState.lastError}</Notice>}
         </section>
 
         <section className="comms-utility-card">

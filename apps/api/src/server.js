@@ -56,11 +56,25 @@ assertConfig();
 const app = express();
 app.set('trust proxy', 1);
 app.use(securityHeaders);
-app.use(cors({
-  origin(origin, callback) {
-    if (!origin || config.corsOrigins.includes(origin)) return callback(null, true);
-    return callback(new HttpError(403, 'Origin is not allowed.', 'CORS_DENIED'));
-  },
+app.use(cors((request, callback) => {
+  const origin = request.get('origin');
+  const snapInboxRequest = origin === 'null'
+    && request.path === '/v1/communications/inbox';
+
+  if (snapInboxRequest) {
+    return callback(null, {
+      origin: 'null',
+      methods: ['GET', 'OPTIONS'],
+      allowedHeaders: ['Accept'],
+      maxAge: 86_400,
+    });
+  }
+
+  if (!origin || config.corsOrigins.includes(origin)) {
+    return callback(null, { origin: true });
+  }
+
+  return callback(new HttpError(403, 'Origin is not allowed.', 'CORS_DENIED'));
 }));
 app.use(express.json({ limit: '256kb' }));
 app.use(optionalAuth);
@@ -258,6 +272,7 @@ app.get('/v1/communications/inbox', async (request, response, next) => {
   try {
     const wallet = request.query.wallet ?? request.auth?.wallet_address;
     if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
+    response.set('Cache-Control', 'private, no-store');
     response.json(await inbox(wallet));
   } catch (error) { next(error); }
 });

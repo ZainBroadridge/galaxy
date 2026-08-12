@@ -1,5 +1,4 @@
 import { getAddress } from 'ethers';
-import { fetchCommunications, verifyCommunications } from './communications.js';
 
 const configuredId = import.meta.env.VITE_SNAP_ID?.trim();
 export const SNAP_ID = configuredId || (location.hostname === 'localhost' ? 'local:http://localhost:8080' : null);
@@ -20,7 +19,9 @@ async function discoverMetaMask() {
 
   const announced = [];
   const listener = (event) => {
-    if (event.detail?.info?.rdns === 'io.metamask' || event.detail?.provider?.isMetaMask) announced.push(event.detail.provider);
+    if (event.detail?.info?.rdns === 'io.metamask' || event.detail?.provider?.isMetaMask) {
+      announced.push(event.detail.provider);
+    }
   };
   window.addEventListener('eip6963:announceProvider', listener);
   window.dispatchEvent(new Event('eip6963:requestProvider'));
@@ -53,7 +54,9 @@ export async function installSnap() {
   const provider = await metamask();
   const result = await provider.request({
     method: 'wallet_requestSnaps',
-    params: { [SNAP_ID]: SNAP_ID.startsWith('local:') ? {} : { version: SNAP_VERSION } },
+    params: {
+      [SNAP_ID]: SNAP_ID.startsWith('local:') ? {} : { version: SNAP_VERSION },
+    },
   });
   const installed = snapError(result?.[SNAP_ID], 'MetaMask rejected the Snap installation.');
   try {
@@ -72,7 +75,10 @@ export async function invokeSnap(method, params) {
   try {
     return await provider.request({
       method: 'wallet_snap',
-      params: { snapId: SNAP_ID, request: params === undefined ? { method } : { method, params } },
+      params: {
+        snapId: SNAP_ID,
+        request: params === undefined ? { method } : { method, params },
+      },
     });
   } catch (error) {
     throw new Error(error?.message || `Snap method ${method} failed.`);
@@ -83,24 +89,66 @@ async function assertMetaMaskWallet(walletAddress) {
   const provider = await metamask();
   const accounts = await provider.request({ method: 'eth_accounts' });
   const expected = getAddress(walletAddress).toLowerCase();
-  const active = Array.isArray(accounts) ? accounts.map((value) => {
-    try { return getAddress(value).toLowerCase(); } catch { return null; }
-  }) : [];
+  const active = Array.isArray(accounts)
+    ? accounts.map((value) => {
+        try {
+          return getAddress(value).toLowerCase();
+        } catch {
+          return null;
+        }
+      })
+    : [];
+
   if (!active.includes(expected)) {
-    throw new Error('Use the same connected wallet in MetaMask and the PV dApp before syncing communications.');
+    throw new Error('Use the same connected wallet in MetaMask and the PV dApp before enabling alerts.');
   }
 }
 
-export async function syncSnap({ walletAddress, install = false, messages }) {
-  await assertMetaMaskWallet(walletAddress);
-  let snap = await getInstalledSnap();
-  if (!snap && install) snap = await installSnap();
-  if (!snap) return { installed: false, messages: [], accepted: 0 };
+export async function snapInbox() {
+  return invokeSnap('getInbox');
+}
 
-  const verified = messages === undefined
-    ? await fetchCommunications(walletAddress)
-    : verifyCommunications(messages);
-  await invokeSnap('setWalletContext', { walletAddress });
-  const result = await invokeSnap('ingestCommunications', { messages: verified });
-  return { installed: true, messages: verified, accepted: result?.acceptedMessageIds?.length ?? 0, ...result };
+export async function syncSnap({ walletAddress, install = false }) {
+  await assertMetaMaskWallet(walletAddress);
+  let installed = await getInstalledSnap();
+  if (!installed && install) installed = await installSnap();
+  if (!installed) {
+    return {
+      installed: false,
+      backgroundEnabled: false,
+      messages: [],
+      accepted: 0,
+    };
+  }
+
+  const result = await invokeSnap('configureBackgroundAlerts', { walletAddress });
+  const state = await snapInbox();
+  return {
+    installed: true,
+    backgroundEnabled: state?.backgroundEnabled === true,
+    messages: state?.messages ?? [],
+    accepted: result?.acceptedMessageIds?.length ?? 0,
+    state,
+    ...result,
+  };
+}
+
+export async function checkSnapNow(walletAddress) {
+  await assertMetaMaskWallet(walletAddress);
+  const result = await invokeSnap('checkNow');
+  const state = await snapInbox();
+  return {
+    installed: true,
+    backgroundEnabled: state?.backgroundEnabled === true,
+    messages: state?.messages ?? [],
+    accepted: result?.acceptedMessageIds?.length ?? 0,
+    state,
+    ...result,
+  };
+}
+
+export async function disableSnapBackgroundAlerts(walletAddress) {
+  await assertMetaMaskWallet(walletAddress);
+  await invokeSnap('disableBackgroundAlerts');
+  return snapInbox();
 }
