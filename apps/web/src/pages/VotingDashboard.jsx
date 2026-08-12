@@ -79,6 +79,9 @@ function Receipt({ event, vote }) {
   const wallet = useWallet();
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState(null);
+  const verifiedContractUrl = event.verificationStatus === 'VERIFIED'
+    ? event.contractExplorerUrl
+    : null;
 
   async function downloadReceipt() {
     if (downloading) return;
@@ -98,17 +101,23 @@ function Receipt({ event, vote }) {
   return <Panel title={vote.status === 'CONFIRMED' ? 'Vote recorded' : 'Vote submitted'} className="receipt">
     <div className="row between wrap">
       <Status value={vote.status} />
-      <button className="button secondary" onClick={downloadReceipt} disabled={downloading}>
+      {verifiedContractUrl && <button
+        className="button secondary"
+        onClick={downloadReceipt}
+        disabled={downloading}
+      >
         {downloading && <span className="button-spinner" aria-hidden="true" />}
         {downloading ? 'Generating receipt…' : 'Download receipt'}
-      </button>
+      </button>}
     </div>
     <dl className="details">
       <div><dt>Voting power</dt><dd><strong className="voting-power-emphasis">{vote.votingPower}</strong></dd></div>
       <div><dt>Transaction</dt><dd>{vote.transactionHash
         ? <a href={vote.transactionExplorerUrl} target="_blank" rel="noreferrer"><ShortAddress value={vote.transactionHash} /></a>
         : <span className="inline-working"><span className="inline-spinner" />Waiting for relayer</span>}</dd></div>
-      <div><dt>VoteEvent</dt><dd><a href={event.contractExplorerUrl} target="_blank" rel="noreferrer"><ShortAddress value={event.contractAddress} /></a></dd></div>
+      <div><dt>VoteEvent</dt><dd>{verifiedContractUrl
+        ? <a href={verifiedContractUrl} target="_blank" rel="noreferrer"><ShortAddress value={event.contractAddress} /></a>
+        : 'Verification pending'}</dd></div>
       <div><dt>Source</dt><dd>{event.verificationStatus === 'VERIFIED'
         ? 'Verified on PolygonScan'
         : event.verificationStatus.replaceAll('_', ' ')}</dd></div>

@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { formatUnits } from 'ethers';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { config } from './config.js';
 import { query } from './db.js';
 import { readAllEventDocuments } from './documents.js';
 import { HttpError, normalizeAddress } from './errors.js';
@@ -285,6 +286,11 @@ function eventDetails(event) {
   ];
 }
 
+function verifiedContractUrl(event) {
+  if (event.verification_status !== 'VERIFIED' || !event.contract_address) return null;
+  return `${config.explorerUrl}/address/${event.contract_address}#code`;
+}
+
 async function appendSupportingDocuments(target, documents) {
   for (const document of documents) {
     const source = await PDFDocument.load(document.bytes, { updateMetadata: false });
@@ -407,6 +413,10 @@ export async function createResultsReport(eventId, walletInput) {
 export async function createVoteReceipt(eventId, walletInput) {
   const wallet = normalizeAddress(walletInput, 'wallet');
   const event = await getEventRow(eventId);
+  const contractUrl = verifiedContractUrl(event);
+  if (!contractUrl) {
+    throw new HttpError(409, 'The vote receipt is available after the VoteEvent contract is verified on PolygonScan.', 'RECEIPT_NOT_READY');
+  }
   const voteResult = await query(
     `SELECT * FROM votes
       WHERE event_id=$1 AND voter_address=$2 AND status<>'FAILED'`,
@@ -422,7 +432,10 @@ export async function createVoteReceipt(eventId, walletInput) {
   writer.heading(event.title, 18);
   writer.paragraph('Receipt of submitted proxy voting instructions.', { color: MUTED });
   writer.heading('Event details');
-  writer.keyValues(eventDetails(event));
+  writer.keyValues([
+    ...eventDetails(event),
+    ['Verified VoteEvent URL', contractUrl],
+  ]);
   writer.heading('Voter details');
   writer.keyValues([
     ['Wallet', wallet],

@@ -472,7 +472,6 @@ export function OrganiserEventPage() {
   if (view.error) return <Page title="Organiser Dashboard"><ErrorBox error={view.error} /></Page>;
   const event = view.data;
   const canRetry = Boolean(event.failureReason || event.verificationStatus === 'FAILED');
-  const waitingForRelayer = jobActive && event.job?.type === 'DEPLOY_EVENT';
   const documentSlots = Math.max(0, MAX_DOCUMENTS - (event.documents?.length ?? 0));
   const canAuthoriseAnnouncement = event.announcementStatus === 'AWAITING_SIGNATURE'
     || (event.announcementStatus === 'QUEUED' && event.contractReady);
@@ -488,8 +487,7 @@ export function OrganiserEventPage() {
     <Panel title="Event status">
       <div className="status-line">
         <Status value={event.status} />
-        {waitingForRelayer && <span className="inline-working"><span className="inline-spinner" />Waiting for relayer</span>}
-        {!waitingForRelayer && <span>{event.job?.message}</span>}
+        <span>{event.job?.message}</span>
       </div>
       {jobActive && <div className="job-progress">
         <div><span>{event.job?.message}</span><strong>{event.job?.progress ?? 0}%</strong></div>
