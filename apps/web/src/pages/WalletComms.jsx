@@ -84,10 +84,6 @@ export default function WalletComms() {
   }, [configuration.ready]);
 
   useEffect(() => {
-    if (!snapInstalled && activeTab === 'organiser') setActiveTab('investor');
-  }, [activeTab, snapInstalled]);
-
-  useEffect(() => {
     if (wallet.connected && activeTab === 'investor' && notifications.messages.length) {
       notifications.markAllRead();
     }
@@ -285,7 +281,7 @@ export default function WalletComms() {
           Notifications
           {notifications.unreadCount > 0 && <span className="comms-tab-count">{notifications.unreadCount > 99 ? '99+' : notifications.unreadCount}</span>}
         </button>
-        {snapInstalled && <button
+        <button
           type="button"
           id="comms-tab-organiser"
           role="tab"
@@ -293,7 +289,7 @@ export default function WalletComms() {
           aria-selected={activeTab === 'organiser'}
           className={`comms-tab${activeTab === 'organiser' ? ' active' : ''}`}
           onClick={() => setActiveTab('organiser')}
-        >Organiser</button>}
+        >Organiser</button>
       </div>}
     </header>
 
@@ -411,7 +407,7 @@ export default function WalletComms() {
       </div>
     </div>}
 
-    {wallet.connected && activeTab === 'organiser' && snapInstalled && <div id="comms-panel-organiser" role="tabpanel" aria-labelledby="comms-tab-organiser">
+    {wallet.connected && activeTab === 'organiser' && <div id="comms-panel-organiser" role="tabpanel" aria-labelledby="comms-tab-organiser">
       {!wallet.authenticated
         ? <Panel className="organiser-access">
           <span className="panel-eyebrow">Organiser access</span>
