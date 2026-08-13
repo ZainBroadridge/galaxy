@@ -382,6 +382,36 @@ dd { margin: 0; text-align: right; font-weight: 600; }
 .footer-brand { color: #536174; }
 .footer-copyright { margin-left: auto; }
 
+/* Reference-site type scale: keep Home compact while giving all working pages comfortable reading size. */
+.page:not(.home-page) { font-size: 15px; }
+.page:not(.home-page) .page-head h1 { font-size: 24px; }
+.page:not(.home-page) .page-head p, .page:not(.home-page) .muted { font-size: 14px; }
+.page:not(.home-page) .panel-heading h2, .page:not(.home-page) .panel > h2, .page:not(.home-page) .panel h3 { font-size: 16px; }
+.page:not(.home-page) .button { min-height: 38px; padding: 8px 16px; font-size: 14px; }
+.page:not(.home-page) .button.compact { min-height: 34px; padding: 7px 12px; font-size: 13px; }
+.page:not(.home-page) label { font-size: 13px; }
+.page:not(.home-page) input, .page:not(.home-page) select, .page:not(.home-page) textarea { min-height: 38px; padding: 8px 10px; font-size: 14px; }
+.page:not(.home-page) .event-card-heading h3 { font-size: 17px; }
+.page:not(.home-page) .event-card-facts span, .page:not(.home-page) .event-card-token span, .page:not(.home-page) .event-card-power span { font-size: 12px; }
+.page:not(.home-page) .event-card-facts strong, .page:not(.home-page) .event-card-token code { font-size: 13px; }
+.page:not(.home-page) .proposal legend { font-size: 16px; }
+.page:not(.home-page) .option { padding: 12px 14px; font-size: 15px; }
+.page:not(.home-page) .results-table th, .page:not(.home-page) .results-table td { font-size: 13px; }
+.page:not(.home-page) .table-action { font-size: 13px; }
+.page:not(.home-page) .results-title-row h1 { font-size: 24px; }
+.page:not(.home-page) .result-proposal-heading h2 { font-size: 16px; }
+.page:not(.home-page) .comms-tab { min-height: 38px; font-size: 14px; }
+
+/* Keep the Home dashboard intentionally smaller and denser than the workspaces. */
+.home-page { min-height: 0; padding-top: 28px; }
+.home-heading h1 { font-size: 22px; }
+.home-actions { margin-top: 24px; }
+.home-summary-grid { gap: 40px; margin-top: 24px; }
+.home-summary-card { min-height: 188px; padding: 24px 28px; }
+.home-summary-label { font-size: 16px; }
+.home-summary-card strong { font-size: 34px; }
+.home-summary-card a { font-size: 14px; }
+
 @media (max-width: 1344px) {
   .topbar-inner { padding: 0 16px; gap: 14px; }
   .topbar-primary { gap: 14px; }
