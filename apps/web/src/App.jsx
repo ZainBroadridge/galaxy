@@ -9,10 +9,11 @@ import VotingDashboard, { VoteEventPage } from './pages/VotingDashboard.jsx';
 import OrganiserDashboard, { OrganiserEventPage } from './pages/OrganiserDashboard.jsx';
 import ResultsPage, { EventResultsPage } from './pages/ResultsPage.jsx';
 import WalletComms from './pages/WalletComms.jsx';
+import HomePage from './pages/HomePage.jsx';
 
 const AMOY_CHAIN_ID = '0x13882';
 const primaryNavigation = [
-  ['/', 'Voting Dashboard'],
+  ['/voting', 'Voting Dashboard'],
   ['/results', 'Results'],
   ['/organiser', 'Organizer'],
   ['/comms', 'Wallet Comms'],
@@ -144,7 +145,8 @@ export default function App() {
       {!reownConfigured && <Notice tone="warning">Set <code>VITE_REOWN_PROJECT_ID</code> before deployment.</Notice>}
       {networkError && <Notice tone="error">{networkError.message || 'Unable to add Polygon Amoy to this wallet.'}</Notice>}
       <Routes>
-        <Route path="/" element={<VotingDashboard />} />
+        <Route path="/" element={<HomePage />} />
+        <Route path="/voting" element={<VotingDashboard />} />
         <Route path="/vote/:eventId" element={<VoteEventPage />} />
         <Route path="/organiser" element={<OrganiserDashboard />} />
         <Route path="/organiser/:eventId" element={<OrganiserEventPage />} />
