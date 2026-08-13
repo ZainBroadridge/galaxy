@@ -16,6 +16,29 @@ import {
 import { useEventLiveRefresh, useLoad } from '../hooks.js';
 import { useWallet } from '../wallet.jsx';
 
+function formatDate(value) {
+  if (!value) return '—';
+  return new Date(value).toLocaleString([], {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function CopyIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5V3.25A1.25 1.25 0 0 1 6.75 2h6A1.25 1.25 0 0 1 14 3.25v6a1.25 1.25 0 0 1-1.25 1.25H11.5M3.25 5.5h6A1.25 1.25 0 0 1 10.5 6.75v6A1.25 1.25 0 0 1 9.25 14h-6A1.25 1.25 0 0 1 2 12.75v-6A1.25 1.25 0 0 1 3.25 5.5Z" /></svg>;
+}
+
+function WalletIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h8.75A1.75 1.75 0 0 1 13 5.25V6h.75A1.25 1.25 0 0 1 15 7.25v2.5A1.25 1.25 0 0 1 13.75 11H13v.75a1.75 1.75 0 0 1-1.75 1.75H2.5A1.5 1.5 0 0 1 1 12V5a1.5 1.5 0 0 1 1.5-1.5Zm10.25 4h-2a1 1 0 1 0 0 2h2a.75.75 0 0 0 .75-.75v-.5a.75.75 0 0 0-.75-.75Z" /></svg>;
+}
+
+function ClockIcon() {
+  return <svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" /><path d="M9 5v4l2.5 1.5" /></svg>;
+}
+
 export default function VotingDashboard() {
   const { account, connected, openWallet } = useWallet();
   const events = useLoad(
@@ -28,7 +51,7 @@ export default function VotingDashboard() {
   return <Page
     title="Voting Dashboard"
     intro="Open proxy votes for which your connected wallet had voting power on the record date."
-    actions={<button className="button secondary" onClick={() => events.reload().catch(() => {})}>Refresh</button>}
+    actions={<button className="button secondary compact" onClick={() => events.reload().catch(() => {})}>Refresh</button>}
   >
     {!connected && <Panel><Empty>
       <p>Connect a wallet to discover eligible voting events.</p>
@@ -39,9 +62,10 @@ export default function VotingDashboard() {
     {connected && !events.loading && !events.data?.length
       ? <Panel><Empty>No ongoing eligible events.</Empty></Panel>
       : null}
-    <div className="card-grid">{events.data?.map((event) => <EventCard
+    <div className="card-grid voting-card-grid">{events.data?.map((event) => <EventCard
       key={event.id}
       event={event}
+      variant="voting"
       to={`/vote/${event.id}`}
       action={event.eligibility?.hasVoted ? 'View receipt' : 'Open ballot'}
     />)}</div>
@@ -60,13 +84,13 @@ function EventDocuments({ event }) {
         </div>
         <div className="row wrap">
           <a
-            className="button tertiary"
+            className="button tertiary compact"
             href={`${API_BASE_URL}/v1/events/${event.id}/documents/${document.id}`}
             target="_blank"
             rel="noreferrer"
           >Open</a>
           <a
-            className="button tertiary"
+            className="button tertiary compact"
             href={`${API_BASE_URL}/v1/events/${event.id}/documents/${document.id}?download=1`}
           >Download</a>
         </div>
@@ -98,11 +122,11 @@ function Receipt({ event, vote }) {
     }
   }
 
-  return <Panel title={vote.status === 'CONFIRMED' ? 'Vote recorded' : 'Vote submitted'} className="receipt">
-    <div className="row between wrap">
+  return <Panel title={vote.status === 'CONFIRMED' ? 'Vote recorded' : 'Vote submitted'} className="receipt receipt-panel">
+    <div className="row between wrap receipt-toolbar">
       <Status value={vote.status} />
       {verifiedContractUrl && <button
-        className="button secondary"
+        className="button secondary compact"
         onClick={downloadReceipt}
         disabled={downloading}
       >
@@ -110,7 +134,7 @@ function Receipt({ event, vote }) {
         {downloading ? 'Generating receipt…' : 'Download receipt'}
       </button>}
     </div>
-    <dl className="details">
+    <dl className="details receipt-details">
       <div><dt>Voting power</dt><dd><strong className="voting-power-emphasis">{vote.votingPower}</strong></dd></div>
       <div><dt>Transaction</dt><dd>{vote.transactionHash
         ? <a href={vote.transactionExplorerUrl} target="_blank" rel="noreferrer"><ShortAddress value={vote.transactionHash} /></a>
@@ -127,9 +151,39 @@ function Receipt({ event, vote }) {
   </Panel>;
 }
 
+function VotingPowerCard({ event, wallet, copied, onCopy, onAddToken }) {
+  const votingPower = event.vote?.votingPower ?? event.eligibility?.votingPower;
+  if (!wallet.connected || !votingPower) return null;
+
+  return <section className="voting-power-card">
+    <span className="voting-power-label">Voting power</span>
+    <div className="voting-power-value">
+      <strong>{votingPower}</strong>
+      <span>On-chain {event.tokenSymbol} votes</span>
+    </div>
+    <p>Wallet: {wallet.account ? `${wallet.account.slice(0, 6)}…${wallet.account.slice(-4)}` : '—'}</p>
+
+    <div className="token-wallet-card">
+      <div className="token-wallet-row">
+        <div>
+          <span>{event.tokenSymbol} token address</span>
+          <strong>{event.tokenAddress ? `${event.tokenAddress.slice(0, 8)}…${event.tokenAddress.slice(-4)}` : '—'}</strong>
+        </div>
+        <button className="button secondary compact icon-label-button" type="button" onClick={onCopy}>
+          <CopyIcon />{copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <button className="button secondary token-add-button" type="button" onClick={onAddToken}>
+        <WalletIcon />Add to Wallet
+      </button>
+    </div>
+  </section>;
+}
+
 export function VoteEventPage() {
   const { eventId } = useParams();
-  const { account, connected, openWallet, getSigner } = useWallet();
+  const wallet = useWallet();
+  const { account, connected, openWallet, getSigner } = wallet;
   const view = useLoad(
     () => api(`/v1/events/${eventId}/view${account ? `?wallet=${account}` : ''}`, { auth: false }),
     [eventId, account],
@@ -138,6 +192,8 @@ export function VoteEventPage() {
   const [choices, setChoices] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [walletActionError, setWalletActionError] = useState(null);
 
   useEffect(() => {
     setChoices(event?.proposals?.map(() => null) ?? []);
@@ -188,24 +244,89 @@ export function VoteEventPage() {
     }
   }
 
+  async function copyTokenAddress() {
+    if (!event.tokenAddress) return;
+    setWalletActionError(null);
+    try {
+      await navigator.clipboard.writeText(event.tokenAddress);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch (error) {
+      setCopied(false);
+      setWalletActionError(error);
+    }
+  }
+
+  async function addTokenToWallet() {
+    setWalletActionError(null);
+    try {
+      if (!wallet.walletProvider?.request || !event.tokenAddress) {
+        throw new Error('Connect MetaMask before adding this token.');
+      }
+      await wallet.walletProvider.request({
+        method: 'wallet_watchAsset',
+        params: {
+          type: 'ERC20',
+          options: {
+            address: event.tokenAddress,
+            symbol: event.tokenSymbol,
+            decimals: Number.isInteger(event.tokenDecimals) ? event.tokenDecimals : 18,
+          },
+        },
+      });
+    } catch (error) {
+      setWalletActionError(error);
+    }
+  }
+
   if (view.loading) return <Page title="Voting Dashboard"><Spinner /></Page>;
   if (view.error) return <Page title="Voting Dashboard"><ErrorBox error={view.error} /></Page>;
 
-  return <Page
-    title={event.title}
-    intro={`${event.tokenName} (${event.tokenSymbol})`}
-    actions={<Link className="button secondary" to="/">Back</Link>}
-  >
+  const voted = Boolean(event.vote || event.eligibility?.hasVoted || event.eligibility?.onChainOnly);
+  const stateLabel = voted
+    ? 'Vote recorded'
+    : event.status === 'SCHEDULED'
+      ? 'Not started'
+      : event.status === 'OPEN'
+        ? 'Voting open'
+        : event.status === 'CLOSED'
+          ? 'Voting closed'
+          : 'Event preparation';
+
+  return <main className="page vote-event-page">
+    <div className="page-back-row"><Link to="/">← Back to dashboard</Link></div>
+
+    <header className="vote-event-heading">
+      <h1>{event.title}</h1>
+      <p>Voting open {formatDate(event.votingStartAt)} — {formatDate(event.votingEndAt)}</p>
+    </header>
+
     {!event.metadataIntegrity && <Notice tone="error">
       Event metadata does not match the hash committed to the contract. Voting is disabled.
     </Notice>}
-    {jobActive && event.deploymentBlock === null && <Panel title="Event preparation">
+
+    {jobActive && event.deploymentBlock === null && <Panel title="Event preparation" className="event-preparation-panel">
       <div className="status-line"><Status value={event.status} /><span>{event.job?.message}</span></div>
       <div className="job-progress">
         <div><span>{event.job?.message}</span><strong>{event.job?.progress ?? 0}%</strong></div>
         <progress value={event.job?.progress ?? 0} max="100" />
       </div>
     </Panel>}
+
+    <VotingPowerCard
+      event={event}
+      wallet={wallet}
+      copied={copied}
+      onCopy={copyTokenAddress}
+      onAddToken={addTokenToWallet}
+    />
+    <ErrorBox error={walletActionError} />
+
+    <div className={`vote-state-banner vote-state-${event.status.toLowerCase()}`}>
+      <div><ClockIcon /><strong>{stateLabel}</strong></div>
+      <span>{event.status === 'CLOSED' ? 'Closed' : 'Vote by'} {formatDate(event.votingEndAt)}</span>
+    </div>
+
     {event.failureReason && <Notice tone="error">{event.failureReason}</Notice>}
     {event.lastVoteFailure && <Notice tone="error">
       Previous relay attempt failed: {event.lastVoteFailure}. You may submit the ballot again.
@@ -213,6 +334,7 @@ export function VoteEventPage() {
 
     <EventDocuments event={event} />
     {event.vote && event.vote.status !== 'FAILED' ? <Receipt event={event} vote={event.vote} /> : null}
+
     {!event.vote && !connected ? <Panel><Empty>
       <p>Connect the eligible wallet to view this ballot.</p>
       <button className="button" onClick={openWallet}>Connect wallet</button>
@@ -224,50 +346,58 @@ export function VoteEventPage() {
       <Status value="CONFIRMED" />
       <p>This wallet is already marked as voted by the VoteEvent contract. The ballot is locked; a local transaction receipt was not available in Neon.</p>
     </Panel> : null}
-    {!event.vote && event.status === 'SCHEDULED'
-      ? <Notice>Voting opens {new Date(event.votingStartAt).toLocaleString()}.</Notice>
-      : null}
     {!event.vote && event.status === 'CLOSED'
       ? <Notice>Voting is closed. <Link to={`/results/${event.id}`}>View results</Link>.</Notice>
       : null}
+
     {!event.vote
       && !event.eligibility?.hasVoted
       && event.status === 'OPEN'
       && event.eligibility?.eligible
       && event.metadataIntegrity
-      ? <Panel title="Ballot">
+      ? <section className="ballot-shell">
+        <header className="ballot-shell-heading">
+          <div><span>Official ballot</span><h2>Cast your vote</h2></div>
+          <div><span>Voting power</span><strong>{event.eligibility.votingPower}</strong></div>
+        </header>
         <div className="ballot-meta">
-          <span>Voting power <strong>{event.eligibility.votingPower}</strong></span>
-          <span>Closes <strong>{new Date(event.votingEndAt).toLocaleString()}</strong></span>
+          <span>Record date <strong>{formatDate(event.recordDateAt)}</strong></span>
+          <span>Voting closes <strong>{formatDate(event.votingEndAt)}</strong></span>
         </div>
-        {event.proposals.map((proposal, proposalIndex) => <fieldset
-          key={proposal.index ?? proposalIndex}
-          className="proposal"
-        >
-          <legend>{proposalIndex + 1}. {proposal.title}</legend>
-          {proposal.description && <p>{proposal.description}</p>}
-          {proposal.options.map((option, optionIndex) => <label
-            key={option.index ?? optionIndex}
-            className="option"
+        <div className="proposal-stack">
+          {event.proposals.map((proposal, proposalIndex) => <fieldset
+            key={proposal.index ?? proposalIndex}
+            className="proposal ballot-proposal"
           >
-            <input
-              type="radio"
-              name={`proposal-${proposalIndex}`}
-              checked={choices[proposalIndex] === optionIndex}
-              onChange={() => setChoices((current) => current.map((value, index) => (
-                index === proposalIndex ? optionIndex : value
-              )))}
-            />
-            <span>{option.text ?? option}</span>
-            {proposal.recommendation === optionIndex && <small>Organiser recommendation</small>}
-          </label>)}
-        </fieldset>)}
+            <legend>{proposalIndex + 1}. {proposal.title}</legend>
+            {proposal.description && <p>{proposal.description}</p>}
+            <div className="ballot-options">
+              {proposal.options.map((option, optionIndex) => <label
+                key={option.index ?? optionIndex}
+                className="option"
+              >
+                <input
+                  type="radio"
+                  name={`proposal-${proposalIndex}`}
+                  checked={choices[proposalIndex] === optionIndex}
+                  onChange={() => setChoices((current) => current.map((value, index) => (
+                    index === proposalIndex ? optionIndex : value
+                  )))}
+                />
+                <span>{option.text ?? option}</span>
+                {proposal.recommendation === optionIndex && <small>Board recommendation</small>}
+              </label>)}
+            </div>
+          </fieldset>)}
+        </div>
         <ErrorBox error={submitError} />
-        <button className="button" disabled={!complete || submitting} onClick={submit}>
-          {submitting ? 'Signing and submitting…' : 'Submit final vote'}
-        </button>
-        <p className="muted">MetaMask will request one final-ballot signature. The Render relayer pays POL.</p>
-      </Panel>
+        <footer className="ballot-submit-row">
+          <p>MetaMask requests one final-ballot signature. The Render relayer pays POL.</p>
+          <button className="button" disabled={!complete || submitting} onClick={submit}>
+            {submitting ? 'Signing and submitting…' : 'Submit final vote'}
+          </button>
+        </footer>
+      </section>
       : null}
-  </Page>;
+  </main>;
 }

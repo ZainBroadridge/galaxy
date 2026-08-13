@@ -159,6 +159,7 @@ export default function OrganiserDashboard() {
   const [token, setToken] = useState(null);
   const [busyStage, setBusyStage] = useState('');
   const [error, setError] = useState(null);
+  const [creating, setCreating] = useState(false);
 
   async function unlock() {
     setError(null);
@@ -244,106 +245,153 @@ export default function OrganiserDashboard() {
     }
   }
 
-  return <Page title="Organiser Dashboard" intro="Create a lightweight proxy vote for a standard Polygon Amoy ERC-20 token.">
-    {!wallet.connected && <Panel><Empty>
-      <p>Connect a wallet to create and manage events.</p>
-      <button className="button" onClick={wallet.openWallet}>Connect wallet</button>
-    </Empty></Panel>}
-    {wallet.connected && !wallet.authenticated && <Panel><Empty>
-      <p>Authenticate once to unlock organiser actions.</p>
-      <button className="button" onClick={unlock} disabled={wallet.authBusy}>Unlock organiser</button>
-    </Empty></Panel>}
-    <ErrorBox error={error} />
+  if (!wallet.connected) {
+    return <Page title="Organizer">
+      <Panel><Empty>
+        <p>Connect a wallet to create and manage voting events.</p>
+        <button className="button" onClick={wallet.openWallet}>Connect wallet</button>
+      </Empty></Panel>
+    </Page>;
+  }
 
-    {wallet.authenticated && <>
-      <Panel title="Create event">
-        <form className="form" onSubmit={submit}>
-          <div className="field-grid two">
-            <label>ERC-20 token address<div className="input-action">
-              <input
-                value={form.tokenAddress}
-                onChange={(event) => {
-                  setForm({ ...form, tokenAddress: event.target.value });
-                  setToken(null);
-                }}
-                placeholder="0x…"
-                required
-              />
-              <button type="button" className="button tertiary" onClick={inspect}>Inspect</button>
-            </div></label>
-            <label>Token-to-vote ratio<input
-              type="number"
-              min="1"
-              step="1"
-              value={form.tokenToVoteRatio}
-              onChange={(event) => setForm({ ...form, tokenToVoteRatio: event.target.value })}
+  if (!wallet.authenticated) {
+    return <Page title="Organizer">
+      <ErrorBox error={error} />
+      <Panel><Empty>
+        <p>Authenticate once to unlock organizer actions.</p>
+        <button className="button" onClick={unlock} disabled={wallet.authBusy}>Unlock organizer</button>
+      </Empty></Panel>
+    </Page>;
+  }
+
+  if (!creating) {
+    return <Page
+      className="organiser-index-page"
+      title="Your Voting Events"
+      intro={`${events.data?.length ?? 0} event${events.data?.length === 1 ? '' : 's'} created by this wallet`}
+      actions={<button className="button" type="button" onClick={() => setCreating(true)}>Create Voting Event</button>}
+    >
+      <ErrorBox error={error} />
+      {events.loading
+        ? <Spinner />
+        : events.data?.length
+          ? <div className="organiser-events-grid">{events.data.map((item) => <EventCard
+              key={item.id}
+              event={item}
+              variant="organiser"
+              to={item.status === 'CLOSED' ? `/results/${item.id}` : `/organiser/${item.id}`}
+              titleTo={`/organiser/${item.id}`}
+              action={item.status === 'CLOSED' ? 'Results' : 'Manage'}
+            />)}</div>
+          : <Panel><Empty>
+              <p>No voting events have been created by this wallet.</p>
+              <button className="button" type="button" onClick={() => setCreating(true)}>Create Voting Event</button>
+            </Empty></Panel>}
+    </Page>;
+  }
+
+  return <main className="page organiser-create-page">
+    <button className="back-link-button" type="button" onClick={() => setCreating(false)}>← Back to your events</button>
+    <header className="organiser-create-heading">
+      <h1>Create Voting Event</h1>
+    </header>
+
+    <ErrorBox error={error} />
+    <form className="form organiser-create-form" onSubmit={submit}>
+      <section className="form-section-card">
+        <header className="form-section-heading">
+          <h2>Event details</h2>
+          <p>Identify the token and define the voting event shown to eligible holders.</p>
+        </header>
+        <div className="field-grid two">
+          <label>ERC-20 token address<div className="input-action">
+            <input
+              value={form.tokenAddress}
+              onChange={(event) => {
+                setForm({ ...form, tokenAddress: event.target.value });
+                setToken(null);
+              }}
+              placeholder="0x…"
               required
-            /><small>Voting power = whole tokens ÷ X</small></label>
-          </div>
-          {token && <Notice tone="success">
-            {token.name} ({token.symbol}), {token.decimals} decimals. Standard ERC-20 interface confirmed.
-          </Notice>}
+            />
+            <button type="button" className="button secondary compact" onClick={inspect}>Inspect</button>
+          </div></label>
+          <label>Token-to-vote ratio<input
+            type="number"
+            min="1"
+            step="1"
+            value={form.tokenToVoteRatio}
+            onChange={(event) => setForm({ ...form, tokenToVoteRatio: event.target.value })}
+            required
+          /><small>Voting power = whole tokens ÷ X</small></label>
+        </div>
+        {token && <Notice tone="success">
+          {token.name} ({token.symbol}), {token.decimals} decimals. Standard ERC-20 interface confirmed.
+        </Notice>}
+        <div className="field-grid two">
           <label>Event title<input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
           <label>Description<textarea rows="3" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-          <div className="field-grid three">
-            <label>Record date<input type="datetime-local" max={localDate(new Date())} value={form.recordDateAt} onChange={(event) => setForm({ ...form, recordDateAt: event.target.value })} required /></label>
-            <label>Voting starts<input type="datetime-local" value={form.votingStartAt} onChange={(event) => setForm({ ...form, votingStartAt: event.target.value })} required /></label>
-            <label>Voting ends<input type="datetime-local" value={form.votingEndAt} onChange={(event) => setForm({ ...form, votingEndAt: event.target.value })} required /></label>
-          </div>
-          <div className="field-grid three">
-            <label>Authenticity<select value={form.authenticityClaim} onChange={(event) => setForm({ ...form, authenticityClaim: event.target.value })}>
-              <option value="COMMUNITY">Community-created</option>
-              <option value="ISSUER_AUTHORIZED">Issuer-authorized claim</option>
-            </select></label>
-            <label>Discovery<select value={form.discoveryMode} onChange={(event) => setForm({ ...form, discoveryMode: event.target.value })}>
-              <option value="PUBLIC_ELIGIBLE">Eligible holders</option>
-              <option value="SUBSCRIBERS_ONLY">Subscribed holders</option>
-              <option value="DIRECT_LINK">Direct link only</option>
-            </select></label>
-            <label>Wallet communications<select value={form.snapDeliveryMode} onChange={(event) => setForm({ ...form, snapDeliveryMode: event.target.value })}>
-              <option value="ELIGIBLE">Eligible holders</option>
-              <option value="SUBSCRIBERS_ONLY">Subscribers only</option>
-              <option value="DISABLED">Disabled</option>
-            </select></label>
-          </div>
+        </div>
+      </section>
 
-          <div className="optional-upload">
-            <div>
-              <strong>Proxy voting documents</strong>
-              <small>Optional. Up to three PDFs, 10 MB each.</small>
-            </div>
-            <label className="button tertiary file-button">
-              Select PDFs
-              <input type="file" accept="application/pdf,.pdf" multiple onChange={chooseDocuments} />
-            </label>
+      <section className="form-section-card">
+        <header className="form-section-heading">
+          <h2>Proposals</h2>
+          <p>Define each resolution, its available options, and an optional board recommendation.</p>
+        </header>
+        <ProposalEditor proposals={form.proposals} onChange={(proposals) => setForm({ ...form, proposals })} />
+      </section>
+
+      <section className="form-section-card">
+        <header className="form-section-heading">
+          <h2>Schedule &amp; eligibility</h2>
+          <p>Set the record date, voting window, event discovery, and communications behavior.</p>
+        </header>
+        <div className="field-grid three">
+          <label>Voting start<input type="datetime-local" value={form.votingStartAt} onChange={(event) => setForm({ ...form, votingStartAt: event.target.value })} required /></label>
+          <label>Voting end<input type="datetime-local" value={form.votingEndAt} onChange={(event) => setForm({ ...form, votingEndAt: event.target.value })} required /></label>
+          <label>Record date<input type="datetime-local" max={localDate(new Date())} value={form.recordDateAt} onChange={(event) => setForm({ ...form, recordDateAt: event.target.value })} required /></label>
+        </div>
+        <div className="field-grid three">
+          <label>Authenticity<select value={form.authenticityClaim} onChange={(event) => setForm({ ...form, authenticityClaim: event.target.value })}>
+            <option value="COMMUNITY">Community-created</option>
+            <option value="ISSUER_AUTHORIZED">Issuer-authorized claim</option>
+          </select></label>
+          <label>Discovery<select value={form.discoveryMode} onChange={(event) => setForm({ ...form, discoveryMode: event.target.value })}>
+            <option value="PUBLIC_ELIGIBLE">Eligible holders</option>
+            <option value="SUBSCRIBERS_ONLY">Subscribed holders</option>
+            <option value="DIRECT_LINK">Direct link only</option>
+          </select></label>
+          <label>Wallet communications<select value={form.snapDeliveryMode} onChange={(event) => setForm({ ...form, snapDeliveryMode: event.target.value })}>
+            <option value="ELIGIBLE">Eligible holders</option>
+            <option value="SUBSCRIBERS_ONLY">Subscribers only</option>
+            <option value="DISABLED">Disabled</option>
+          </select></label>
+        </div>
+
+        <div className="optional-upload">
+          <div>
+            <strong>Proxy voting documents</strong>
+            <small>Optional. Up to three PDFs, 10 MB each.</small>
           </div>
-          <DocumentSelection
-            files={documents}
-            onRemove={(index) => setDocuments((current) => current.filter((_file, position) => position !== index))}
-          />
+          <label className="button secondary compact file-button">
+            Select PDFs
+            <input type="file" accept="application/pdf,.pdf" multiple onChange={chooseDocuments} />
+          </label>
+        </div>
+        <DocumentSelection
+          files={documents}
+          onRemove={(index) => setDocuments((current) => current.filter((_file, position) => position !== index))}
+        />
+      </section>
 
-          <ProposalEditor proposals={form.proposals} onChange={(proposals) => setForm({ ...form, proposals })} />
-          <ErrorBox error={error} />
-          <button className="button" disabled={Boolean(busyStage)}>
-            {busyStage || 'Create event'}
-          </button>
-        </form>
-      </Panel>
-
-      <Panel title="Your events">
-        {events.loading
-          ? <Spinner />
-          : events.data?.length
-            ? <div className="card-grid">{events.data.map((item) => <EventCard
-                key={item.id}
-                event={item}
-                to={`/organiser/${item.id}`}
-                action="Manage"
-              />)}</div>
-            : <Empty>No events created by this wallet.</Empty>}
-      </Panel>
-    </>}
-  </Page>;
+      <footer className="create-form-actions">
+        <button className="button" disabled={Boolean(busyStage)}>
+          {busyStage || 'Create Event'}
+        </button>
+      </footer>
+    </form>
+  </main>;
 }
 
 export function OrganiserEventPage() {
@@ -468,8 +516,8 @@ export function OrganiserEventPage() {
     }
   }
 
-  if (view.loading) return <Page title="Organiser Dashboard"><Spinner /></Page>;
-  if (view.error) return <Page title="Organiser Dashboard"><ErrorBox error={view.error} /></Page>;
+  if (view.loading) return <Page title="Organizer"><Spinner /></Page>;
+  if (view.error) return <Page title="Organizer"><ErrorBox error={view.error} /></Page>;
   const event = view.data;
   const canRetry = Boolean(event.failureReason || event.verificationStatus === 'FAILED');
   const documentSlots = Math.max(0, MAX_DOCUMENTS - (event.documents?.length ?? 0));
@@ -479,7 +527,7 @@ export function OrganiserEventPage() {
   return <Page
     title={event.title}
     intro={`${event.tokenName} (${event.tokenSymbol})`}
-    actions={<Link className="button secondary" to="/organiser">Back</Link>}
+    actions={<Link className="button secondary" to="/organiser">Back to events</Link>}
   >
     {location.state?.notice && <Notice tone="success">{location.state.notice}</Notice>}
     {location.state?.warning && <Notice>{location.state.warning}</Notice>}

@@ -4,14 +4,38 @@ import { api, apiBlob, saveBlob } from '../api.js';
 import {
   Empty,
   ErrorBox,
-  EventCard,
   Page,
   Panel,
+  ShortAddress,
   Spinner,
   Status,
 } from '../components/UI.jsx';
 import { useLoad } from '../hooks.js';
 import { useWallet } from '../wallet.jsx';
+
+function formatDate(value) {
+  if (!value) return '—';
+  return new Date(value).toLocaleString([], {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function formatVotes(value) {
+  try { return new Intl.NumberFormat().format(BigInt(value)); }
+  catch { return String(value ?? '0'); }
+}
+
+function proposalCount(event) {
+  return event.proposalCount ?? event.proposals?.length ?? '—';
+}
+
+function eligibleWallets(event) {
+  return event.snapshotHolderCount ?? event.eligibleWallets ?? '—';
+}
 
 export default function ResultsPage() {
   const { account } = useWallet();
@@ -23,9 +47,10 @@ export default function ResultsPage() {
   );
 
   return <Page
-    title="Results"
-    intro="Final tallies for events you created or voted in."
-    actions={<button className="button secondary" onClick={() => results.reload().catch(() => {})} disabled={!account}>Refresh</button>}
+    className="results-index-page"
+    title="Voting Results"
+    intro="Per-proposal tallies read from each VoteEvent contract for events you created or participated in."
+    actions={<button className="button secondary compact" onClick={() => results.reload().catch(() => {})} disabled={!account}>Refresh</button>}
   >
     <ErrorBox error={results.error} />
     {!account
@@ -33,14 +58,83 @@ export default function ResultsPage() {
       : results.loading
         ? <Spinner />
         : results.data?.length
-          ? <div className="card-grid">{results.data.map((event) => <EventCard
-              key={event.id}
-              event={event}
-              to={`/results/${event.id}`}
-              action="View results"
-            />)}</div>
+          ? <section className="results-table-card">
+            <div className="results-table-scroll">
+              <table className="results-table">
+                <thead><tr>
+                  <th>Token</th>
+                  <th>Token address</th>
+                  <th>Status</th>
+                  <th>Proposals</th>
+                  <th>Eligible wallets</th>
+                  <th>Voting closes</th>
+                  <th aria-label="Actions" />
+                </tr></thead>
+                <tbody>{results.data.map((event) => <tr key={event.id}>
+                  <td><strong>{event.tokenSymbol || event.tokenName}</strong></td>
+                  <td><ShortAddress value={event.tokenAddress} /></td>
+                  <td>{event.status === 'CLOSED' ? 'Closed' : String(event.status).replaceAll('_', ' ')}</td>
+                  <td>{proposalCount(event)}</td>
+                  <td>{eligibleWallets(event)}</td>
+                  <td>{formatDate(event.votingEndAt)}</td>
+                  <td><Link className="table-action" to={`/results/${event.id}`}>View results</Link></td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+          </section>
           : <Panel><Empty>No completed events for this wallet.</Empty></Panel>}
   </Page>;
+}
+
+function ProposalResults({ proposal, proposalIndex }) {
+  const values = proposal.tallies.map((value) => BigInt(value));
+  const total = values.reduce((sum, value) => sum + value, 0n);
+  const maximum = values.reduce((max, value) => value > max ? value : max, 0n);
+  const leadingIndex = maximum > 0n ? values.findIndex((value) => value === maximum) : -1;
+
+  return <section className="result-proposal-card">
+    <header className="result-proposal-heading">
+      <h2>{proposalIndex + 1}. {proposal.title}</h2>
+      {proposal.description && <p>{proposal.description}</p>}
+    </header>
+
+    <div className="result-chart" aria-label={`Vote power chart for ${proposal.title}`}>
+      <div className="chart-y-label">Vote power</div>
+      <div className="chart-grid-lines" aria-hidden="true"><span /><span /><span /><span /></div>
+      <div className="chart-columns">
+        {proposal.options.map((option, optionIndex) => {
+          const value = values[optionIndex];
+          const height = maximum === 0n ? 0 : Math.max(2, Number((value * 100n) / maximum));
+          return <div className="chart-column" key={option.index ?? optionIndex}>
+            <div className="chart-bar-track">
+              <div className={`chart-bar chart-bar-${optionIndex % 3}`} style={{ height: `${height}%` }}>
+                <span className="sr-only">{formatVotes(value)} votes</span>
+              </div>
+            </div>
+            <span>{option.text}</span>
+          </div>;
+        })}
+      </div>
+    </div>
+
+    <div className="proposal-result-table-wrap">
+      <table className="proposal-result-table">
+        <thead><tr><th>Option</th><th>Vote power</th><th>Share</th></tr></thead>
+        <tbody>{proposal.options.map((option, optionIndex) => {
+          const value = values[optionIndex];
+          const percent = total === 0n ? 0 : Number((value * 10_000n) / total) / 100;
+          const labels = [];
+          if (proposal.recommendation === optionIndex) labels.push('Board rec.');
+          if (leadingIndex === optionIndex && value > 0n) labels.push('Leading');
+          return <tr key={option.index ?? optionIndex}>
+            <td>{option.text}{labels.length ? <small> · {labels.join(' · ')}</small> : null}</td>
+            <td>{formatVotes(value)}</td>
+            <td>{percent.toFixed(2)}%</td>
+          </tr>;
+        })}</tbody>
+      </table>
+    </div>
+  </section>;
 }
 
 export function EventResultsPage() {
@@ -74,7 +168,7 @@ export function EventResultsPage() {
   }
 
   if (!wallet.account) {
-    return <Page title="Results" actions={<Link className="button secondary" to="/results">Back</Link>}>
+    return <Page title="Results" actions={<Link className="button secondary compact" to="/results">Back</Link>}>
       <Panel><Empty>Connect the creator or participating wallet to view these results.</Empty></Panel>
     </Page>;
   }
@@ -82,40 +176,45 @@ export function EventResultsPage() {
   if (result.error) return <Page title="Results"><ErrorBox error={result.error} /></Page>;
   if (!result.data) return <Page title="Results"><Panel><Empty>No results are available.</Empty></Panel></Page>;
 
-  return <Page
-    title={result.data.event.title}
-    intro={`${result.data.event.tokenName} final result`}
-    actions={<div className="row wrap">
-      <button className="button" onClick={downloadReport} disabled={downloading}>
-        {downloading && <span className="button-spinner" aria-hidden="true" />}
-        {downloading ? 'Generating report…' : 'Download result report'}
-      </button>
-      <Link className="button secondary" to="/results">Back</Link>
-    </div>}
-  >
-    <ErrorBox error={downloadError} />
-    <Panel>
-      <div className="status-line">
-        <Status value={result.data.event.verificationStatus} />
-        <a href={result.data.event.contractExplorerUrl} target="_blank" rel="noreferrer">View verified VoteEvent</a>
+  const { event } = result.data;
+  const explorerBase = import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://amoy.polygonscan.com';
+
+  return <main className="page results-detail-page">
+    <section className="results-summary-card">
+      <div className="results-summary-top">
+        <Link className="back-link" to="/results">← Back</Link>
+        <Status value={event.status} label={event.status === 'CLOSED' ? 'Closed' : undefined} />
       </div>
-    </Panel>
-    {result.data.proposals.map((proposal, proposalIndex) => {
-      const total = proposal.tallies.reduce((sum, value) => sum + BigInt(value), 0n);
-      return <Panel key={proposalIndex} title={`${proposalIndex + 1}. ${proposal.title}`}>
-        {proposal.description && <p>{proposal.description}</p>}
-        <div className="result-list">{proposal.options.map((option, optionIndex) => {
-          const value = BigInt(proposal.tallies[optionIndex]);
-          const percent = total === 0n ? 0 : Number((value * 10_000n) / total) / 100;
-          return <div className="result-row" key={optionIndex}>
-            <div>
-              <strong>{option.text}</strong>
-              <span>{value.toString()} votes · {percent.toFixed(2)}%</span>
-            </div>
-            <progress value={percent} max="100" />
-          </div>;
-        })}</div>
-      </Panel>;
-    })}
-  </Page>;
+      <div className="results-title-row">
+        <div>
+          <h1>{event.title} Results</h1>
+          <p>{event.tokenName} ({event.tokenSymbol})</p>
+        </div>
+        <button className="button compact" onClick={downloadReport} disabled={downloading}>
+          {downloading && <span className="button-spinner" aria-hidden="true" />}
+          {downloading ? 'Generating report…' : 'Download result report'}
+        </button>
+      </div>
+
+      <div className="results-summary-metrics">
+        <div><span>Eligible voters</span><strong>{eligibleWallets(event)}</strong></div>
+        <div><span>Proposals</span><strong>{result.data.proposals.length}</strong></div>
+        <div><span>Voting closed</span><strong>{formatDate(event.votingEndAt)}</strong></div>
+      </div>
+
+      <div className="results-summary-links">
+        {event.contractExplorerUrl && <a href={event.contractExplorerUrl} target="_blank" rel="noreferrer">View VoteEvent contract ↗</a>}
+        {event.tokenAddress && <a href={`${explorerBase}/address/${event.tokenAddress}`} target="_blank" rel="noreferrer">View {event.tokenSymbol} token contract ↗</a>}
+      </div>
+      <ErrorBox error={downloadError} />
+    </section>
+
+    <div className="results-proposal-stack">
+      {result.data.proposals.map((proposal, proposalIndex) => <ProposalResults
+        key={proposal.index ?? proposalIndex}
+        proposal={proposal}
+        proposalIndex={proposalIndex}
+      />)}
+    </div>
+  </main>;
 }
