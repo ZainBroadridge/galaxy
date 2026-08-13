@@ -1,12 +1,11 @@
-@import url("https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap");
 
 :root {
-  font-family: "Source Sans 3", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-family: "Geist", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   color: #101828;
   background: #f4f4f4;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --ui-scale: 1.2;
   --navy: #001f5a;
   --navy-2: #092d63;
   --blue: #0046b8;
@@ -33,10 +32,6 @@
 html { min-width: 320px; min-height: 100%; background: var(--page); }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--page); color: var(--ink); font-size: 14px; }
 
-/* Match the current interface at 120% browser zoom while keeping the browser itself at 100%. */
-@supports (zoom: 1.2) {
-  body { min-height: 83.333333vh; zoom: var(--ui-scale); }
-}
 button, input, select, textarea { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
 a { color: var(--blue); text-decoration: none; }
@@ -46,9 +41,6 @@ code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; ov
 
 /* Application shell */
 .app-shell { min-height: 100vh; display: flex; flex-direction: column; background: var(--page); }
-@supports (zoom: 1.2) {
-  .app-shell { min-height: 83.333333vh; }
-}
 .app-content { flex: 1 0 auto; }
 .topbar { position: sticky; top: 0; z-index: 30; background: #fff; border-bottom: 1px solid #d7dce3; }
 .topbar-inner {
