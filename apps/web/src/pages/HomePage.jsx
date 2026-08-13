@@ -26,7 +26,7 @@ export default function HomePage() {
     <div className="home-actions page-actions">
       <Link className="button secondary" to="/organiser">Organizer Dashboard</Link>
       <Link className="button secondary" to="/results">Results</Link>
-      <Link className="button" to="/">Voting Dashboard</Link>
+      <Link className="button" to="/voting">Voting Dashboard</Link>
     </div>
     {(voting.loading || organised.loading) ? <Spinner /> : <div className="home-summary-grid">
       <section className="home-summary-card home-summary-card-primary">

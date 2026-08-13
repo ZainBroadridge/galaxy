@@ -218,8 +218,8 @@ dd { margin: 0; text-align: right; font-weight: 600; }
 .document-upload-row { margin-top: 12px; display: flex; align-items: center; gap: 12px; }
 
 /* Voting event */
-.vote-event-page { width: min(calc(100% - 24px), 1080px); padding-top: 14px; }
-.vote-event-heading { margin: 0 auto 16px; text-align: center; }
+.vote-event-page { width: min(calc(100% - 24px), 1080px); padding-top: 12px; }
+.vote-event-heading { margin: 0 auto 14px; text-align: center; }
 .vote-event-heading h1 { margin: 0; color: #111827; font-size: clamp(22px, 2.4vw, 30px); font-weight: 800; letter-spacing: -.02em; }
 .vote-event-heading p { margin: 7px 0 0; color: #6b7280; font-size: 13px; }
 .voting-power-card { width: min(760px, 100%); margin: 0 auto 16px; padding: 24px 24px 20px; border-radius: 6px; background: #cee1fa; text-align: center; }
@@ -242,7 +242,9 @@ dd { margin: 0; text-align: right; font-weight: 600; }
 .vote-state-open { border-color: #9dc6a5; background: #fbfffb; }
 .vote-state-closed { border-color: #cbd1d8; background: #fafafa; }
 .event-preparation-panel { max-width: 860px; margin-inline: auto; }
-.ballot-documents, .receipt-panel { width: min(100%, 760px); max-width: 760px; margin-inline: auto; }
+.ballot-documents, .receipt-panel { width: min(100%, 720px); max-width: 720px; margin-inline: auto; }
+.receipt-panel .panel { margin-bottom: 12px; }
+.receipt-details .details > div { padding: 8px 0; }
 .receipt { border-top: 3px solid var(--success); }
 .receipt-toolbar { margin-bottom: 8px; }
 .receipt-details { margin-top: 8px; }
@@ -405,12 +407,13 @@ dd { margin: 0; text-align: right; font-weight: 600; }
 /* Keep the Home dashboard intentionally smaller and denser than the workspaces. */
 .home-page { min-height: 0; padding-top: 28px; }
 .home-heading h1 { font-size: 22px; }
-.home-actions { margin-top: 24px; }
-.home-summary-grid { gap: 40px; margin-top: 24px; }
-.home-summary-card { min-height: 188px; padding: 24px 28px; }
-.home-summary-label { font-size: 16px; }
-.home-summary-card strong { font-size: 34px; }
+.home-actions { margin-top: 22px; }
+.home-summary-grid { gap: 32px; margin-top: 22px; }
+.home-summary-card { min-height: 172px; padding: 22px 26px; gap: 8px; }
+.home-summary-label { font-size: 15px; }
+.home-summary-card strong { font-size: 32px; }
 .home-summary-card a { font-size: 14px; }
+.home-summary-card-secondary { padding-left: 0; }
 
 @media (max-width: 1344px) {
   .topbar-inner { padding: 0 16px; gap: 14px; }
@@ -437,12 +440,20 @@ dd { margin: 0; text-align: right; font-weight: 600; }
 
 @media (max-width: 768px) {
   body { font-size: 13px; }
-  .topbar-primary { padding-right: 0; flex-wrap: wrap; }
-  .wallet-actions { position: static; order: 2; margin-left: auto; }
+  .topbar-inner { min-height: 56px; padding: 0 16px; gap: 10px; }
+  .topbar-primary { padding-right: 0; flex-wrap: wrap; gap: 12px; }
+  .wallet-actions { position: static; order: 2; margin-left: auto; gap: 8px; }
   .topbar nav { order: 3; width: 100%; }
   .wallet-control { min-width: 132px; }
-  .page { width: calc(100% - 18px); padding-bottom: 40px; }
+  .page { width: calc(100% - 24px); padding-top: 12px; padding-bottom: 32px; }
   .page-head, .results-title-row, .ballot-shell-heading, .ballot-submit-row, .notification-toolbar, .wallet-comms-header, .comms-panel-heading, .utility-card-heading { align-items: flex-start; flex-direction: column; }
+  .page:not(.home-page) .page-head h1, .page:not(.home-page) .results-title-row h1 { font-size: 21px; }
+  .page:not(.home-page) .panel { padding: 14px; }
+  .page:not(.home-page) .panel-heading { margin: -14px -14px 14px; padding: 11px 14px; }
+  .vote-event-page { width: calc(100% - 24px); padding-top: 10px; }
+  .vote-event-heading h1 { font-size: 24px; }
+  .voting-power-card { width: 100%; }
+  .ballot-documents, .receipt-panel { width: 100%; }
   .page-actions, .notification-actions { width: 100%; }
   .field-grid.two, .field-grid.three { grid-template-columns: 1fr; }
   .event-card-facts { grid-template-columns: 1fr; }
