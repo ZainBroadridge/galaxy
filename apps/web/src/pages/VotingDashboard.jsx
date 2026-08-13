@@ -294,7 +294,7 @@ export function VoteEventPage() {
           : 'Event preparation';
 
   return <main className="page vote-event-page">
-    <div className="page-back-row"><Link to="/">← Back to dashboard</Link></div>
+    <div className="page-back-row"><Link to="/voting">← Back to dashboard</Link></div>
 
     <header className="vote-event-heading">
       <h1>{event.title}</h1>

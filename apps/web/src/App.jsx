@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useAppKit } from '@reown/appkit/react';
-import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { reownConfigured } from './appkit.js';
 import { Notice } from './components/UI.jsx';
 import { useNotifications } from './notifications.jsx';
 import { useWallet } from './wallet.jsx';
+import HomePage from './pages/HomePage.jsx';
 import VotingDashboard, { VoteEventPage } from './pages/VotingDashboard.jsx';
 import OrganiserDashboard, { OrganiserEventPage } from './pages/OrganiserDashboard.jsx';
 import ResultsPage, { EventResultsPage } from './pages/ResultsPage.jsx';
@@ -12,7 +13,7 @@ import WalletComms from './pages/WalletComms.jsx';
 
 const AMOY_CHAIN_ID = '0x13882';
 const primaryNavigation = [
-  ['/', 'Voting Dashboard'],
+  ['/voting', 'Voting Dashboard'],
   ['/results', 'Results'],
   ['/organiser', 'Organizer'],
   ['/comms', 'Wallet Comms'],
@@ -48,6 +49,7 @@ function PlusIcon() {
 
 export default function App() {
   const wallet = useWallet();
+  const location = useLocation();
   const { open } = useAppKit();
   const { unreadCount } = useNotifications();
   const [networkBusy, setNetworkBusy] = useState(false);
@@ -105,10 +107,15 @@ export default function App() {
           </Link>
 
           <nav aria-label="Primary navigation">
-            <Link className="nav-home" to="/">Home</Link>
+            <NavLink className="nav-home" to="/" end>Home</NavLink>
             {primaryNavigation.map(([to, label]) => {
               const notifications = to === '/comms';
-              return <NavLink key={to} to={to} end={to === '/'}>
+              const voteRouteActive = to === '/voting' && location.pathname.startsWith('/vote/');
+              return <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) => (isActive || voteRouteActive ? 'active' : undefined)}
+              >
                 <span>{label}</span>
                 {notifications && unreadCount > 0 && <span
                   className="notification-badge"
@@ -126,15 +133,22 @@ export default function App() {
             onClick={addOrSwitchAmoy}
             disabled={networkBusy}
             title="Add or switch to Polygon Amoy Testnet"
+            aria-label="Add or switch to Polygon Amoy Testnet"
+            aria-busy={networkBusy}
           >
             <span className="network-dot" aria-hidden="true" />
-            <span>{networkBusy ? 'Opening wallet…' : 'Polygon Amoy Testnet'}</span>
-            <PlusIcon />
+            <span className="network-control-label">{networkBusy ? 'Opening wallet…' : 'Polygon Amoy Testnet'}</span>
+            <span className="network-add-icon"><PlusIcon /></span>
           </button>
-          <button className="wallet-control" type="button" onClick={openWallet}>
+          <button
+            className={`wallet-control${wallet.connected ? ' connected' : ''}`}
+            type="button"
+            onClick={openWallet}
+            aria-label={wallet.connected ? `Open wallet ${shortAddress(wallet.account)}` : 'Connect Wallet'}
+          >
             <WalletIcon />
             <span>{shortAddress(wallet.account)}</span>
-            <ChevronIcon />
+            {wallet.connected && <ChevronIcon />}
           </button>
         </div>
       </div>
@@ -144,7 +158,9 @@ export default function App() {
       {!reownConfigured && <Notice tone="warning">Set <code>VITE_REOWN_PROJECT_ID</code> before deployment.</Notice>}
       {networkError && <Notice tone="error">{networkError.message || 'Unable to add Polygon Amoy to this wallet.'}</Notice>}
       <Routes>
-        <Route path="/" element={<VotingDashboard />} />
+        <Route path="/" element={<HomePage />} />
+        <Route path="/home" element={<HomePage />} />
+        <Route path="/voting" element={<VotingDashboard />} />
         <Route path="/vote/:eventId" element={<VoteEventPage />} />
         <Route path="/organiser" element={<OrganiserDashboard />} />
         <Route path="/organiser/:eventId" element={<OrganiserEventPage />} />
