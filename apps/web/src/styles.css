@@ -2273,9 +2273,11 @@ textarea:focus {
 
 /* Description behaves like the other textareas on the page */
 .create-copy-grid textarea {
-  min-height: 80px;
-  height: auto;
+  min-height: var(--ui-control-height);
+  height: var(--ui-control-height);
   padding: 7px 8px;
   border-radius: 4px;
-  resize: vertical;
+  resize: none;
+  line-height: 20px;
+  overflow: hidden;
 }
