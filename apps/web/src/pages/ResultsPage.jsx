@@ -154,8 +154,11 @@ export function EventResultsPage() {
     setDownloading(true);
     setDownloadError(null);
     try {
-      await wallet.ensureAuthenticated();
-      const blob = await apiBlob(`/v1/events/${eventId}/reports/results`);
+      if (!wallet.account) throw new Error('Connect the creator or participating wallet before downloading this report.');
+      const blob = await apiBlob(
+        `/v1/events/${eventId}/reports/results?wallet=${encodeURIComponent(wallet.account)}`,
+        { auth: false },
+      );
       saveBlob(
         blob,
         `${result.data.event.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-results.pdf`,

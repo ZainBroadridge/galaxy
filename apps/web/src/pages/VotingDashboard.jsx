@@ -120,8 +120,11 @@ function Receipt({ event, vote }) {
     setDownloading(true);
     setDownloadError(null);
     try {
-      await wallet.ensureAuthenticated();
-      const blob = await apiBlob(`/v1/events/${event.id}/reports/receipt`);
+      if (!wallet.account) throw new Error('Connect the voting wallet before downloading its receipt.');
+      const blob = await apiBlob(
+        `/v1/events/${event.id}/reports/receipt?wallet=${encodeURIComponent(wallet.account)}`,
+        { auth: false },
+      );
       saveBlob(blob, `${event.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-vote-receipt.pdf`);
     } catch (error) {
       setDownloadError(error);
@@ -191,7 +194,7 @@ function VotingPowerCard({ event, wallet, copied, onCopy, onAddToken }) {
 export function VoteEventPage() {
   const { eventId } = useParams();
   const wallet = useWallet();
-  const { account, connected, openWallet, getSigner } = wallet;
+  const { account, connected, openWallet, signBallot } = wallet;
   const view = useLoad(
     () => api(`/v1/events/${eventId}/view${account ? `?wallet=${account}` : ''}`, { auth: false }),
     [eventId, account],
@@ -233,8 +236,7 @@ export function VoteEventPage() {
         choices,
         ballotVersion: ballot.ballotVersion,
       });
-      const signer = await getSigner();
-      const signature = await signer.signTypedData(typed.domain, typed.types, typed.message);
+      const signature = await signBallot(typed);
       const vote = await api(`/v1/events/${eventId}/votes`, {
         method: 'POST',
         auth: false,

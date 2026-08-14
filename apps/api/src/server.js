@@ -45,9 +45,8 @@ import {
   communicationPublishInput,
   platformCommunicationInput,
   platformTokenCommunicationInput,
-  publicCreatorInput,
-  publicEventInput,
   publicSubscriptionInput,
+  eventInput,
   tokenCommunicationDraftInput,
   tokenCommunicationPublishInput,
   voteInput,
@@ -103,14 +102,6 @@ const authWalletLimiter = limiter(
   (request) => String(request.body?.walletAddress ?? 'invalid-wallet').toLowerCase(),
 );
 const writeLimiter = limiter(40, (request) => request.auth?.wallet_address ?? 'anonymous');
-const publicWriteLimiter = limiter(40, (request) => String(
-  request.body?.creatorAddress
-    ?? request.body?.publisherAddress
-    ?? request.body?.walletAddress
-    ?? request.get('x-wallet-address')
-    ?? request.ip
-    ?? 'anonymous',
-).toLowerCase());
 const voteLimiter = limiter(
   20,
   (request) => String(request.body?.voterAddress ?? 'invalid-voter').toLowerCase(),
@@ -154,31 +145,32 @@ app.post('/v1/auth/logout', writeLimiter, async (request, response, next) => {
   try { await revokeSession(request); response.status(204).end(); } catch (error) { next(error); }
 });
 
-app.post('/v1/tokens/inspect', publicWriteLimiter, async (request, response, next) => {
+app.post('/v1/tokens/inspect', writeLimiter, async (request, response, next) => {
   try { response.json(await inspectToken(request.body?.tokenAddress)); } catch (error) { next(error); }
 });
-app.post('/v1/events', publicWriteLimiter, async (request, response, next) => {
+app.post('/v1/events', writeLimiter, async (request, response, next) => {
   try {
-    const input = parse(publicEventInput, request.body);
-    const { creatorAddress, ...event } = input;
-    response.status(201).json(await createEvent(creatorAddress, event));
+    const creator = parse(announcementTriggerInput, {
+      publisherAddress: request.body?.creatorAddress,
+    }).publisherAddress;
+    response.status(201).json(await createEvent(creator, parse(eventInput, request.body)));
   } catch (error) { next(error); }
 });
 app.get('/v1/events/:id/view', async (request, response, next) => {
   try { response.json(await eventView(request.params.id, request.query.wallet)); } catch (error) { next(error); }
 });
 app.get('/v1/events/:id/stream', openEventStream);
-app.post('/v1/events/:id/retry', publicWriteLimiter, async (request, response, next) => {
+app.post('/v1/events/:id/retry', writeLimiter, async (request, response, next) => {
   try {
-    const input = parse(publicCreatorInput, request.body);
-    response.json(await retryEvent(request.params.id, input.publisherAddress));
+    const publisher = parse(announcementTriggerInput, request.body).publisherAddress;
+    response.json(await retryEvent(request.params.id, publisher));
   } catch (error) { next(error); }
 });
 app.get('/v1/events/:id/results', async (request, response, next) => {
   try { response.json(await eventResults(request.params.id, request.query.wallet)); } catch (error) { next(error); }
 });
 
-app.post('/v1/events/:id/announcement', publicWriteLimiter, async (request, response, next) => {
+app.post('/v1/events/:id/announcement', writeLimiter, async (request, response, next) => {
   try {
     const input = parse(announcementTriggerInput, request.body);
     const result = await triggerEventAnnouncement(request.params.id, input.publisherAddress);
@@ -187,7 +179,7 @@ app.post('/v1/events/:id/announcement', publicWriteLimiter, async (request, resp
   } catch (error) { next(error); }
 });
 // Backwards-compatible alias for earlier frontend packages. No wallet signature is required.
-app.put('/v1/events/:id/announcement', publicWriteLimiter, async (request, response, next) => {
+app.put('/v1/events/:id/announcement', writeLimiter, async (request, response, next) => {
   try {
     const input = parse(announcementTriggerInput, request.body);
     const result = await triggerEventAnnouncement(request.params.id, input.publisherAddress);
@@ -196,22 +188,28 @@ app.put('/v1/events/:id/announcement', publicWriteLimiter, async (request, respo
   } catch (error) { next(error); }
 });
 
-app.post('/v1/events/:id/documents', publicWriteLimiter, pdfBody, async (request, response, next) => {
+app.post('/v1/events/:id/documents', writeLimiter, pdfBody, async (request, response, next) => {
   try {
+    const publisher = parse(announcementTriggerInput, {
+      publisherAddress: request.query.wallet,
+    }).publisherAddress;
     response.status(201).json(await uploadEventDocument(
       request.params.id,
-      request.get('x-wallet-address'),
+      publisher,
       request.get('x-file-name'),
       request.body,
     ));
   } catch (error) { next(error); }
 });
-app.delete('/v1/events/:id/documents/:documentId', publicWriteLimiter, async (request, response, next) => {
+app.delete('/v1/events/:id/documents/:documentId', writeLimiter, async (request, response, next) => {
   try {
+    const publisher = parse(announcementTriggerInput, {
+      publisherAddress: request.query.wallet,
+    }).publisherAddress;
     await deleteEventDocument(
       request.params.id,
       request.params.documentId,
-      request.query.wallet,
+      publisher,
     );
     response.status(204).end();
   } catch (error) { next(error); }
@@ -229,11 +227,19 @@ app.get('/v1/events/:id/documents/:documentId', async (request, response, next) 
     response.send(document.bytes);
   } catch (error) { next(error); }
 });
-app.get('/v1/events/:id/reports/results', requireAuth, async (request, response, next) => {
-  try { sendPdf(response, await createResultsReport(request.params.id, request.auth.wallet_address)); } catch (error) { next(error); }
+app.get('/v1/events/:id/reports/results', async (request, response, next) => {
+  try {
+    const wallet = request.query.wallet ?? request.auth?.wallet_address;
+    if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
+    sendPdf(response, await createResultsReport(request.params.id, wallet));
+  } catch (error) { next(error); }
 });
-app.get('/v1/events/:id/reports/receipt', requireAuth, async (request, response, next) => {
-  try { sendPdf(response, await createVoteReceipt(request.params.id, request.auth.wallet_address)); } catch (error) { next(error); }
+app.get('/v1/events/:id/reports/receipt', async (request, response, next) => {
+  try {
+    const wallet = request.query.wallet ?? request.auth?.wallet_address;
+    if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
+    sendPdf(response, await createVoteReceipt(request.params.id, wallet));
+  } catch (error) { next(error); }
 });
 
 app.get('/v1/dashboard/voting', async (request, response, next) => {
@@ -245,9 +251,9 @@ app.get('/v1/dashboard/results', async (request, response, next) => {
 app.get('/v1/dashboard/organiser', async (request, response, next) => {
   try {
     const wallet = request.query.wallet ?? request.auth?.wallet_address;
-    if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
-    response.json(await organiserDashboard(wallet));
-  } catch (error) { next(error); }
+    if (!wallet) return response.json([]);
+    return response.json(await organiserDashboard(wallet));
+  } catch (error) { return next(error); }
 });
 
 app.get('/v1/events/:id/ballot', async (request, response, next) => {
@@ -274,7 +280,6 @@ app.get('/v1/communications/portal', async (request, response, next) => {
       subscriptions(wallet),
       organiserDashboard(wallet),
     ]);
-    response.set('Cache-Control', 'private, no-store');
     response.json({ subscriptions: savedSubscriptions, organisedEvents });
   } catch (error) { next(error); }
 });
@@ -285,7 +290,7 @@ app.get('/v1/communications/subscriptions', async (request, response, next) => {
     response.json(await subscriptions(wallet));
   } catch (error) { next(error); }
 });
-app.put('/v1/communications/subscriptions', publicWriteLimiter, async (request, response, next) => {
+app.put('/v1/communications/subscriptions', writeLimiter, async (request, response, next) => {
   try {
     const input = parse(publicSubscriptionInput, request.body);
     response.json(await saveSubscription(input.walletAddress, input));
@@ -299,16 +304,6 @@ app.get('/v1/communications/inbox', async (request, response, next) => {
     response.json(await inbox(wallet));
   } catch (error) { next(error); }
 });
-app.post('/v1/communications/token/platform', publicWriteLimiter, async (request, response, next) => {
-  try {
-    const message = await publishPlatformTokenCommunication(
-      parse(platformTokenCommunicationInput, request.body),
-    );
-    announceCommunication();
-    response.status(201).json(message);
-  } catch (error) { next(error); }
-});
-
 app.post('/v1/communications/token/draft', requireAuth, writeLimiter, async (request, response, next) => {
   try {
     response.json(await draftTokenCommunication(
@@ -327,7 +322,17 @@ app.post('/v1/communications/token', requireAuth, writeLimiter, async (request, 
     response.status(201).json(message);
   } catch (error) { next(error); }
 });
-app.post('/v1/events/:id/communications/platform', publicWriteLimiter, async (request, response, next) => {
+app.post('/v1/communications/token/platform', writeLimiter, async (request, response, next) => {
+  try {
+    const message = await publishPlatformTokenCommunication(
+      parse(platformTokenCommunicationInput, request.body),
+    );
+    announceCommunication();
+    response.status(201).json(message);
+  } catch (error) { next(error); }
+});
+
+app.post('/v1/events/:id/communications/platform', writeLimiter, async (request, response, next) => {
   try {
     const message = await publishPlatformCommunication(
       request.params.id,
