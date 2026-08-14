@@ -296,7 +296,9 @@ export default function OrganiserDashboard() {
                 placeholder="0x…"
                 required
               />
-              <button type="button" className="button secondary compact" onClick={inspect}>Inspect</button>
+              <button type="button" className="button secondary compact inspect-icon-button" onClick={inspect} aria-label="Inspect token address" title="Inspect token address">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.2" /><path d="m16 16 4.5 4.5" /></svg>
+              </button>
             </div></label>
             <label>Token-to-vote ratio<input
               type="number"
