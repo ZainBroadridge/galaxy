@@ -70,6 +70,13 @@ function AnnouncementIcon() {
   </svg>;
 }
 
+function SearchIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="10.75" cy="10.75" r="5.75" />
+    <path d="m15.1 15.1 4.4 4.4" />
+  </svg>;
+}
+
 function DocumentSelection({ files, onRemove }) {
   if (!files.length) return null;
   return <div className="selected-documents">
@@ -164,6 +171,7 @@ function ProposalEditor({ proposals, onChange }) {
 export default function OrganiserDashboard() {
   const navigate = useNavigate();
   const wallet = useWallet();
+  const [creating, setCreating] = useState(false);
   const events = useLoad(
     () => (wallet.account
       ? api(`/v1/dashboard/organiser?wallet=${encodeURIComponent(wallet.account)}`, { auth: false })
@@ -173,12 +181,12 @@ export default function OrganiserDashboard() {
   const [form, setForm] = useState(initialForm);
   const [documents, setDocuments] = useState([]);
   const [token, setToken] = useState(null);
+  const [inspectError, setInspectError] = useState(null);
   const [busyStage, setBusyStage] = useState('');
   const [error, setError] = useState(null);
-  const [creating, setCreating] = useState(false);
 
   async function inspect() {
-    setError(null);
+    setInspectError(null);
     setToken(null);
     try {
       setToken(await api('/v1/tokens/inspect', {
@@ -186,7 +194,7 @@ export default function OrganiserDashboard() {
         auth: false,
         body: { tokenAddress: form.tokenAddress },
       }));
-    } catch (value) { setError(value); }
+    } catch (value) { setInspectError(value); }
   }
 
   function chooseDocuments(event) {
@@ -257,7 +265,7 @@ export default function OrganiserDashboard() {
       intro={`${events.data?.length ?? 0} event${events.data?.length === 1 ? '' : 's'} created by this wallet`}
       actions={<button className="button" type="button" onClick={() => setCreating(true)}>Create Voting Event</button>}
     >
-      <ErrorBox error={events.error || error} />
+      <ErrorBox error={error || events.error} />
       {events.loading
         ? <Spinner />
         : events.data?.length
@@ -276,27 +284,49 @@ export default function OrganiserDashboard() {
     </Page>;
   }
 
-  return <main className="page organiser-create-page organiser-create-restored">
-    <button className="back-link-button" type="button" onClick={() => setCreating(false)}>← Back to your events</button>
-    <header className="organiser-create-heading"><h1>Create Voting Event</h1></header>
-    <ErrorBox error={error} />
+  const deliveryLabel = form.snapDeliveryMode === 'ELIGIBLE'
+    ? 'Eligible holders'
+    : form.snapDeliveryMode === 'SUBSCRIBERS_ONLY'
+      ? 'Subscribers only'
+      : 'Disabled';
 
-    <Panel title="Create event" className="create-event-shell">
-      <form className="form organiser-create-form restored-create-form" onSubmit={submit}>
-        <section className="restored-form-block">
-          <header><h3>Event details</h3><p>Choose the ERC-20 token and describe the voting event shown to eligible holders.</p></header>
-          <div className="field-grid two token-config-grid">
-            <label>ERC-20 token address<div className="input-action">
+  return <Page
+    className="organiser-create-page"
+    title="Create event"
+    actions={<button className="button secondary" type="button" onClick={() => setCreating(false)}>Back to events</button>}
+  >
+    <ErrorBox error={error} />
+    <Panel className="create-event-panel">
+      <form className="form create-event-form" onSubmit={submit}>
+        <section className="create-event-section">
+          <header className="create-event-section-heading">
+            <h2>Event details</h2>
+            <p>Choose the ERC-20 token and describe the voting event shown to eligible holders.</p>
+          </header>
+
+          <div className="field-grid create-token-grid">
+            <label className="create-token-address-field">ERC-20 token address<div className="create-token-input">
               <input
                 value={form.tokenAddress}
                 onChange={(event) => {
                   setForm({ ...form, tokenAddress: event.target.value });
                   setToken(null);
+                  setInspectError(null);
                 }}
                 placeholder="0x…"
                 required
               />
-              <button type="button" className="button secondary compact" onClick={inspect}>Inspect</button>
+              <button
+                type="button"
+                className="create-token-inspect-button"
+                onClick={inspect}
+                disabled={!form.tokenAddress.trim()}
+                aria-label="Inspect ERC-20 token"
+                title="Inspect ERC-20 token"
+              >
+                <SearchIcon />
+                <span className="sr-only">Inspect ERC-20 token</span>
+              </button>
             </div></label>
             <label>Token-to-vote ratio<input
               type="number"
@@ -307,28 +337,32 @@ export default function OrganiserDashboard() {
               required
             /><small>Voting power = whole tokens ÷ X</small></label>
           </div>
-          {token && <Notice tone="success">
-            {token.name} ({token.symbol}), {token.decimals} decimals. Standard ERC-20 interface confirmed.
-          </Notice>}
-          <div className="field-grid restored-event-copy-grid">
+
+          {(token || inspectError) && <div className="create-token-feedback">
+            {token && <Notice tone="success">
+              {token.name} ({token.symbol}), {token.decimals} decimals. Standard ERC-20 interface confirmed.
+            </Notice>}
+            <ErrorBox error={inspectError} />
+          </div>}
+
+          <div className="field-grid create-copy-grid">
             <label>Event title<input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
-            <label>Description<textarea rows="3" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Explain the purpose of the vote and any context holders should know." /></label>
+            <label>Description<textarea rows="2" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Explain the purpose of the vote and any context holders should know." /></label>
           </div>
         </section>
 
-        <section className="restored-form-block">
-          <header><h3>Proposals</h3><p>Define each resolution, its available options, and an optional recommendation.</p></header>
-          <ProposalEditor proposals={form.proposals} onChange={(proposals) => setForm({ ...form, proposals })} />
-        </section>
+        <section className="create-event-section">
+          <header className="create-event-section-heading">
+            <h2>Schedule &amp; access</h2>
+            <p>Set the record date, voting window, discovery rules, and communication audience.</p>
+          </header>
 
-        <section className="restored-form-block">
-          <header><h3>Schedule &amp; eligibility</h3><p>Set the record date, voting window, discovery, and notification audience.</p></header>
-          <div className="field-grid three schedule-grid">
-            <label>Voting start<input type="datetime-local" value={form.votingStartAt} onChange={(event) => setForm({ ...form, votingStartAt: event.target.value })} required /></label>
-            <label>Voting end<input type="datetime-local" value={form.votingEndAt} onChange={(event) => setForm({ ...form, votingEndAt: event.target.value })} required /></label>
+          <div className="field-grid three">
             <label>Record date<input type="datetime-local" max={localDate(new Date())} value={form.recordDateAt} onChange={(event) => setForm({ ...form, recordDateAt: event.target.value })} required /></label>
+            <label>Voting starts<input type="datetime-local" value={form.votingStartAt} onChange={(event) => setForm({ ...form, votingStartAt: event.target.value })} required /></label>
+            <label>Voting ends<input type="datetime-local" value={form.votingEndAt} onChange={(event) => setForm({ ...form, votingEndAt: event.target.value })} required /></label>
           </div>
-          <div className="field-grid three create-access-fields">
+          <div className="field-grid three create-policy-grid">
             <label>Authenticity<select value={form.authenticityClaim} onChange={(event) => setForm({ ...form, authenticityClaim: event.target.value })}>
               <option value="COMMUNITY">Community-created</option>
               <option value="ISSUER_AUTHORIZED">Issuer-authorized claim</option>
@@ -338,7 +372,7 @@ export default function OrganiserDashboard() {
               <option value="SUBSCRIBERS_ONLY">Subscribed holders</option>
               <option value="DIRECT_LINK">Direct link only</option>
             </select></label>
-            <label>Notification audience<select value={form.snapDeliveryMode} onChange={(event) => setForm({ ...form, snapDeliveryMode: event.target.value })}>
+            <label>Notifications<select value={form.snapDeliveryMode} onChange={(event) => setForm({ ...form, snapDeliveryMode: event.target.value })}>
               <option value="ELIGIBLE">Eligible holders</option>
               <option value="SUBSCRIBERS_ONLY">Subscribers only</option>
               <option value="DISABLED">Disabled</option>
@@ -346,35 +380,56 @@ export default function OrganiserDashboard() {
           </div>
         </section>
 
-        <section className="restored-form-block restored-resources-block">
-          <header><h3>Documents &amp; notifications</h3><p>Add supporting voter material and review the automatic announcement behavior.</p></header>
-          <div className="restored-resource-grid">
-            <div className="restored-resource-card">
-              <span className="create-support-icon"><DocumentIcon /></span>
-              <div><strong>Proxy voting documents</strong><small>Optional · Up to three PDF files · 10 MB each</small></div>
-              <label className="button secondary compact file-button">
-                {documents.length ? `${documents.length} selected` : 'Select PDFs'}
-                <input type="file" accept="application/pdf,.pdf" multiple onChange={chooseDocuments} />
-              </label>
+        <section className="create-event-section">
+          <header className="create-event-section-heading">
+            <h2>Proxy voting documents</h2>
+            <p>Optionally attach up to three PDFs, with a maximum size of 10 MB each.</p>
+          </header>
+          <div className="optional-upload create-documents-row">
+            <div>
+              <strong>Supporting material</strong>
+              <small>PDF only · up to 3 files · 10 MB per file</small>
             </div>
-            <div className="restored-resource-card">
-              <span className="create-support-icon"><AnnouncementIcon /></span>
-              <div><strong>Automatic event announcement</strong><small>Publishes after deployment to {form.snapDeliveryMode === 'ELIGIBLE' ? 'eligible holders' : form.snapDeliveryMode === 'SUBSCRIBERS_ONLY' ? 'subscribers' : 'no audience (disabled)'}</small></div>
-            </div>
+            <label className="button secondary file-button">
+              {documents.length ? `${documents.length} PDF${documents.length === 1 ? '' : 's'} selected` : 'Select PDFs'}
+              <input type="file" accept="application/pdf,.pdf" multiple onChange={chooseDocuments} />
+            </label>
           </div>
           <DocumentSelection
             files={documents}
             onRemove={(index) => setDocuments((current) => current.filter((_file, position) => position !== index))}
           />
+          <div className="automatic-notice-row">
+            <span className="automatic-notice-icon"><AnnouncementIcon /></span>
+            <div>
+              <strong>Automatic event announcement</strong>
+              <small>Published after deployment to {deliveryLabel}. No organiser unlock or MetaMask signature is required.</small>
+            </div>
+            <span className="support-badge">Automatic</span>
+          </div>
         </section>
 
-        <footer className="create-form-actions restored-create-actions">
-          <div><strong>Ready to create the voting event?</strong><span>The snapshot and deployment continue in the background.</span></div>
-          <button className="button" disabled={Boolean(busyStage)}>{busyStage || 'Create Event'}</button>
+        <section className="create-event-section">
+          <header className="create-event-section-heading">
+            <h2>Proposals</h2>
+            <p>Define each resolution, its available options, and an optional recommendation.</p>
+          </header>
+          <ProposalEditor proposals={form.proposals} onChange={(proposals) => setForm({ ...form, proposals })} />
+        </section>
+
+        <ErrorBox error={error} />
+        <footer className="create-event-submit-row">
+          <div>
+            <strong>Ready to create the event?</strong>
+            <span>Snapshot processing and deployment continue in the background.</span>
+          </div>
+          <button className="button" disabled={Boolean(busyStage)}>
+            {busyStage || 'Create Event'}
+          </button>
         </footer>
       </form>
     </Panel>
-  </main>;
+  </Page>;
 }
 
 export function OrganiserEventPage() {
@@ -466,8 +521,10 @@ export function OrganiserEventPage() {
     setDocumentFeedback(null);
     try {
       if (!wallet.account) throw new Error('Connect the event creator wallet first.');
-      const query = new URLSearchParams({ wallet: wallet.account });
-      await api(`/v1/events/${eventId}/documents/${documentId}?${query}`, { method: 'DELETE', auth: false });
+      await api(`/v1/events/${eventId}/documents/${documentId}?wallet=${encodeURIComponent(wallet.account)}`, {
+        method: 'DELETE',
+        auth: false,
+      });
       await view.reload();
       setDocumentFeedback({ tone: 'success', message: 'Document removed.' });
     } catch (error) {
