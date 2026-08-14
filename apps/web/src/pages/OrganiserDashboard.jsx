@@ -184,6 +184,7 @@ export default function OrganiserDashboard() {
   const [inspectError, setInspectError] = useState(null);
   const [busyStage, setBusyStage] = useState('');
   const [error, setError] = useState(null);
+  const [announcementAudience, setAnnouncementAudience] = useState('ELIGIBLE');
 
   async function inspect() {
     setInspectError(null);
@@ -284,11 +285,24 @@ export default function OrganiserDashboard() {
     </Page>;
   }
 
-  const deliveryLabel = form.snapDeliveryMode === 'ELIGIBLE'
-    ? 'Eligible holders'
-    : form.snapDeliveryMode === 'SUBSCRIBERS_ONLY'
+  const announcementEnabled = form.snapDeliveryMode !== 'DISABLED';
+  const deliveryLabel = announcementEnabled
+    ? form.snapDeliveryMode === 'SUBSCRIBERS_ONLY'
       ? 'Subscribers only'
-      : 'Disabled';
+      : 'Eligible holders'
+    : 'Off';
+
+  function setAnnouncementEnabled(enabled) {
+    setForm((current) => ({
+      ...current,
+      snapDeliveryMode: enabled ? announcementAudience : 'DISABLED',
+    }));
+  }
+
+  function setAnnouncementDelivery(value) {
+    setAnnouncementAudience(value);
+    setForm((current) => ({ ...current, snapDeliveryMode: value }));
+  }
 
   return <Page
     className="organiser-create-page"
@@ -335,7 +349,7 @@ export default function OrganiserDashboard() {
               value={form.tokenToVoteRatio}
               onChange={(event) => setForm({ ...form, tokenToVoteRatio: event.target.value })}
               required
-            /></label>
+            /><small>Voting power = whole tokens ÷ X</small></label>
           </div>
 
           {(token || inspectError) && <div className="create-token-feedback">
@@ -372,11 +386,16 @@ export default function OrganiserDashboard() {
               <option value="SUBSCRIBERS_ONLY">Subscribed holders</option>
               <option value="DIRECT_LINK">Direct link only</option>
             </select></label>
-            <label>Notifications<select value={form.snapDeliveryMode} onChange={(event) => setForm({ ...form, snapDeliveryMode: event.target.value })}>
+            <label>Announcement audience<select
+              value={announcementEnabled ? form.snapDeliveryMode : announcementAudience}
+              onChange={(event) => setAnnouncementDelivery(event.target.value)}
+              disabled={!announcementEnabled}
+            >
               <option value="ELIGIBLE">Eligible holders</option>
               <option value="SUBSCRIBERS_ONLY">Subscribers only</option>
-              <option value="DISABLED">Disabled</option>
-            </select></label>
+            </select><small>{announcementEnabled
+              ? 'Who receives the automatic event announcement.'
+              : 'Turn on the event announcement to choose an audience.'}</small></label>
           </div>
         </section>
 
@@ -399,13 +418,25 @@ export default function OrganiserDashboard() {
             files={documents}
             onRemove={(index) => setDocuments((current) => current.filter((_file, position) => position !== index))}
           />
-          <div className="automatic-notice-row">
+          <div className={`automatic-notice-row${announcementEnabled ? '' : ' is-disabled'}`}>
             <span className="automatic-notice-icon"><AnnouncementIcon /></span>
             <div>
               <strong>Automatic event announcement</strong>
-              <small>Published after deployment to {deliveryLabel}. No organiser unlock or MetaMask signature is required.</small>
+              <small>{announcementEnabled
+                ? `Published after deployment to ${deliveryLabel}. No organiser unlock or MetaMask signature is required.`
+                : 'No event announcement will be published after deployment.'}</small>
             </div>
-            <span className="support-badge">Automatic</span>
+            <label className="announcement-switch" title={`Automatic event announcement: ${announcementEnabled ? 'On' : 'Off'}`}>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={announcementEnabled}
+                onChange={(event) => setAnnouncementEnabled(event.target.checked)}
+                aria-label="Automatic event announcement"
+              />
+              <span className="announcement-switch-track" aria-hidden="true"><span /></span>
+              <span className="announcement-switch-state">{announcementEnabled ? 'On' : 'Off'}</span>
+            </label>
           </div>
         </section>
 
