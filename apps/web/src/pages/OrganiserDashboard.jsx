@@ -394,7 +394,6 @@ export default function OrganiserDashboard() {
               <option value="ELIGIBLE">Eligible holders</option>
               <option value="SUBSCRIBERS_ONLY">Subscribers only</option>
             </select><small>{announcementEnabled
-              ? 'Who receives the automatic event announcement.'
               : 'Turn on the event announcement to choose an audience.'}</small></label>
           </div>
         </section>
