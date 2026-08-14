@@ -338,7 +338,7 @@ dd { margin: 0; text-align: right; font-weight: 600; }
 .proposal-result-table tbody tr:nth-child(even) { background: #f2f2f2; }
 .proposal-result-table small { color: #5f6875; }
 
-/* Wallet communications */
+/* Notifications */
 .wallet-comms-page { padding-top: 18px; }
 .wallet-comms-header { margin-bottom: 12px; display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
 .wallet-comms-header h1 { margin: 2px 0 0; font-size: 20px; }
@@ -422,9 +422,10 @@ dd { margin: 0; text-align: right; font-weight: 600; }
   --ui-card-padding: 24px;
   --ui-card-radius: 12px;
   --ui-home-card-min-height: 170px;
-  --ui-vote-summary-width: 680px;
-  --ui-ballot-width: 900px;
-  --ui-receipt-width: 680px;
+  --ui-vote-page-width: 1728px;
+  --ui-vote-summary-width: 980px;
+  --ui-ballot-width: 1560px;
+  --ui-receipt-width: 1280px;
   --ui-vote-heading-size: 26px;
   --ui-ballot-section-padding: 14px;
 
@@ -507,8 +508,7 @@ code { font-family: var(--font-mono); }
   color: var(--link-blue) !important;
   font-weight: 600 !important;
 }
-/* The reference shell has four textual primary links. Wallet Comms remains
-   available at /comms and from event-management surfaces without widening it. */
+/* Notifications uses a compact bell icon so the reference shell keeps its spacing. */
 .nav-comms-icon { display: none !important; }
 
 .wallet-actions { gap: 12px; }
@@ -1210,4 +1210,549 @@ textarea:focus {
   .home-metric-card { min-height: 150px; }
   .selected-documents > div { grid-template-columns: minmax(0,1fr) auto; }
   .selected-documents .text-button { grid-column: 1 / -1; justify-self: start; }
+}
+
+
+/* ============================================================================
+   Final notifications, ballot, receipt, and organizer-form polish
+   ========================================================================== */
+
+/* The Notifications destination is an icon-only primary action, matching the
+   compact topbar while preserving a full 32px pointer target. */
+.nav-comms-icon {
+  position: relative;
+  display: inline-grid !important;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0 !important;
+  place-items: center;
+  align-self: center;
+  border-radius: 6px;
+  color: var(--muted) !important;
+}
+.nav-comms-icon:hover,
+.nav-comms-icon.active {
+  background: #edf3ff;
+  color: var(--link-blue) !important;
+}
+.nav-comms-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.nav-comms-icon .notification-badge {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #d92d20;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* Voting and receipt surfaces share one centered horizontal frame. The voting
+   power summary remains deliberately narrower to establish hierarchy, while
+   the ballot and receipt use the available desktop width. */
+.vote-event-page {
+  max-width: var(--ui-vote-page-width);
+  margin-inline: auto;
+}
+.vote-event-heading,
+.vote-event-page .page-back-row {
+  width: min(var(--ui-ballot-width), 100%);
+  margin-inline: auto;
+}
+.vote-content-frame {
+  width: min(var(--ui-ballot-width), 100%);
+  margin-inline: auto;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 0;
+}
+.vote-content-frame > * {
+  width: 100%;
+  min-width: 0;
+}
+.vote-content-frame > .voting-power-card,
+.vote-content-frame > .event-preparation-panel {
+  width: min(var(--ui-vote-summary-width), 100%);
+}
+.vote-content-frame > .vote-state-banner,
+.vote-content-frame > .ballot-documents,
+.vote-content-frame > .ballot-shell,
+.vote-content-frame > .receipt,
+.vote-content-frame > .receipt-panel,
+.vote-content-frame > .panel,
+.vote-content-frame > .notice,
+.vote-content-frame > .error-box {
+  max-width: var(--ui-ballot-width);
+  margin-inline: auto;
+}
+.vote-content-frame > .receipt,
+.vote-content-frame > .receipt-panel,
+.receipt-panel.receipt {
+  width: min(var(--ui-receipt-width), 100%);
+  max-width: var(--ui-receipt-width);
+}
+.vote-content-frame > .ballot-shell {
+  width: min(var(--ui-ballot-width), 100%);
+}
+.vote-content-frame > .ballot-documents {
+  width: min(var(--ui-ballot-width), 100%);
+  max-width: var(--ui-ballot-width);
+}
+.vote-content-frame > .notice,
+.vote-content-frame > .error-box {
+  width: min(var(--ui-ballot-width), 100%);
+}
+.receipt-panel .panel-heading,
+.ballot-documents .panel-heading {
+  padding-inline: 22px;
+}
+.receipt-panel {
+  padding-inline: 24px;
+}
+.receipt-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 36px;
+}
+.receipt-details > div {
+  min-width: 0;
+}
+.receipt-details dd {
+  overflow-wrap: anywhere;
+}
+.ballot-shell-heading,
+.ballot-meta,
+.proposal-stack,
+.ballot-submit-row {
+  padding-inline: 24px;
+}
+
+/* A restrained, flagship event-creation workspace. */
+.organiser-create-page {
+  max-width: 1240px;
+  margin-inline: auto;
+  padding-bottom: 40px;
+}
+.organiser-create-heading {
+  margin-top: 18px;
+  margin-bottom: 20px;
+}
+.organiser-create-form {
+  gap: 18px;
+}
+.form-section-card {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 12px;
+}
+.form-section-card > .form-section-heading {
+  margin: 0;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line-soft);
+  background: #fafbfc;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.form-section-card > .form-section-heading + * {
+  margin-top: 0;
+}
+.form-section-card > .field-grid,
+.form-section-card > .proposal-editor,
+.form-section-card > .create-support-grid,
+.form-section-card > .selected-documents {
+  margin-left: 22px;
+  margin-right: 22px;
+}
+.form-section-card > .field-grid:first-of-type,
+.form-section-card > .proposal-editor,
+.form-section-card > .create-support-grid {
+  margin-top: 22px;
+}
+.form-section-card > .field-grid:last-child,
+.form-section-card > .proposal-editor:last-child,
+.form-section-card > .selected-documents:last-child,
+.form-section-card > .create-support-grid:last-child {
+  margin-bottom: 22px;
+}
+.form-section-step {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 999px;
+  background: #e5efff;
+  color: var(--blue);
+  display: inline-grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+}
+.form-section-heading > div {
+  min-width: 0;
+}
+.form-section-heading h2 {
+  margin: 1px 0 3px;
+  font-size: 15px;
+  line-height: 20px;
+}
+.form-section-heading p {
+  margin: 0;
+  max-width: 760px;
+}
+.token-config-grid {
+  grid-template-columns: minmax(0, 2fr) minmax(220px, .8fr);
+}
+.event-copy-grid {
+  grid-template-columns: minmax(260px, .9fr) minmax(0, 1.6fr);
+  margin-top: 16px !important;
+  margin-bottom: 22px;
+}
+.event-copy-grid textarea {
+  min-height: 96px;
+}
+.schedule-grid,
+.create-access-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.create-access-fields {
+  margin-top: 16px !important;
+  margin-bottom: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line-soft);
+}
+.proposal-editor {
+  padding-bottom: 22px;
+}
+.proposal-edit {
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #d9dee5;
+  border-radius: 10px;
+  background: #fff;
+  gap: 0;
+}
+.proposal-edit-heading {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  background: #f7f9fb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.proposal-edit-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.proposal-edit-heading > div > span {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #e5efff;
+  color: var(--blue);
+  display: inline-grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+}
+.proposal-edit-heading h3 {
+  margin: 0;
+}
+.proposal-edit > label,
+.proposal-edit > .option-edit-list,
+.proposal-edit > .row.wrap {
+  margin-left: 14px;
+  margin-right: 14px;
+}
+.proposal-edit > label:first-of-type {
+  margin-top: 14px;
+}
+.proposal-edit > label + label,
+.proposal-edit > .option-edit-list,
+.proposal-edit > .row.wrap {
+  margin-top: 12px;
+}
+.proposal-edit > .row.wrap {
+  margin-bottom: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  justify-content: space-between;
+}
+.option-edit-list .row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.proposal-editor > .button.secondary {
+  justify-self: flex-start;
+}
+.create-resources-section > .create-support-grid {
+  margin-bottom: 0;
+}
+.create-support-grid {
+  margin-top: 22px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.create-support-card {
+  min-height: 184px;
+  padding: 18px;
+  border-radius: 10px;
+  background: #fbfcfd;
+}
+.create-support-control {
+  padding-top: 14px;
+}
+.notification-delivery-summary {
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.notification-delivery-summary span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.notification-delivery-summary strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+.create-resources-section > .selected-documents {
+  margin-top: 14px;
+  margin-bottom: 22px;
+}
+.create-form-actions {
+  padding: 18px 22px;
+  border: 1px solid #d7dadd;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.create-form-actions > div {
+  display: grid;
+  gap: 2px;
+}
+.create-form-actions strong {
+  font-size: 14px;
+  line-height: 20px;
+}
+.create-form-actions span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+.create-form-actions .button {
+  min-width: 132px;
+}
+
+/* Notifications is a regular page, not a separate product surface. */
+.notifications-page {
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-bottom: 32px;
+}
+.notifications-header {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+.notifications-header > div:first-child {
+  min-width: 0;
+}
+.notifications-header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+.notifications-page .comms-tabs {
+  flex: 0 0 auto;
+  padding: 3px;
+  border: 1px solid #d7dadd;
+  background: #f3f5f7;
+}
+.notifications-page .comms-tab {
+  min-width: 116px;
+}
+.notification-center,
+.comms-utility-card,
+.notifications-organiser-panel {
+  border: 1px solid #d7dadd;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+.notification-toolbar {
+  padding: 16px 18px;
+  background: #fafbfc;
+}
+.notification-row {
+  padding: 16px 18px;
+}
+.notification-token-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+}
+.notification-empty {
+  min-height: 180px;
+}
+.comms-utilities {
+  gap: 16px;
+}
+.comms-utility-card {
+  padding: 18px;
+}
+.inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.notifications-organiser-panel {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.notifications-organiser-panel .comms-panel-heading {
+  margin: 0;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line-soft);
+  background: #fafbfc;
+}
+.notifications-organiser-panel .organiser-comms-form {
+  padding: 22px;
+}
+.notifications-organiser-panel .form-section {
+  padding: 18px;
+  border: 1px solid #d9dee5;
+  background: #fbfcfd;
+}
+.notification-organiser-empty {
+  min-height: 240px;
+  padding: 32px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  text-align: center;
+}
+.notification-organiser-empty span {
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.notifications-publish-actions {
+  padding: 14px 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #f7f9fb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.notifications-publish-actions span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 980px) {
+  .token-config-grid,
+  .event-copy-grid,
+  .schedule-grid,
+  .create-access-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .create-support-grid {
+    grid-template-columns: 1fr;
+  }
+  .receipt-details {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .nav-comms-icon {
+    flex: 0 0 32px;
+  }
+  .vote-event-page,
+  .vote-content-frame,
+  .vote-event-heading,
+  .vote-event-page .page-back-row {
+    width: 100%;
+  }
+  .receipt-panel {
+    padding-inline: 16px;
+  }
+  .ballot-shell-heading,
+  .ballot-meta,
+  .proposal-stack,
+  .ballot-submit-row {
+    padding-inline: 16px;
+  }
+  .token-config-grid,
+  .event-copy-grid,
+  .schedule-grid,
+  .create-access-fields {
+    grid-template-columns: 1fr;
+  }
+  .form-section-card > .field-grid,
+  .form-section-card > .proposal-editor,
+  .form-section-card > .create-support-grid,
+  .form-section-card > .selected-documents {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+  .form-section-card > .form-section-heading,
+  .create-form-actions,
+  .notifications-organiser-panel .comms-panel-heading,
+  .notifications-organiser-panel .organiser-comms-form {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .create-form-actions,
+  .notifications-header,
+  .notifications-publish-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .create-form-actions .button,
+  .notifications-publish-actions .button {
+    width: 100%;
+  }
+  .notifications-page .comms-tabs {
+    width: 100%;
+  }
+  .notifications-page .comms-tab {
+    flex: 1 1 50%;
+    min-width: 0;
+  }
 }

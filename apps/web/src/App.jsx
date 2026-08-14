@@ -124,10 +124,10 @@ export default function App() {
               </NavLink>;
             })}
             <NavLink
-              to="/comms"
+              to="/notifications"
               className={({ isActive }) => `nav-comms-icon${isActive ? ' active' : ''}`}
-              aria-label="Wallet Comms"
-              title="Wallet Comms"
+              aria-label="Notifications"
+              title="Notifications"
             >
               <BellIcon />
               {unreadCount > 0 && <span
@@ -178,7 +178,8 @@ export default function App() {
         <Route path="/organiser/:eventId" element={<OrganiserEventPage />} />
         <Route path="/results" element={<ResultsPage />} />
         <Route path="/results/:eventId" element={<EventResultsPage />} />
-        <Route path="/comms" element={<WalletComms />} />
+        <Route path="/notifications" element={<WalletComms />} />
+        <Route path="/comms" element={<Navigate to="/notifications" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </main>

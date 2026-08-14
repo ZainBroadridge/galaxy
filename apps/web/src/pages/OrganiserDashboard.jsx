@@ -89,8 +89,8 @@ function ProposalEditor({ proposals, onChange }) {
   );
   return <div className="proposal-editor">
     {proposals.map((proposal, proposalIndex) => <div className="proposal-edit" key={proposalIndex}>
-      <div className="row between">
-        <h3>Proposal {proposalIndex + 1}</h3>
+      <div className="proposal-edit-heading">
+        <div><span>{proposalIndex + 1}</span><h3>Proposal {proposalIndex + 1}</h3></div>
         {proposals.length > 1 && <button
           type="button"
           className="text-button danger"
@@ -236,9 +236,6 @@ export default function OrganiserDashboard() {
       });
 
       const warnings = [];
-      if (created.announcementDraft) {
-        warnings.push('Automatic Wallet Comms announcement is ready for optional authorisation from Manage Event. No additional signature was requested during event creation.');
-      }
 
       if (documents.length) {
         setBusyStage('Uploading proxy voting documents…');
@@ -321,10 +318,10 @@ export default function OrganiserDashboard() {
     <form className="form organiser-create-form" onSubmit={submit}>
       <section className="form-section-card">
         <header className="form-section-heading">
-          <h2>Event details</h2>
-          <p>Identify the token and define the voting event shown to eligible holders.</p>
+          <span className="form-section-step">1</span>
+          <div><h2>Event details</h2><p>Identify the token and define the voting event shown to eligible holders.</p></div>
         </header>
-        <div className="field-grid two">
+        <div className="field-grid token-config-grid">
           <label>ERC-20 token address<div className="input-action">
             <input
               value={form.tokenAddress}
@@ -349,31 +346,31 @@ export default function OrganiserDashboard() {
         {token && <Notice tone="success">
           {token.name} ({token.symbol}), {token.decimals} decimals. Standard ERC-20 interface confirmed.
         </Notice>}
-        <div className="field-grid two">
+        <div className="field-grid event-copy-grid">
           <label>Event title<input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
-          <label>Description<textarea rows="3" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+          <label>Description<textarea rows="3" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Explain the purpose of the vote and any context holders should know." /></label>
         </div>
       </section>
 
       <section className="form-section-card">
         <header className="form-section-heading">
-          <h2>Proposals</h2>
-          <p>Define each resolution, its available options, and an optional board recommendation.</p>
+          <span className="form-section-step">2</span>
+          <div><h2>Proposals</h2><p>Define each resolution, its available options, and an optional board recommendation.</p></div>
         </header>
         <ProposalEditor proposals={form.proposals} onChange={(proposals) => setForm({ ...form, proposals })} />
       </section>
 
       <section className="form-section-card">
         <header className="form-section-heading">
-          <h2>Schedule &amp; eligibility</h2>
-          <p>Set the record date, voting window, event discovery, and communications behavior.</p>
+          <span className="form-section-step">3</span>
+          <div><h2>Schedule &amp; eligibility</h2><p>Set the record date, voting window, discovery, and notification audience.</p></div>
         </header>
-        <div className="field-grid three">
+        <div className="field-grid three schedule-grid">
           <label>Voting start<input type="datetime-local" value={form.votingStartAt} onChange={(event) => setForm({ ...form, votingStartAt: event.target.value })} required /></label>
           <label>Voting end<input type="datetime-local" value={form.votingEndAt} onChange={(event) => setForm({ ...form, votingEndAt: event.target.value })} required /></label>
           <label>Record date<input type="datetime-local" max={localDate(new Date())} value={form.recordDateAt} onChange={(event) => setForm({ ...form, recordDateAt: event.target.value })} required /></label>
         </div>
-        <div className="field-grid two create-access-fields">
+        <div className="field-grid three create-access-fields">
           <label>Authenticity<select value={form.authenticityClaim} onChange={(event) => setForm({ ...form, authenticityClaim: event.target.value })}>
             <option value="COMMUNITY">Community-created</option>
             <option value="ISSUER_AUTHORIZED">Issuer-authorized claim</option>
@@ -383,14 +380,19 @@ export default function OrganiserDashboard() {
             <option value="SUBSCRIBERS_ONLY">Subscribed holders</option>
             <option value="DIRECT_LINK">Direct link only</option>
           </select></label>
+          <label>Notification audience<select value={form.snapDeliveryMode} onChange={(event) => setForm({ ...form, snapDeliveryMode: event.target.value })}>
+            <option value="ELIGIBLE">Eligible holders</option>
+            <option value="SUBSCRIBERS_ONLY">Subscribers only</option>
+            <option value="DISABLED">Disabled</option>
+          </select></label>
         </div>
 
       </section>
 
       <section className="form-section-card create-resources-section">
         <header className="form-section-heading">
-          <h2>Documents &amp; communications</h2>
-          <p>Add voter materials and configure the automatic event notice without interrupting event creation.</p>
+          <span className="form-section-step">4</span>
+          <div><h2>Documents &amp; notifications</h2><p>Add voter materials and confirm how the automatic event notice will be delivered.</p></div>
         </header>
 
         <div className="create-support-grid">
@@ -423,19 +425,18 @@ export default function OrganiserDashboard() {
               <span className="create-support-icon"><AnnouncementIcon /></span>
               <div className="create-support-copy">
                 <div className="create-support-title-line">
-                  <strong>Automatic Wallet Comms announcement</strong>
+                  <strong>Automatic event announcement</strong>
                   <span className="support-badge">After deployment</span>
                 </div>
-                <small>Prepare an organiser-signed event notice for the selected investor audience.</small>
+                <small>The platform publishes the event notice automatically as soon as the VoteEvent contract is deployed.</small>
               </div>
             </div>
             <div className="create-support-control">
-              <label className="support-field"><span>Announcement audience</span><select value={form.snapDeliveryMode} onChange={(event) => setForm({ ...form, snapDeliveryMode: event.target.value })}>
-                <option value="ELIGIBLE">Eligible holders</option>
-                <option value="SUBSCRIBERS_ONLY">Subscribers only</option>
-                <option value="DISABLED">Disabled</option>
-              </select></label>
-              <p className="create-support-note">Creating the event never requests a MetaMask signature. Authorisation remains an explicit action on Manage Event.</p>
+              <div className="notification-delivery-summary">
+                <span>Delivery</span>
+                <strong>{form.snapDeliveryMode === 'ELIGIBLE' ? 'Eligible holders' : form.snapDeliveryMode === 'SUBSCRIBERS_ONLY' ? 'Subscribers only' : 'Disabled'}</strong>
+              </div>
+              <p className="create-support-note">No additional authentication or MetaMask signature is required for automatic or manual announcements.</p>
             </div>
           </section>
         </div>
@@ -447,6 +448,7 @@ export default function OrganiserDashboard() {
       </section>
 
       <footer className="create-form-actions">
+        <div><strong>Ready to create the voting event?</strong><span>The snapshot and deployment run in the background after submission.</span></div>
         <button className="button" disabled={Boolean(busyStage)}>
           {busyStage || 'Create Event'}
         </button>
@@ -550,25 +552,22 @@ export function OrganiserEventPage() {
     }
   }
 
-  async function authoriseAnnouncement() {
-    if (announcementBusy) return;
+  async function publishAnnouncement() {
+    if (announcementBusy || !wallet.account) return;
     setAnnouncementBusy(true);
     setAnnouncementFeedback(null);
     try {
-      await wallet.ensureAuthenticated();
-      const draft = await api(`/v1/events/${eventId}/announcement/draft`);
-      const signer = await wallet.getSigner();
-      const signature = await signer.signMessage(draft.signingMessage);
       const result = await api(`/v1/events/${eventId}/announcement`, {
-        method: 'PUT',
-        body: { signature },
+        method: 'POST',
+        auth: false,
+        body: { publisherAddress: wallet.account },
       });
       await view.reload();
       setAnnouncementFeedback({
         tone: 'success',
         message: result.status === 'PUBLISHED'
-          ? 'Event announcement published successfully.'
-          : 'Event announcement authorised and will publish after deployment.',
+          ? 'Event announcement published successfully. No wallet signature was required.'
+          : 'The announcement remains queued until deployment completes.',
       });
     } catch (error) {
       setAnnouncementFeedback({ tone: 'error', message: error.message });
@@ -582,20 +581,17 @@ export function OrganiserEventPage() {
   const event = view.data;
   const canRetry = Boolean(event.failureReason || event.verificationStatus === 'FAILED');
   const documentSlots = Math.max(0, MAX_DOCUMENTS - (event.documents?.length ?? 0));
-  const canAuthoriseAnnouncement = event.announcementStatus === 'AWAITING_SIGNATURE'
-    || (event.announcementStatus === 'QUEUED' && event.contractReady);
-  const announcementHeading = event.announcementStatus === 'AWAITING_SIGNATURE'
-    ? 'Ready for optional authorisation'
-    : event.announcementStatus === 'QUEUED'
-      ? (event.contractReady ? 'Publication needs attention' : 'Authorised and queued')
-      : 'Announcement published';
-  const announcementMessage = event.announcementStatus === 'AWAITING_SIGNATURE'
-    ? 'Authorise this organiser-signed notice whenever you are ready. Event creation and deployment do not depend on this step.'
-    : event.announcementStatus === 'QUEUED'
-      ? (event.contractReady
-          ? 'The contract is deployed, but the announcement needs a manual publication retry.'
-          : 'The notice is authorised and will publish automatically after deployment.')
-      : 'The event notice has been published to the selected Wallet Comms audience.';
+  const canPublishAnnouncement = event.announcementStatus === 'QUEUED' && event.contractReady;
+  const announcementHeading = event.announcementStatus === 'PUBLISHED'
+    ? 'Announcement published'
+    : event.contractReady
+      ? 'Ready to publish'
+      : 'Scheduled automatically';
+  const announcementMessage = event.announcementStatus === 'PUBLISHED'
+    ? 'The platform-issued event notice is available in Notifications for the selected audience.'
+    : event.contractReady
+      ? 'Automatic publication can be retried here without authentication or a wallet signature.'
+      : 'The platform will publish this event notice automatically after the VoteEvent contract is deployed.';
 
   return <Page
     title={event.title}
@@ -648,7 +644,7 @@ export function OrganiserEventPage() {
     </Panel>
 
     {!['DISABLED', 'NOT_CONFIGURED'].includes(event.announcementStatus) && <Panel
-      title="Automatic Wallet Comms announcement"
+      title="Automatic event announcement"
       className="announcement-panel"
     >
       <div className="announcement-card-layout">
@@ -660,13 +656,11 @@ export function OrganiserEventPage() {
           </div>
           <p>{announcementMessage}</p>
         </div>
-        {canAuthoriseAnnouncement && <button
+        {canPublishAnnouncement && <button
           className="button secondary announcement-card-action"
-          onClick={authoriseAnnouncement}
+          onClick={publishAnnouncement}
           disabled={announcementBusy}
-        >{announcementBusy
-          ? 'Authorising…'
-          : event.announcementStatus === 'QUEUED' ? 'Retry announcement' : 'Authorise announcement'}</button>}
+        >{announcementBusy ? 'Publishing…' : 'Publish now'}</button>}
       </div>
       {announcementFeedback && <Notice tone={announcementFeedback.tone}>{announcementFeedback.message}</Notice>}
     </Panel>}

@@ -9,6 +9,7 @@ import {
   draftTokenCommunication,
   inbox,
   publishCommunication,
+  publishPlatformCommunication,
   publishTokenCommunication,
   saveSubscription,
   subscriptions,
@@ -20,10 +21,7 @@ import {
   readEventDocument,
   uploadEventDocument,
 } from './documents.js';
-import {
-  announcementDraft,
-  authoriseEventAnnouncement,
-} from './event-announcements.js';
+import { triggerEventAnnouncement } from './event-announcements.js';
 import { closeEventStreams, openEventStream } from './event-stream.js';
 import { HttpError } from './errors.js';
 import {
@@ -41,11 +39,12 @@ import { jobRunnerStatus, startJobRunner } from './runner.js';
 import { securityHeaders } from './security.js';
 import { inspectToken } from './tokens.js';
 import {
-  announcementSignatureInput,
+  announcementTriggerInput,
   communicationDraftInput,
   communicationPublishInput,
+  platformCommunicationInput,
+  publicSubscriptionInput,
   eventInput,
-  subscriptionInput,
   tokenCommunicationDraftInput,
   tokenCommunicationPublishInput,
   voteInput,
@@ -166,17 +165,20 @@ app.get('/v1/events/:id/results', async (request, response, next) => {
   try { response.json(await eventResults(request.params.id, request.query.wallet)); } catch (error) { next(error); }
 });
 
-app.get('/v1/events/:id/announcement/draft', requireAuth, async (request, response, next) => {
-  try { response.json(await announcementDraft(request.params.id, request.auth.wallet_address)); } catch (error) { next(error); }
-});
-app.put('/v1/events/:id/announcement', requireAuth, writeLimiter, async (request, response, next) => {
+app.post('/v1/events/:id/announcement', writeLimiter, async (request, response, next) => {
   try {
-    const result = await authoriseEventAnnouncement(
-      request.params.id,
-      request.auth.wallet_address,
-      parse(announcementSignatureInput, request.body).signature,
-    );
-    if (result.status === 'PUBLISHED') announceCommunication();
+    const input = parse(announcementTriggerInput, request.body);
+    const result = await triggerEventAnnouncement(request.params.id, input.publisherAddress);
+    if (result.published) announceCommunication();
+    response.json(result);
+  } catch (error) { next(error); }
+});
+// Backwards-compatible alias for earlier frontend packages. No wallet signature is required.
+app.put('/v1/events/:id/announcement', writeLimiter, async (request, response, next) => {
+  try {
+    const input = parse(announcementTriggerInput, request.body);
+    const result = await triggerEventAnnouncement(request.params.id, input.publisherAddress);
+    if (result.published) announceCommunication();
     response.json(result);
   } catch (error) { next(error); }
 });
@@ -247,9 +249,10 @@ app.post('/v1/events/:id/votes', voteLimiter, async (request, response, next) =>
 });
 
 app.get('/v1/communications/stream', openCommunicationStream);
-app.get('/v1/communications/portal', requireAuth, async (request, response, next) => {
+app.get('/v1/communications/portal', async (request, response, next) => {
   try {
-    const wallet = request.auth.wallet_address;
+    const wallet = request.query.wallet ?? request.auth?.wallet_address;
+    if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
     const [savedSubscriptions, organisedEvents] = await Promise.all([
       subscriptions(wallet),
       organiserDashboard(wallet),
@@ -257,15 +260,17 @@ app.get('/v1/communications/portal', requireAuth, async (request, response, next
     response.json({ subscriptions: savedSubscriptions, organisedEvents });
   } catch (error) { next(error); }
 });
-app.get('/v1/communications/subscriptions', requireAuth, async (request, response, next) => {
-  try { response.json(await subscriptions(request.auth.wallet_address)); } catch (error) { next(error); }
-});
-app.put('/v1/communications/subscriptions', requireAuth, writeLimiter, async (request, response, next) => {
+app.get('/v1/communications/subscriptions', async (request, response, next) => {
   try {
-    response.json(await saveSubscription(
-      request.auth.wallet_address,
-      parse(subscriptionInput, request.body),
-    ));
+    const wallet = request.query.wallet ?? request.auth?.wallet_address;
+    if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
+    response.json(await subscriptions(wallet));
+  } catch (error) { next(error); }
+});
+app.put('/v1/communications/subscriptions', writeLimiter, async (request, response, next) => {
+  try {
+    const input = parse(publicSubscriptionInput, request.body);
+    response.json(await saveSubscription(input.walletAddress, input));
   } catch (error) { next(error); }
 });
 app.get('/v1/communications/inbox', async (request, response, next) => {
@@ -294,6 +299,17 @@ app.post('/v1/communications/token', requireAuth, writeLimiter, async (request, 
     response.status(201).json(message);
   } catch (error) { next(error); }
 });
+app.post('/v1/events/:id/communications/platform', writeLimiter, async (request, response, next) => {
+  try {
+    const message = await publishPlatformCommunication(
+      request.params.id,
+      parse(platformCommunicationInput, request.body),
+    );
+    announceCommunication();
+    response.status(201).json(message);
+  } catch (error) { next(error); }
+});
+
 app.post('/v1/events/:id/communications/draft', requireAuth, writeLimiter, async (request, response, next) => {
   try {
     response.json(await draftCommunication(

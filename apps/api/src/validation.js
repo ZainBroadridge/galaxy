@@ -125,4 +125,16 @@ export const tokenCommunicationPublishInput = z.object({
   signature,
 });
 
-export const announcementSignatureInput = z.object({ signature });
+
+export const publicSubscriptionInput = subscriptionInput.extend({
+  walletAddress: address,
+});
+
+export const platformCommunicationInput = communicationFields.extend({
+  publisherAddress: address,
+  audience: eventAudience,
+}).superRefine(validateCommunicationDates);
+
+export const announcementTriggerInput = z.object({
+  publisherAddress: address,
+});

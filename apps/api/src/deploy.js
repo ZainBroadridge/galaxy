@@ -95,7 +95,7 @@ export async function deployEvent(job) {
   } catch (error) {
     logger.warn(
       { err: error, eventId: event.id },
-      'VoteEvent deployed, but its automatic Wallet Comms announcement needs a manual retry',
+      'VoteEvent deployed, but its automatic notification announcement needs a retry',
     );
   }
   await updateJob(job.id, 96, 'VoteEvent mined and validated');

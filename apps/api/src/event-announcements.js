@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { verifyMessage } from 'ethers';
 import {
   COMMUNICATION_AUDIENCE,
   COMMUNICATION_CATEGORY,
@@ -10,6 +9,7 @@ import {
 import { config } from './config.js';
 import { query, transaction } from './db.js';
 import { HttpError, normalizeAddress } from './errors.js';
+import { relayer } from './rpc.js';
 
 function formatUtc(value) {
   const iso = new Date(value).toISOString();
@@ -22,6 +22,8 @@ function announcementAudience(mode) {
   return null;
 }
 
+export const notificationPublisherAddress = relayer.address.toLowerCase();
+
 export function buildEventAnnouncement(event) {
   const audience = announcementAudience(event.snap_delivery_mode);
   if (!audience) return null;
@@ -31,8 +33,10 @@ export function buildEventAnnouncement(event) {
     eventId: event.id,
     eventTitle: event.title,
     tokenSymbol: event.token_symbol,
-    contractAddress: ZERO_ADDRESS,
-    creatorAddress: event.creator_address,
+    contractAddress: event.contract_address ?? ZERO_ADDRESS,
+    // Announcements are issued by the platform notification service so the
+    // organiser never has to sign a second wallet message.
+    creatorAddress: notificationPublisherAddress,
     authenticityStatus: event.authenticity_status,
     messageId: event.announcement_message?.messageId ?? randomUUID(),
     category: COMMUNICATION_CATEGORY.EVENT_ANNOUNCEMENT,
@@ -48,11 +52,9 @@ export function buildEventAnnouncement(event) {
 }
 
 export function eventAnnouncementStatus(event) {
-  if (event.snap_delivery_mode === SNAP_DELIVERY_MODE.DISABLED) return 'DISABLED';
+  if (!announcementAudience(event.snap_delivery_mode)) return 'DISABLED';
   if (event.announcement_published_at) return 'PUBLISHED';
-  if (event.announcement_signature) return 'QUEUED';
-  if (event.announcement_message) return 'AWAITING_SIGNATURE';
-  return 'NOT_CONFIGURED';
+  return 'QUEUED';
 }
 
 async function eventForAnnouncement(eventId, client = { query }) {
@@ -63,35 +65,33 @@ async function eventForAnnouncement(eventId, client = { query }) {
 
 async function publishWithClient(eventId, client) {
   const event = await eventForAnnouncement(eventId, client);
-  if (
-    event.snap_delivery_mode === SNAP_DELIVERY_MODE.DISABLED
-    || !event.announcement_signature
-    || event.announcement_published_at
-    || !event.contract_address
-    || event.deployment_block === null
-  ) return false;
+  if (event.snap_delivery_mode === SNAP_DELIVERY_MODE.DISABLED) {
+    return { published: false, status: 'DISABLED', message: null };
+  }
+  if (event.announcement_published_at) {
+    return { published: false, status: 'PUBLISHED', message: event.announcement_message ?? null };
+  }
+  if (!event.contract_address || event.deployment_block === null) {
+    return { published: false, status: 'QUEUED', message: null };
+  }
 
   const draft = buildEventAnnouncement(event);
-  const stored = event.announcement_message;
-  if (!draft || !stored || buildCommunicationSigningMessage(draft.message) !== buildCommunicationSigningMessage(stored)) {
-    throw new HttpError(409, 'The automatic announcement no longer matches the event.', 'ANNOUNCEMENT_MISMATCH');
-  }
-
-  let signer;
-  try { signer = normalizeAddress(verifyMessage(draft.signingMessage, event.announcement_signature)); } catch { signer = null; }
-  if (signer !== event.creator_address) {
-    throw new HttpError(401, 'The automatic announcement signature is invalid.', 'INVALID_SIGNATURE');
-  }
+  if (!draft) return { published: false, status: 'DISABLED', message: null };
+  const signature = await relayer.signMessage(draft.signingMessage);
 
   await client.query(
     `INSERT INTO communications(
-       message_id,event_id,scope,category,audience,title,body,action_url,published_at,expires_at,
+       message_id,event_id,scope,chain_id,creator_address,authenticity_status,
+       category,audience,title,body,action_url,published_at,expires_at,
        creator_signature,signed_contract_address
-     ) VALUES ($1,$2,'EVENT',$3,$4,$5,$6,$7,$8,$9,$10,$11)
+     ) VALUES ($1,$2,'EVENT',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
      ON CONFLICT(message_id) DO NOTHING`,
     [
       draft.message.messageId,
       event.id,
+      draft.message.chainId,
+      draft.message.creatorAddress,
+      draft.message.authenticityStatus,
       draft.message.category,
       draft.message.audience,
       draft.message.title,
@@ -99,60 +99,38 @@ async function publishWithClient(eventId, client) {
       draft.message.actionUrl,
       draft.message.publishedAt,
       draft.message.expiresAt,
-      event.announcement_signature,
+      signature,
       draft.message.contractAddress,
     ],
   );
   await client.query(
-    'UPDATE events SET announcement_published_at=coalesce(announcement_published_at,now()) WHERE id=$1',
-    [event.id],
+    `UPDATE events
+        SET announcement_message=$2::jsonb,
+            announcement_signature=$3,
+            announcement_published_at=coalesce(announcement_published_at,now())
+      WHERE id=$1`,
+    [event.id, JSON.stringify(draft.message), signature],
   );
-  return true;
+  return { published: true, status: 'PUBLISHED', message: draft.message };
 }
 
 export async function publishPendingEventAnnouncement(eventId, client = null) {
-  return client
-    ? publishWithClient(eventId, client)
-    : transaction((transactionClient) => publishWithClient(eventId, transactionClient));
+  const result = client
+    ? await publishWithClient(eventId, client)
+    : await transaction((transactionClient) => publishWithClient(eventId, transactionClient));
+  return result.published;
 }
 
-export async function announcementDraft(eventId, wallet) {
-  const event = await eventForAnnouncement(eventId);
-  if (event.creator_address !== normalizeAddress(wallet)) {
-    throw new HttpError(403, 'Only the event creator can authorise this announcement.', 'FORBIDDEN');
-  }
-  const draft = buildEventAnnouncement(event);
-  if (!draft) throw new HttpError(409, 'Automatic wallet communications are disabled for this event.', 'ANNOUNCEMENT_DISABLED');
-  return draft;
-}
-
-export async function authoriseEventAnnouncement(eventId, wallet, signature) {
-  const creator = normalizeAddress(wallet);
-  const result = await transaction(async (client) => {
+export async function triggerEventAnnouncement(eventId, wallet) {
+  const publisher = normalizeAddress(wallet, 'publisherAddress');
+  return transaction(async (client) => {
     const locked = await client.query('SELECT * FROM events WHERE id=$1 FOR UPDATE', [eventId]);
     if (!locked.rowCount) throw new HttpError(404, 'Event not found.', 'EVENT_NOT_FOUND');
     const event = locked.rows[0];
-    if (event.creator_address !== creator) {
-      throw new HttpError(403, 'Only the event creator can authorise this announcement.', 'FORBIDDEN');
+    if (event.creator_address !== publisher) {
+      throw new HttpError(403, 'Only the event creator can trigger this announcement.', 'FORBIDDEN');
     }
-    const draft = buildEventAnnouncement(event);
-    if (!draft) throw new HttpError(409, 'Automatic wallet communications are disabled for this event.', 'ANNOUNCEMENT_DISABLED');
-
-    let signer;
-    try { signer = normalizeAddress(verifyMessage(draft.signingMessage, signature)); } catch { signer = null; }
-    if (signer !== creator) throw new HttpError(401, 'Announcement signature is invalid.', 'INVALID_SIGNATURE');
-
-    await client.query(
-      `UPDATE events
-          SET announcement_message=$2::jsonb,announcement_signature=$3
-        WHERE id=$1`,
-      [eventId, JSON.stringify(draft.message), signature],
-    );
-    const published = await publishWithClient(eventId, client);
-    return { draft, published };
+    const result = await publishWithClient(eventId, client);
+    return { published: result.published, status: result.status, message: result.message };
   });
-  return {
-    message: result.draft.message,
-    status: result.published ? 'PUBLISHED' : 'QUEUED',
-  };
 }

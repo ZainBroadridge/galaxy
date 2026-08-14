@@ -12,7 +12,7 @@ import { config } from './config.js';
 import { query } from './db.js';
 import { HttpError, normalizeAddress } from './errors.js';
 import { getEventRow } from './events.js';
-import { provider } from './rpc.js';
+import { provider, relayer } from './rpc.js';
 import { inspectToken } from './tokens.js';
 
 const NON_HOLDER_SUBSCRIBER_CATEGORIES = new Set([
@@ -33,14 +33,14 @@ function commonMessage(input) {
   };
 }
 
-function eventMessageFor(event, input) {
+function eventMessageFor(event, input, creatorAddress = event.creator_address) {
   return {
     chainId: Number(event.chain_id),
     eventId: event.id,
     eventTitle: event.title,
     tokenSymbol: event.token_symbol,
     contractAddress: event.contract_address,
-    creatorAddress: event.creator_address,
+    creatorAddress,
     authenticityStatus: event.authenticity_status,
     ...commonMessage(input),
   };
@@ -87,6 +87,33 @@ function tokenAuthenticity(token, creator, audience) {
   return AUTHENTICITY_STATUS.SELF_CLAIMED;
 }
 
+async function insertEventCommunication(event, message, signature) {
+  await query(
+    `INSERT INTO communications(
+       message_id,event_id,scope,chain_id,creator_address,authenticity_status,
+       category,audience,title,body,action_url,published_at,expires_at,
+       creator_signature,signed_contract_address
+     ) VALUES ($1,$2,'EVENT',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+     ON CONFLICT(message_id) DO NOTHING`,
+    [
+      message.messageId,
+      event.id,
+      message.chainId,
+      message.creatorAddress,
+      message.authenticityStatus,
+      message.category,
+      message.audience,
+      message.title,
+      message.body,
+      message.actionUrl,
+      message.publishedAt,
+      message.expiresAt,
+      signature,
+      message.contractAddress,
+    ],
+  );
+}
+
 export async function draftCommunication(eventId, wallet, input) {
   const event = await getEventRow(eventId);
   if (event.creator_address !== normalizeAddress(wallet)) throw new HttpError(403, 'Only the event creator can publish communications.', 'FORBIDDEN');
@@ -111,16 +138,24 @@ export async function publishCommunication(eventId, wallet, input) {
   let signer;
   try { signer = normalizeAddress(verifyMessage(buildCommunicationSigningMessage(expected), input.signature)); } catch { signer = null; }
   if (signer !== creator) throw new HttpError(401, 'Communication signature is invalid.', 'INVALID_SIGNATURE');
-  await query(
-    `INSERT INTO communications(
-       message_id,event_id,scope,category,audience,title,body,action_url,published_at,expires_at,
-       creator_signature,signed_contract_address
-     ) VALUES ($1,$2,'EVENT',$3,$4,$5,$6,$7,$8,$9,$10,$11)
-     ON CONFLICT(message_id) DO NOTHING`,
-    [expected.messageId, eventId, expected.category, expected.audience, expected.title, expected.body,
-      expected.actionUrl, expected.publishedAt, expected.expiresAt, input.signature, expected.contractAddress],
-  );
+  await insertEventCommunication(event, expected, input.signature);
   return expected;
+}
+
+export async function publishPlatformCommunication(eventId, input) {
+  const event = await getEventRow(eventId);
+  const publisher = normalizeAddress(input.publisherAddress, 'publisherAddress');
+  if (event.creator_address !== publisher) {
+    throw new HttpError(403, 'Only the event creator can issue an announcement for this event.', 'FORBIDDEN');
+  }
+  if (!event.contract_address || event.deployment_block === null) {
+    throw new HttpError(409, 'Deploy the event before publishing communications.', 'EVENT_NOT_READY');
+  }
+  validateActionUrl(input.actionUrl);
+  const message = eventMessageFor(event, input, relayer.address.toLowerCase());
+  const signature = await relayer.signMessage(buildCommunicationSigningMessage(message));
+  await insertEventCommunication(event, message, signature);
+  return { ...message, signature, issuedBy: 'PLATFORM' };
 }
 
 export async function draftTokenCommunication(wallet, input) {
@@ -195,8 +230,8 @@ function serializeEventCommunication(row) {
     eventTitle: row.event_title,
     tokenSymbol: row.token_symbol,
     contractAddress: row.signed_contract_address ?? row.contract_address,
-    creatorAddress: row.creator_address,
-    authenticityStatus: row.authenticity_status,
+    creatorAddress: row.communication_creator_address ?? row.event_creator_address,
+    authenticityStatus: row.communication_authenticity_status ?? row.event_authenticity_status,
     messageId: row.message_id,
     category: row.category,
     audience: row.audience,
@@ -206,6 +241,7 @@ function serializeEventCommunication(row) {
     publishedAt: row.published_at,
     expiresAt: row.expires_at,
     signature: row.creator_signature,
+    issuedBy: row.communication_creator_address ? 'PLATFORM_OR_CREATOR' : 'LEGACY_CREATOR',
   };
 }
 
@@ -234,7 +270,12 @@ export async function inbox(wallet) {
   const address = normalizeAddress(wallet);
   const [eventRows, tokenRows] = await Promise.all([
     query(
-      `SELECT c.*,e.chain_id,e.title AS event_title,e.token_symbol,e.contract_address,e.creator_address,e.authenticity_status
+      `SELECT c.*,
+              c.creator_address AS communication_creator_address,
+              c.authenticity_status AS communication_authenticity_status,
+              e.chain_id,e.title AS event_title,e.token_symbol,e.contract_address,
+              e.creator_address AS event_creator_address,
+              e.authenticity_status AS event_authenticity_status
        FROM communications c JOIN events e ON e.id=c.event_id
        JOIN snapshot_entries se ON se.event_id=e.id AND se.wallet_address=$1
        LEFT JOIN votes v ON v.event_id=e.id AND v.voter_address=$1 AND v.status<>'FAILED'

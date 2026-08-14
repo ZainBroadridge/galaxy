@@ -90,7 +90,11 @@ export async function createEvent(wallet, input) {
   return {
     event: serializeEvent(created.event),
     job: serializeJob(created.job),
-    announcementDraft: created.announcementDraft,
+    // Keep the backward-compatible field without exposing a wallet-signing
+    // payload. The platform notification service signs after deployment.
+    announcementDraft: created.announcementDraft
+      ? { message: created.announcementDraft.message, status: 'QUEUED' }
+      : null,
   };
 }
 

@@ -309,6 +309,7 @@ export function VoteEventPage() {
       <p>Voting open {formatDate(event.votingStartAt)} — {formatDate(event.votingEndAt)}</p>
     </header>
 
+    <div className="vote-content-frame">
     {!event.metadataIntegrity && <Notice tone="error">
       Event metadata does not match the hash committed to the contract. Voting is disabled.
     </Notice>}
@@ -407,5 +408,6 @@ export function VoteEventPage() {
         </footer>
       </section>
       : null}
+    </div>
   </main>;
 }

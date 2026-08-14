@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { ErrorBox, Notice, Panel, Spinner, Status } from '../components/UI.jsx';
 import { useNotifications } from '../notifications.jsx';
@@ -13,20 +14,17 @@ import {
 import { useWallet } from '../wallet.jsx';
 
 const communicationCategories = [
-  { value: 'EVENT_ANNOUNCEMENT', label: 'Event announcements' },
+  { value: 'EVENT_ANNOUNCEMENT', label: 'Event announcement' },
   { value: 'VOTING_OPEN', label: 'Voting opens' },
-  { value: 'DEADLINE_REMINDER', label: 'Deadline reminders' },
-  { value: 'DOCUMENT_UPDATE', label: 'Document updates' },
+  { value: 'DEADLINE_REMINDER', label: 'Deadline reminder' },
+  { value: 'DOCUMENT_UPDATE', label: 'Document update' },
   { value: 'RESULTS_AVAILABLE', label: 'Results available' },
-  { value: 'GENERAL', label: 'General issuer news' },
+  { value: 'GENERAL', label: 'General update' },
 ];
-
 const categoryLabels = new Map(communicationCategories.map(({ value, label }) => [value, label]));
 const localDate = (date) => new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 const initialCommunication = () => ({
-  scope: 'EVENT',
   eventId: '',
-  tokenAddress: '',
   category: 'EVENT_ANNOUNCEMENT',
   audience: 'ALL_ELIGIBLE',
   title: '',
@@ -39,7 +37,7 @@ export default function WalletComms() {
   const wallet = useWallet();
   const notifications = useNotifications();
   const configuration = snapConfiguration();
-  const [activeTab, setActiveTab] = useState('investor');
+  const [activeTab, setActiveTab] = useState('announcements');
   const [snapInstalled, setSnapInstalled] = useState(false);
   const [snapState, setSnapState] = useState(null);
   const [subscriptions, setSubscriptions] = useState([]);
@@ -51,7 +49,7 @@ export default function WalletComms() {
   const [communication, setCommunication] = useState(initialCommunication);
 
   useEffect(() => {
-    setActiveTab('investor');
+    setActiveTab('announcements');
     setSubscriptions([]);
     setOrganisedEvents([]);
     setSnapState(null);
@@ -62,7 +60,7 @@ export default function WalletComms() {
   }, [wallet.account]);
 
   useEffect(() => {
-    if (!configuration.ready) return;
+    if (!configuration.ready) return undefined;
     let active = true;
     getInstalledSnap()
       .then(async (value) => {
@@ -84,26 +82,27 @@ export default function WalletComms() {
   }, [configuration.ready]);
 
   useEffect(() => {
-    if (wallet.connected && activeTab === 'investor' && notifications.messages.length) {
+    if (wallet.connected && activeTab === 'announcements' && notifications.messages.length) {
       notifications.markAllRead();
     }
   }, [activeTab, notifications.markAllRead, notifications.messages, wallet.connected]);
 
   const loadPortalData = useCallback(async () => {
-    if (!wallet.connected) return;
-    const portal = await api('/v1/communications/portal');
-    setSubscriptions(portal.subscriptions);
-    setOrganisedEvents(portal.organisedEvents);
+    if (!wallet.connected || !wallet.account) return;
+    const query = new URLSearchParams({ wallet: wallet.account });
+    const portal = await api(`/v1/communications/portal?${query}`, { auth: false });
+    setSubscriptions(portal.subscriptions ?? []);
+    setOrganisedEvents(portal.organisedEvents ?? []);
     setCommunication((current) => ({
       ...current,
-      eventId: current.eventId || portal.organisedEvents[0]?.id || '',
+      eventId: current.eventId || portal.organisedEvents?.[0]?.id || '',
     }));
   }, [wallet.account, wallet.connected]);
 
   useEffect(() => {
-    if (!wallet.authenticated) return;
+    if (!wallet.connected) return;
     loadPortalData().catch(setError);
-  }, [loadPortalData, wallet.authenticated]);
+  }, [loadPortalData, wallet.connected]);
 
   const busy = pendingAction !== null;
 
@@ -132,8 +131,8 @@ export default function WalletComms() {
         action: 'install',
         tone: 'success',
         message: updating
-          ? 'MetaMask Snap updated and background alerts enabled.'
-          : 'MetaMask Snap installed and background alerts enabled.',
+          ? 'MetaMask notifications updated and background alerts enabled.'
+          : 'MetaMask notifications installed and background alerts enabled.',
       });
     });
   }
@@ -144,7 +143,7 @@ export default function WalletComms() {
       setSnapInstalled(result.installed);
       setSnapState(result.state ?? null);
       if (!result.installed) {
-        setFeedback({ action: 'sync', tone: 'info', message: 'Install the MetaMask Snap before checking wallet notices.' });
+        setFeedback({ action: 'sync', tone: 'info', message: 'Install the MetaMask notification companion before syncing.' });
         return;
       }
       const accepted = Number(result.accepted ?? 0);
@@ -152,8 +151,8 @@ export default function WalletComms() {
         action: 'sync',
         tone: 'success',
         message: accepted > 0
-          ? `${accepted} new notice${accepted === 1 ? '' : 's'} added to the MetaMask inbox.`
-          : 'MetaMask inbox is up to date. Background alerts remain enabled.',
+          ? `${accepted} new announcement${accepted === 1 ? '' : 's'} added to MetaMask.`
+          : 'MetaMask notifications are up to date.',
       });
     });
   }
@@ -162,93 +161,66 @@ export default function WalletComms() {
     await runAction('disable-alerts', async () => {
       const state = await disableSnapBackgroundAlerts(wallet.account);
       setSnapState(state);
-      setFeedback({
-        action: 'disable-alerts',
-        tone: 'success',
-        message: 'Background MetaMask alerts disabled.',
-      });
+      setFeedback({ action: 'disable-alerts', tone: 'success', message: 'Background MetaMask alerts disabled.' });
     });
   }
 
   async function saveSubscription() {
     await runAction('subscription', async () => {
-      await wallet.ensureAuthenticated();
-      await api('/v1/communications/subscriptions', { method: 'PUT', body: subscription });
+      await api('/v1/communications/subscriptions', {
+        method: 'PUT',
+        auth: false,
+        body: { ...subscription, walletAddress: wallet.account },
+      });
       await loadPortalData();
       notifications.refresh({ silent: true }).catch(() => {});
       setFeedback({
         action: 'subscription',
         tone: 'success',
-        message: subscription.enabled
-          ? 'Token subscription saved successfully.'
-          : 'Token notifications disabled successfully.',
+        message: subscription.enabled ? 'Token notifications enabled.' : 'Token notifications disabled.',
       });
     });
-  }
-
-  async function unlockOrganiser() {
-    await runAction('organiser', async () => {
-      await wallet.ensureAuthenticated();
-      await loadPortalData();
-    });
-  }
-
-  function changeScope(scope) {
-    setCommunication((current) => ({
-      ...current,
-      scope,
-      category: scope === 'TOKEN' ? 'GENERAL' : 'EVENT_ANNOUNCEMENT',
-      audience: scope === 'TOKEN' ? 'SUBSCRIBERS' : 'ALL_ELIGIBLE',
-    }));
   }
 
   async function publish(event) {
     event.preventDefault();
     await runAction('publish', async () => {
-      await wallet.ensureAuthenticated();
-      const signer = await wallet.getSigner();
-      const tokenScoped = communication.scope === 'TOKEN';
-      const selectedEvent = tokenScoped
-        ? null
-        : organisedEvents.find((item) => item.id === communication.eventId);
+      const selectedEvent = organisedEvents.find((item) => item.id === communication.eventId);
+      if (!selectedEvent) throw new Error('Select an event first.');
       const input = {
-        ...(tokenScoped ? { tokenAddress: communication.tokenAddress } : {}),
+        publisherAddress: wallet.account,
         category: communication.category,
         audience: communication.audience,
         title: communication.title,
         body: communication.body,
-        actionUrl: tokenScoped
-          ? `${window.location.origin}/comms`
-          : (selectedEvent?.votingUrl ?? `${window.location.origin}/vote/${communication.eventId}`),
+        actionUrl: selectedEvent.votingUrl ?? `${window.location.origin}/vote/${communication.eventId}`,
         publishedAt: new Date().toISOString(),
         expiresAt: new Date(communication.expiresAt).toISOString(),
       };
-      const draftPath = tokenScoped
-        ? '/v1/communications/token/draft'
-        : `/v1/events/${communication.eventId}/communications/draft`;
-      const publishPath = tokenScoped
-        ? '/v1/communications/token'
-        : `/v1/events/${communication.eventId}/communications`;
-      const draft = await api(draftPath, { method: 'POST', body: input });
-      const signature = await signer.signMessage(draft.signingMessage);
-      await api(publishPath, { method: 'POST', body: { message: draft.message, signature } });
+      await api(`/v1/events/${communication.eventId}/communications/platform`, {
+        method: 'POST',
+        auth: false,
+        body: input,
+      });
       setCommunication((current) => ({ ...current, title: '', body: '' }));
       notifications.refresh({ silent: true }).catch(() => {});
       setFeedback({
         action: 'publish',
         tone: 'success',
-        message: tokenScoped
-          ? 'Token communication signed and published successfully.'
-          : 'Event communication signed and published successfully.',
+        message: 'Announcement published. No wallet authentication or signature was required.',
       });
     });
   }
 
   const activeSubscriptions = useMemo(() => subscriptions.filter((item) => item.enabled), [subscriptions]);
-  const tokenScoped = communication.scope === 'TOKEN';
+  const selectedEvent = organisedEvents.find((item) => item.id === communication.eventId);
+  const selectedEventReady = Boolean(selectedEvent?.contractReady || selectedEvent?.contractAddress);
   const canPublish = Boolean(
-    communication.title && communication.body && communication.expiresAt
-      && (tokenScoped ? communication.tokenAddress : communication.eventId),
+    communication.eventId
+      && selectedEventReady
+      && communication.title.trim()
+      && communication.body.trim()
+      && communication.expiresAt,
   );
   const actionNotice = (action) => feedback?.action === action
     ? <Notice tone={feedback.tone}>{feedback.message}</Notice>
@@ -262,23 +234,24 @@ export default function WalletComms() {
     ? new Date(snapState.lastCheckedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : null;
 
-  return <main className="page wallet-comms-page">
-    <header className="wallet-comms-header">
+  return <main className="page wallet-comms-page notifications-page">
+    <header className="wallet-comms-header notifications-header">
       <div>
-        <span className="wallet-comms-kicker">Investor communications</span>
-        <h1>Wallet Comms</h1>
+        <span className="wallet-comms-kicker">Notification center</span>
+        <h1>Notifications</h1>
+        <p>Event announcements and organiser updates for the connected wallet.</p>
       </div>
-      {wallet.connected && <div className="comms-tabs" role="tablist" aria-label="Wallet communications">
+      {wallet.connected && <div className="comms-tabs" role="tablist" aria-label="Notifications">
         <button
           type="button"
-          id="comms-tab-investor"
+          id="comms-tab-announcements"
           role="tab"
-          aria-controls="comms-panel-investor"
-          aria-selected={activeTab === 'investor'}
-          className={`comms-tab${activeTab === 'investor' ? ' active' : ''}`}
-          onClick={() => setActiveTab('investor')}
+          aria-controls="comms-panel-announcements"
+          aria-selected={activeTab === 'announcements'}
+          className={`comms-tab${activeTab === 'announcements' ? ' active' : ''}`}
+          onClick={() => setActiveTab('announcements')}
         >
-          Notifications
+          Announcements
           {notifications.unreadCount > 0 && <span className="comms-tab-count">{notifications.unreadCount > 99 ? '99+' : notifications.unreadCount}</span>}
         </button>
         <button
@@ -300,28 +273,33 @@ export default function WalletComms() {
     {!wallet.connected && <Panel className="comms-connect-panel">
       <div>
         <h2>Connect your wallet</h2>
-        <p>View verified notices and follow token updates without sharing an email address.</p>
+        <p>Open the notification center for your voting events and token holdings.</p>
       </div>
       <button className="button" onClick={wallet.openWallet}>Connect wallet</button>
     </Panel>}
 
-    {wallet.connected && activeTab === 'investor' && <div id="comms-panel-investor" className="notification-workspace" role="tabpanel" aria-labelledby="comms-tab-investor">
+    {wallet.connected && activeTab === 'announcements' && <div
+      id="comms-panel-announcements"
+      className="notification-workspace"
+      role="tabpanel"
+      aria-labelledby="comms-tab-announcements"
+    >
       <section className="notification-center" aria-labelledby="notification-center-title">
         <header className="notification-toolbar">
           <div>
             <div className="notification-title-line">
-              <h2 id="notification-center-title">Notifications</h2>
+              <h2 id="notification-center-title">Announcements</h2>
               <span className="notification-total">{notificationCount}</span>
             </div>
-            <p>Verified notices for this wallet appear here automatically.</p>
+            <p>Platform-issued event notices load automatically and update live.</p>
           </div>
           <div className="notification-actions">
             <span className={`live-indicator${notifications.live ? ' online' : ''}`}>
               <span aria-hidden="true" />{notifications.live ? 'Live' : 'Refreshing'}
             </span>
             {lastUpdated && <span className="notification-updated">Updated {lastUpdated}</span>}
-            <button className="button secondary compact" onClick={sync} disabled={!snapInstalled || busy} title="Check for new MetaMask notices now">
-              {pendingAction === 'sync' ? 'Checking…' : 'Sync now'}
+            <button className="button secondary compact" onClick={sync} disabled={!snapInstalled || busy}>
+              {pendingAction === 'sync' ? 'Checking…' : 'Sync MetaMask'}
             </button>
           </div>
         </header>
@@ -346,7 +324,7 @@ export default function WalletComms() {
               </article>)
               : <div className="notification-empty">
                 <strong>You’re all caught up</strong>
-                <span>New verified notices will appear here automatically.</span>
+                <span>New event announcements will appear here automatically.</span>
               </div>}
         </div>
       </section>
@@ -354,29 +332,21 @@ export default function WalletComms() {
       <div className="comms-utilities">
         <section className="comms-utility-card">
           <div className="utility-card-heading">
-            <div>
-              <span className="panel-eyebrow">MetaMask</span>
-              <h2>Background wallet alerts</h2>
-            </div>
+            <div><span className="panel-eyebrow">MetaMask</span><h2>Background alerts</h2></div>
             <Status value={backgroundEnabled ? 'ACTIVE' : snapInstalled ? 'INSTALLED' : 'NOT_INSTALLED'} />
           </div>
-          <p>Receive creator-signed notices inside MetaMask automatically, even when this dApp is closed.</p>
+          <p>Receive platform-issued voting announcements inside MetaMask while the dApp is closed.</p>
           {snapInstalled && <p className="muted">
             {backgroundEnabled ? 'Checks every minute' : 'Background alerts are disabled'}
             {snapLastChecked ? ` · Last checked ${snapLastChecked}` : ''}
           </p>}
           <div className="inline-actions">
             <button className="button" onClick={install} disabled={!configuration.ready || busy}>
-              {pendingAction === 'install'
-                ? (snapInstalled ? 'Updating…' : 'Installing…')
-                : (snapInstalled ? 'Update and enable' : 'Install and enable')}
+              {pendingAction === 'install' ? (snapInstalled ? 'Updating…' : 'Installing…') : (snapInstalled ? 'Update and enable' : 'Install and enable')}
             </button>
-            {snapInstalled && backgroundEnabled && <button
-              type="button"
-              className="button secondary"
-              onClick={disableBackgroundAlerts}
-              disabled={busy}
-            >{pendingAction === 'disable-alerts' ? 'Disabling…' : 'Disable alerts'}</button>}
+            {snapInstalled && backgroundEnabled && <button type="button" className="button secondary" onClick={disableBackgroundAlerts} disabled={busy}>
+              {pendingAction === 'disable-alerts' ? 'Disabling…' : 'Disable alerts'}
+            </button>}
           </div>
           {actionNotice('install')}
           {actionNotice('disable-alerts')}
@@ -385,18 +355,15 @@ export default function WalletComms() {
 
         <section className="comms-utility-card">
           <div className="utility-card-heading">
-            <div>
-              <span className="panel-eyebrow">Token updates</span>
-              <h2>Follow a token</h2>
-            </div>
+            <div><span className="panel-eyebrow">Token updates</span><h2>Follow a token</h2></div>
           </div>
-          <p>Followers receive general issuer news and published results. Holder-only notices are matched from blockchain balances automatically.</p>
+          <p>Follow general issuer updates and published results for an ERC-20 token.</p>
           <div className="subscription-form">
             <label>Token address<input value={subscription.tokenAddress} onChange={(event) => setSubscription({ ...subscription, tokenAddress: event.target.value })} placeholder="0x…" /></label>
             <label>Delivery<select value={subscription.enabled ? 'on' : 'off'} onChange={(event) => setSubscription({ ...subscription, enabled: event.target.value === 'on' })}><option value="on">Subscribed</option><option value="off">Unsubscribed</option></select></label>
           </div>
           <button className="button secondary" onClick={saveSubscription} disabled={!subscription.tokenAddress || busy}>
-            {pendingAction === 'subscription' ? 'Saving…' : 'Save subscription'}
+            {pendingAction === 'subscription' ? 'Saving…' : 'Save preference'}
           </button>
           {actionNotice('subscription')}
           {activeSubscriptions.length > 0 && <div className="subscription-list">
@@ -408,53 +375,53 @@ export default function WalletComms() {
     </div>}
 
     {wallet.connected && activeTab === 'organiser' && <div id="comms-panel-organiser" role="tabpanel" aria-labelledby="comms-tab-organiser">
-      {!wallet.authenticated
-        ? <Panel className="organiser-access">
-          <span className="panel-eyebrow">Organiser access</span>
-          <h2>Unlock communication tools</h2>
-          <p>Authenticate the connected wallet once to load its organised events and publish verified communications.</p>
-          <button className="button" onClick={unlockOrganiser} disabled={busy}>{pendingAction === 'organiser' ? 'Unlocking…' : 'Unlock organiser tools'}</button>
-          {actionNotice('organiser')}
-        </Panel>
-        : <Panel className="organiser-comms-panel">
-          <div className="comms-panel-heading">
-            <div>
-              <span className="panel-eyebrow">Organiser tools</span>
-              <h2>Issue a communication</h2>
-              <p>Publish a signed notice for a voting event or an ERC-20 token audience.</p>
-            </div>
+      <Panel className="organiser-comms-panel notifications-organiser-panel">
+        <div className="comms-panel-heading">
+          <div>
+            <span className="panel-eyebrow">Organiser announcements</span>
+            <h2>Publish an event update</h2>
+            <p>The platform signs and distributes the announcement. No wallet authentication or MetaMask signature is required.</p>
           </div>
-          <form className="form organiser-comms-form" onSubmit={publish}>
+        </div>
+
+        {!organisedEvents.length
+          ? <div className="notification-organiser-empty">
+            <strong>No organised events found for this wallet.</strong>
+            <span>Create an event first, then return here to publish updates.</span>
+            <Link className="button secondary" to="/organiser">Open Organizer</Link>
+          </div>
+          : <form className="form organiser-comms-form" onSubmit={publish}>
             <section className="form-section">
-              <div className="form-section-heading"><span>1</span><div><h3>Audience</h3><p>Choose the asset context and recipients.</p></div></div>
+              <div className="form-section-heading"><span>1</span><div><h3>Delivery</h3><p>Select the deployed event, message category, and audience.</p></div></div>
               <div className="field-grid three">
-                <label>Communication for<select value={communication.scope} onChange={(event) => changeScope(event.target.value)}><option value="EVENT">Voting event</option><option value="TOKEN">Token news / announcement</option></select></label>
-                {tokenScoped
-                  ? <label>ERC-20 token address<input value={communication.tokenAddress} onChange={(event) => setCommunication({ ...communication, tokenAddress: event.target.value })} placeholder="0x…" required /></label>
-                  : <label>Event<select value={communication.eventId} onChange={(event) => setCommunication({ ...communication, eventId: event.target.value })} required><option value="">Select an event</option>{organisedEvents.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}
+                <label>Event<select value={communication.eventId} onChange={(event) => setCommunication({ ...communication, eventId: event.target.value })} required>
+                  <option value="">Select an event</option>
+                  {organisedEvents.map((item) => <option key={item.id} value={item.id}>{item.title}{item.contractReady || item.contractAddress ? '' : ' — deploying'}</option>)}
+                </select></label>
                 <label>Category<select value={communication.category} onChange={(event) => setCommunication({ ...communication, category: event.target.value })}>{communicationCategories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+                <label>Audience<select value={communication.audience} onChange={(event) => setCommunication({ ...communication, audience: event.target.value })}>
+                  <option value="ALL_ELIGIBLE">All eligible</option>
+                  <option value="NOT_VOTED">Not voted</option>
+                  <option value="SUBSCRIBERS">Subscribers</option>
+                </select></label>
               </div>
-              <label>Audience<select value={communication.audience} onChange={(event) => setCommunication({ ...communication, audience: event.target.value })}>
-                {tokenScoped ? <><option value="SUBSCRIBERS">Subscribed investors</option><option value="CURRENT_HOLDERS">Current token holders</option></> : <><option value="ALL_ELIGIBLE">All eligible</option><option value="NOT_VOTED">Not voted</option><option value="SUBSCRIBERS">Subscribers</option></>}
-              </select></label>
-              {tokenScoped && communication.audience === 'SUBSCRIBERS' && <Notice>General news and published results reach all subscribers. Other categories are delivered only to subscribers who currently hold the token.</Notice>}
-              {tokenScoped && communication.audience === 'CURRENT_HOLDERS' && <Notice>Current-holder broadcasts require a verified token authority: the standard <code>owner()</code> address, or the deployment creator when the token does not expose <code>owner()</code>.</Notice>}
-              {!tokenScoped && !organisedEvents.length && <Notice>No organised event is available. Select “Token news / announcement” to publish independently using an ERC-20 address.</Notice>}
+              {communication.eventId && !selectedEventReady && <Notice>The selected event is still deploying. Announcements become available once its VoteEvent contract is ready.</Notice>}
             </section>
 
             <section className="form-section">
-              <div className="form-section-heading"><span>2</span><div><h3>Message</h3><p>Keep the title concise and the action clear.</p></div></div>
+              <div className="form-section-heading"><span>2</span><div><h3>Message</h3><p>Use a concise title and a clear action-oriented update.</p></div></div>
               <label>Title<input value={communication.title} onChange={(event) => setCommunication({ ...communication, title: event.target.value })} required /></label>
               <label>Message<textarea rows="5" value={communication.body} onChange={(event) => setCommunication({ ...communication, body: event.target.value })} required /></label>
               <label>Expires<input type="datetime-local" value={communication.expiresAt} onChange={(event) => setCommunication({ ...communication, expiresAt: event.target.value })} required /></label>
             </section>
 
-            <div className="form-actions">
-              <button className="button" disabled={busy || !canPublish}>{pendingAction === 'publish' ? 'Signing and publishing…' : 'Sign and publish'}</button>
-              {actionNotice('publish')}
+            <div className="form-actions notifications-publish-actions">
+              <button className="button" disabled={busy || !canPublish}>{pendingAction === 'publish' ? 'Publishing…' : 'Publish announcement'}</button>
+              <span>No wallet signature will be requested.</span>
             </div>
-          </form>
-        </Panel>}
+            {actionNotice('publish')}
+          </form>}
+      </Panel>
     </div>}
   </main>;
 }
