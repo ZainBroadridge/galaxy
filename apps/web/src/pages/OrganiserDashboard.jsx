@@ -386,15 +386,17 @@ export default function OrganiserDashboard() {
               <option value="SUBSCRIBERS_ONLY">Subscribed holders</option>
               <option value="DIRECT_LINK">Direct link only</option>
             </select></label>
-            <label>Announcement audience<select
-              value={announcementEnabled ? form.snapDeliveryMode : announcementAudience}
-              onChange={(event) => setAnnouncementDelivery(event.target.value)}
-              disabled={!announcementEnabled}
-            >
-              <option value="ELIGIBLE">Eligible holders</option>
-              <option value="SUBSCRIBERS_ONLY">Subscribers only</option>
-            </select><small>{announcementEnabled
-              : 'Turn on the event announcement to choose an audience.'}</small></label>
+            <label>
+              Announcement audience
+              <select
+                value={announcementEnabled ? form.snapDeliveryMode : announcementAudience}
+                onChange={(event) => setAnnouncementDelivery(event.target.value)}
+                disabled={!announcementEnabled}
+              >
+                <option value="ELIGIBLE">Eligible holders</option>
+                <option value="SUBSCRIBERS_ONLY">Subscribers only</option>
+              </select>
+            </label>
           </div>
         </section>
 
