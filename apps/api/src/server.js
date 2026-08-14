@@ -191,7 +191,7 @@ app.put('/v1/events/:id/announcement', writeLimiter, async (request, response, n
 app.post('/v1/events/:id/documents', writeLimiter, pdfBody, async (request, response, next) => {
   try {
     const publisher = parse(announcementTriggerInput, {
-      publisherAddress: request.query.wallet,
+      publisherAddress: request.query.wallet || request.get('x-wallet-address'),
     }).publisherAddress;
     response.status(201).json(await uploadEventDocument(
       request.params.id,
@@ -204,7 +204,7 @@ app.post('/v1/events/:id/documents', writeLimiter, pdfBody, async (request, resp
 app.delete('/v1/events/:id/documents/:documentId', writeLimiter, async (request, response, next) => {
   try {
     const publisher = parse(announcementTriggerInput, {
-      publisherAddress: request.query.wallet,
+      publisherAddress: request.query.wallet || request.get('x-wallet-address'),
     }).publisherAddress;
     await deleteEventDocument(
       request.params.id,
