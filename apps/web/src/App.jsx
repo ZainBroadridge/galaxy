@@ -142,7 +142,7 @@ export default function App() {
           </button>
           <NavLink
             to="/notifications"
-            className={({ isActive }) => `notification-control${isActive ? ' active' : ''}`}
+            className={({ isActive }) => `topbar-notifications${isActive ? ' active' : ''}`}
             aria-label="Notifications"
             title="Notifications"
           >

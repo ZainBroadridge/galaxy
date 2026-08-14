@@ -535,18 +535,20 @@ code { font-family: var(--font-mono); }
 }
 .network-control svg { width: 12px; height: 12px; stroke-width: 1.6; }
 .wallet-control {
-  min-width: 142px;
+  width: fit-content;
+  min-width: 0;
   min-height: var(--ui-button-height);
   height: var(--ui-button-height);
-  padding: 6px 8px;
-  gap: 4px;
+  padding: 6px 12px;
+  gap: 8px;
   border-radius: 4px;
   font-size: 14px;
   font-weight: 600;
 }
 .wallet-control.connected {
-  min-width: 180px;
-  max-width: 180px;
+  width: fit-content;
+  min-width: 0;
+  max-width: none;
   justify-content: center;
   gap: 8px;
   border-color: #6d757c;
@@ -1867,7 +1869,8 @@ textarea:focus {
   height: var(--ui-control-height);
 }
 .create-copy-grid textarea {
-  min-height: 86px;
+  min-height: var(--ui-control-height);
+  height: var(--ui-control-height);
 }
 .create-policy-grid {
   margin-top: -2px;
@@ -2046,12 +2049,12 @@ textarea:focus {
 }
 
 .create-token-input {
-  min-height: 56px;
+  min-height: var(--ui-control-height);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 58px;
+  grid-template-columns: minmax(0, 1fr) 40px;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
   transition: border-color .15s ease, box-shadow .15s ease;
 }
@@ -2066,9 +2069,9 @@ textarea:focus {
 }
 
 .create-token-input input {
-  min-height: 54px;
-  height: 54px;
-  padding: 0 16px;
+  min-height: calc(var(--ui-control-height) - 2px);
+  height: calc(var(--ui-control-height) - 2px);
+  padding: 7px 8px;
   border: 0;
   border-radius: 0;
   box-shadow: none;
@@ -2082,8 +2085,8 @@ textarea:focus {
 }
 
 .create-token-inspect-button {
-  min-width: 58px;
-  min-height: 54px;
+  min-width: 40px;
+  min-height: calc(var(--ui-control-height) - 2px);
   padding: 0;
   border: 0;
   border-left: 1px solid var(--line);
@@ -2111,8 +2114,8 @@ textarea:focus {
 }
 
 .create-token-inspect-button svg {
-  width: 23px;
-  height: 23px;
+  width: 17px;
+  height: 17px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -2123,16 +2126,16 @@ textarea:focus {
 .create-token-grid > label:nth-child(2) > input,
 .create-copy-grid input,
 .create-copy-grid textarea {
-  min-height: 56px;
-  height: 56px;
-  padding: 0 16px;
-  border-radius: 8px;
+  min-height: var(--ui-control-height);
+  height: var(--ui-control-height);
+  padding: 7px 8px;
+  border-radius: 4px;
 }
 
 .create-copy-grid textarea {
-  padding-top: 15px;
-  padding-bottom: 15px;
-  resize: vertical;
+  resize: none;
+  line-height: 20px;
+  overflow: hidden;
 }
 
 .create-token-grid label small {
@@ -2236,60 +2239,4 @@ textarea:focus {
     grid-column: 2;
     justify-self: start;
   }
-}
-
-/* Create Event — make Event Details controls match the rest of the form */
-
-.create-token-input {
-  min-height: var(--ui-control-height);
-  grid-template-columns: minmax(0, 1fr) 40px;
-  border-radius: 4px;
-}
-
-.create-token-input input {
-  min-height: calc(var(--ui-control-height) - 2px);
-  height: calc(var(--ui-control-height) - 2px);
-  padding: 7px 8px;
-}
-
-.create-token-inspect-button {
-  min-width: 40px;
-  min-height: calc(var(--ui-control-height) - 2px);
-}
-
-.create-token-inspect-button svg {
-  width: 17px;
-  height: 17px;
-}
-
-/* Ratio + title use the same normal input styling as other sections */
-.create-token-grid > label:nth-child(2) > input,
-.create-copy-grid input {
-  min-height: var(--ui-control-height);
-  height: var(--ui-control-height);
-  padding: 7px 8px;
-  border-radius: 4px;
-}
-
-/* Description behaves like the other textareas on the page */
-.create-copy-grid textarea {
-  min-height: var(--ui-control-height);
-  height: var(--ui-control-height);
-  padding: 7px 8px;
-  border-radius: 4px;
-  resize: none;
-  line-height: 20px;
-  overflow: hidden;
-}
-
-.wallet-control {
-  width: fit-content;
-  min-width: 0;
-  padding: 0 12px;
-  gap: 8px;
-}
-
-.wallet-control.connected {
-  width: fit-content;
-  min-width: 0;
 }
