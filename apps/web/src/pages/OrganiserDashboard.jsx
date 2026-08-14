@@ -309,7 +309,7 @@ export default function OrganiserDashboard() {
               required
             /><small>Voting power = whole tokens ÷ X</small></label>
           </div>
-          {token && <Notice tone="success">
+          {token && <Notice tone="success" className="token-inspection-result">
             {token.name} ({token.symbol}), {token.decimals} decimals. Standard ERC-20 interface confirmed.
           </Notice>}
           <div className="field-grid restored-event-copy-grid">

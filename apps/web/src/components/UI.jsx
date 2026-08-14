@@ -48,8 +48,8 @@ export function Panel({ title, children, className = '' }) {
   </section>;
 }
 
-export function Notice({ children, tone = 'info' }) {
-  return <div className={`notice ${tone}`} role={tone === 'error' ? 'alert' : undefined}>{children}</div>;
+export function Notice({ children, tone = 'info', className = '' }) {
+  return <div className={`notice ${tone} ${className}`.trim()} role={tone === 'error' ? 'alert' : undefined}>{children}</div>;
 }
 
 export function Spinner({ label = 'Loading' }) {
