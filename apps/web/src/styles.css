@@ -1904,22 +1904,37 @@ textarea:focus {
   font-weight: 400;
 }
 .restored-create-form .input-action {
-  grid-template-columns: minmax(0, 1fr) 38px;
-  align-items: stretch;
-  gap: 8px;
+  position: relative;
+  display: block;
 }
 .restored-create-form .input-action input,
 .restored-create-form .token-config-grid > label > input {
+  width: 100%;
   min-height: 42px;
   font-size: 15px;
 }
+.restored-create-form .input-action input {
+  padding-right: 42px;
+}
 .inspect-icon-button {
+  position: absolute;
+  top: 1px;
+  right: 1px;
   width: 38px;
-  min-height: 42px;
+  height: 40px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border: 0;
+  border-left: 1px solid #c7ced7;
+  border-radius: 0 3px 3px 0;
+  background: transparent;
+  color: #111827;
+}
+.inspect-icon-button:hover {
+  background: #f1f4f7;
+  color: var(--blue);
 }
 .inspect-icon-button svg {
   width: 18px;
