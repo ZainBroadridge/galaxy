@@ -39,6 +39,12 @@ function ClockIcon() {
   return <svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" /><path d="M9 5v4l2.5 1.5" /></svg>;
 }
 
+function DashboardEmptyIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M6.75 5.5h10.5v12H6.75zM4.5 17.5h15M9.25 12l1.75 1.75L15.25 9.5" />
+  </svg>;
+}
+
 export default function VotingDashboard() {
   const { account, connected, openWallet } = useWallet();
   const events = useLoad(
@@ -48,19 +54,21 @@ export default function VotingDashboard() {
     [account],
   );
 
-  return <Page
-    title="Voting Dashboard"
-    intro="Open proxy votes for which your connected wallet had voting power on the record date."
-    actions={<button className="button secondary compact" onClick={() => events.reload().catch(() => {})}>Refresh</button>}
-  >
-    {!connected && <Panel><Empty>
-      <p>Connect a wallet to discover eligible voting events.</p>
+  return <Page title="Voting Dashboard">
+    {!connected && <section className="wallet-gate-card">
+      <span className="wallet-gate-icon"><WalletIcon /></span>
+      <h2>Connect your wallet to continue</h2>
+      <p>Connect your wallet to see live voting events and your voting power for each one.</p>
       <button className="button" onClick={openWallet}>Connect wallet</button>
-    </Empty></Panel>}
+    </section>}
     <ErrorBox error={events.error} />
     {events.loading && connected ? <Spinner /> : null}
     {connected && !events.loading && !events.data?.length
-      ? <Panel><Empty>No ongoing eligible events.</Empty></Panel>
+      ? <section className="dashboard-empty-state">
+          <span className="dashboard-empty-icon"><DashboardEmptyIcon /></span>
+          <h2>No live voting events</h2>
+          <p>There are no ongoing events with a deployed contract right now.<br />Once an organizer takes a snapshot and deploys a VoteEvent, it will appear here.</p>
+        </section>
       : null}
     <div className="card-grid voting-card-grid">{events.data?.map((event) => <EventCard
       key={event.id}

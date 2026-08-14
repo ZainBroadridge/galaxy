@@ -56,6 +56,20 @@ function validateDocuments(files, existingCount = 0) {
   return selected;
 }
 
+
+function DocumentIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M6.5 3.5h7l4 4v13H6.5z" />
+    <path d="M13.5 3.5v4h4M9 12h6M9 15.5h6" />
+  </svg>;
+}
+
+function AnnouncementIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M4 13.5V9.75l11-4.25v12.25zM15 8.25h2.25A2.75 2.75 0 0 1 20 11v1.25A2.75 2.75 0 0 1 17.25 15H15M7 14.5l1.25 5h3l-1.5-5" />
+  </svg>;
+}
+
 function DocumentSelection({ files, onRemove }) {
   if (!files.length) return null;
   return <div className="selected-documents">
@@ -173,12 +187,21 @@ export default function OrganiserDashboard() {
     setError(null);
     setToken(null);
     try {
-      await wallet.ensureAuthenticated();
+      // This form is rendered only after the organizer has explicitly unlocked
+      // the portal. Reuse that session rather than opening a wallet signature
+      // prompt from an ordinary form control.
       setToken(await api('/v1/tokens/inspect', {
         method: 'POST',
         body: { tokenAddress: form.tokenAddress },
       }));
-    } catch (value) { setError(value); }
+    } catch (value) {
+      if (value?.status === 401) {
+        await wallet.logoutPortal();
+        setError(new Error('Organizer access expired. Unlock the organizer once, then inspect the token again.'));
+      } else {
+        setError(value);
+      }
+    }
   }
 
   function chooseDocuments(event) {
@@ -197,7 +220,10 @@ export default function OrganiserDashboard() {
     setBusyStage('Creating event…');
     setError(null);
     try {
-      await wallet.ensureAuthenticated();
+      // The organizer portal is explicitly unlocked before this form is shown.
+      // Do not call ensureAuthenticated here: Create Event must never open a
+      // second MetaMask signature request. The existing session token is used
+      // by api(); an expired session returns to the explicit unlock screen.
       const created = await api('/v1/events', {
         method: 'POST',
         body: {
@@ -211,17 +237,7 @@ export default function OrganiserDashboard() {
 
       const warnings = [];
       if (created.announcementDraft) {
-        setBusyStage('Authorising event announcement…');
-        try {
-          const signer = await wallet.getSigner();
-          const signature = await signer.signMessage(created.announcementDraft.signingMessage);
-          await api(`/v1/events/${created.event.id}/announcement`, {
-            method: 'PUT',
-            body: { signature },
-          });
-        } catch (value) {
-          warnings.push('Automatic Wallet Comms announcement was not authorised. It can be authorised from Manage Event.');
-        }
+        warnings.push('Automatic Wallet Comms announcement is ready for optional authorisation from Manage Event. No additional signature was requested during event creation.');
       }
 
       if (documents.length) {
@@ -239,7 +255,12 @@ export default function OrganiserDashboard() {
         },
       });
     } catch (value) {
-      setError(value);
+      if (value?.status === 401) {
+        await wallet.logoutPortal();
+        setError(new Error('Organizer access expired. Unlock the organizer once, then submit again. Creating the event itself never requests a wallet signature.'));
+      } else {
+        setError(value);
+      }
     } finally {
       setBusyStage('');
     }
@@ -352,7 +373,7 @@ export default function OrganiserDashboard() {
           <label>Voting end<input type="datetime-local" value={form.votingEndAt} onChange={(event) => setForm({ ...form, votingEndAt: event.target.value })} required /></label>
           <label>Record date<input type="datetime-local" max={localDate(new Date())} value={form.recordDateAt} onChange={(event) => setForm({ ...form, recordDateAt: event.target.value })} required /></label>
         </div>
-        <div className="field-grid three">
+        <div className="field-grid two create-access-fields">
           <label>Authenticity<select value={form.authenticityClaim} onChange={(event) => setForm({ ...form, authenticityClaim: event.target.value })}>
             <option value="COMMUNITY">Community-created</option>
             <option value="ISSUER_AUTHORIZED">Issuer-authorized claim</option>
@@ -362,23 +383,63 @@ export default function OrganiserDashboard() {
             <option value="SUBSCRIBERS_ONLY">Subscribed holders</option>
             <option value="DIRECT_LINK">Direct link only</option>
           </select></label>
-          <label>Wallet communications<select value={form.snapDeliveryMode} onChange={(event) => setForm({ ...form, snapDeliveryMode: event.target.value })}>
-            <option value="ELIGIBLE">Eligible holders</option>
-            <option value="SUBSCRIBERS_ONLY">Subscribers only</option>
-            <option value="DISABLED">Disabled</option>
-          </select></label>
         </div>
 
-        <div className="optional-upload">
-          <div>
-            <strong>Proxy voting documents</strong>
-            <small>Optional. Up to three PDFs, 10 MB each.</small>
-          </div>
-          <label className="button secondary compact file-button">
-            Select PDFs
-            <input type="file" accept="application/pdf,.pdf" multiple onChange={chooseDocuments} />
-          </label>
+      </section>
+
+      <section className="form-section-card create-resources-section">
+        <header className="form-section-heading">
+          <h2>Documents &amp; communications</h2>
+          <p>Add voter materials and configure the automatic event notice without interrupting event creation.</p>
+        </header>
+
+        <div className="create-support-grid">
+          <section className="create-support-card document-select-card">
+            <div className="create-support-card-main">
+              <span className="create-support-icon"><DocumentIcon /></span>
+              <div className="create-support-copy">
+                <div className="create-support-title-line">
+                  <strong>Proxy voting documents</strong>
+                  <span className="support-badge">Optional</span>
+                </div>
+                <small>Give voters the supporting material they need before opening and submitting the ballot.</small>
+              </div>
+            </div>
+            <div className="create-support-control">
+              <div className="create-support-meta" aria-label="PDF upload limits">
+                <span>PDF only</span>
+                <span>Up to 3 files</span>
+                <span>10 MB each</span>
+              </div>
+              <label className="button secondary file-button">
+                {documents.length ? `${documents.length} PDF${documents.length === 1 ? '' : 's'} selected` : 'Select PDFs'}
+                <input type="file" accept="application/pdf,.pdf" multiple onChange={chooseDocuments} />
+              </label>
+            </div>
+          </section>
+
+          <section className="create-support-card comms-create-card">
+            <div className="create-support-card-main">
+              <span className="create-support-icon"><AnnouncementIcon /></span>
+              <div className="create-support-copy">
+                <div className="create-support-title-line">
+                  <strong>Automatic Wallet Comms announcement</strong>
+                  <span className="support-badge">After deployment</span>
+                </div>
+                <small>Prepare an organiser-signed event notice for the selected investor audience.</small>
+              </div>
+            </div>
+            <div className="create-support-control">
+              <label className="support-field"><span>Announcement audience</span><select value={form.snapDeliveryMode} onChange={(event) => setForm({ ...form, snapDeliveryMode: event.target.value })}>
+                <option value="ELIGIBLE">Eligible holders</option>
+                <option value="SUBSCRIBERS_ONLY">Subscribers only</option>
+                <option value="DISABLED">Disabled</option>
+              </select></label>
+              <p className="create-support-note">Creating the event never requests a MetaMask signature. Authorisation remains an explicit action on Manage Event.</p>
+            </div>
+          </section>
         </div>
+
         <DocumentSelection
           files={documents}
           onRemove={(index) => setDocuments((current) => current.filter((_file, position) => position !== index))}
@@ -523,6 +584,18 @@ export function OrganiserEventPage() {
   const documentSlots = Math.max(0, MAX_DOCUMENTS - (event.documents?.length ?? 0));
   const canAuthoriseAnnouncement = event.announcementStatus === 'AWAITING_SIGNATURE'
     || (event.announcementStatus === 'QUEUED' && event.contractReady);
+  const announcementHeading = event.announcementStatus === 'AWAITING_SIGNATURE'
+    ? 'Ready for optional authorisation'
+    : event.announcementStatus === 'QUEUED'
+      ? (event.contractReady ? 'Publication needs attention' : 'Authorised and queued')
+      : 'Announcement published';
+  const announcementMessage = event.announcementStatus === 'AWAITING_SIGNATURE'
+    ? 'Authorise this organiser-signed notice whenever you are ready. Event creation and deployment do not depend on this step.'
+    : event.announcementStatus === 'QUEUED'
+      ? (event.contractReady
+          ? 'The contract is deployed, but the announcement needs a manual publication retry.'
+          : 'The notice is authorised and will publish automatically after deployment.')
+      : 'The event notice has been published to the selected Wallet Comms audience.';
 
   return <Page
     title={event.title}
@@ -574,23 +647,27 @@ export function OrganiserEventPage() {
       {event.verificationError && <Notice tone="error">{event.verificationError}</Notice>}
     </Panel>
 
-    {!['DISABLED', 'NOT_CONFIGURED'].includes(event.announcementStatus) && <Panel title="Automatic Wallet Comms announcement">
-      <div className="status-line"><Status value={event.announcementStatus} /><span>
-        {event.announcementStatus === 'AWAITING_SIGNATURE'
-          ? 'Authorise once; the announcement publishes automatically after deployment.'
-          : event.announcementStatus === 'QUEUED'
-            ? (event.contractReady
-                ? 'Deployment is complete, but publication needs a manual retry.'
-                : 'Authorised and waiting for deployment.')
-            : 'Published to the selected Wallet Comms audience.'}
-      </span></div>
-      {canAuthoriseAnnouncement && <button
-        className="button secondary"
-        onClick={authoriseAnnouncement}
-        disabled={announcementBusy}
-      >{announcementBusy
-        ? 'Authorising…'
-        : event.announcementStatus === 'QUEUED' ? 'Retry announcement' : 'Authorise announcement'}</button>}
+    {!['DISABLED', 'NOT_CONFIGURED'].includes(event.announcementStatus) && <Panel
+      title="Automatic Wallet Comms announcement"
+      className="announcement-panel"
+    >
+      <div className="announcement-card-layout">
+        <span className="announcement-card-icon"><AnnouncementIcon /></span>
+        <div className="announcement-card-copy">
+          <div className="announcement-card-title-line">
+            <Status value={event.announcementStatus} />
+            <h3>{announcementHeading}</h3>
+          </div>
+          <p>{announcementMessage}</p>
+        </div>
+        {canAuthoriseAnnouncement && <button
+          className="button secondary announcement-card-action"
+          onClick={authoriseAnnouncement}
+          disabled={announcementBusy}
+        >{announcementBusy
+          ? 'Authorising…'
+          : event.announcementStatus === 'QUEUED' ? 'Retry announcement' : 'Authorise announcement'}</button>}
+      </div>
       {announcementFeedback && <Notice tone={announcementFeedback.tone}>{announcementFeedback.message}</Notice>}
     </Panel>}
 
@@ -605,12 +682,16 @@ export function OrganiserEventPage() {
             </div>
           </div>)}</div>
         : <p className="muted">No proxy voting documents have been added.</p>}
-      {documentSlots > 0 && <div className="document-upload-row">
-        <label className="button tertiary file-button">
+      {documentSlots > 0 && <div className="document-upload-callout">
+        <span className="document-upload-icon"><DocumentIcon /></span>
+        <div>
+          <strong>Add supporting PDFs</strong>
+          <small>{documentSlots} document slot{documentSlots === 1 ? '' : 's'} available · 10 MB maximum per PDF</small>
+        </div>
+        <label className="button secondary compact file-button">
           Select PDF{documentSlots > 1 ? 's' : ''}
           <input type="file" accept="application/pdf,.pdf" multiple={documentSlots > 1} onChange={chooseAdditionalDocuments} />
         </label>
-        <span className="muted">{documentSlots} slot{documentSlots === 1 ? '' : 's'} available</span>
       </div>}
       <DocumentSelection
         files={documentFiles}

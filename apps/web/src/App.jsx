@@ -16,7 +16,6 @@ const primaryNavigation = [
   ['/voting', 'Voting Dashboard'],
   ['/results', 'Results'],
   ['/organiser', 'Organizer'],
-  ['/comms', 'Wallet Comms'],
 ];
 
 function shortAddress(value) {
@@ -45,6 +44,12 @@ function ChevronIcon() {
 
 function PlusIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg>;
+}
+
+function BellIcon() {
+  return <svg viewBox="0 0 20 20" aria-hidden="true">
+    <path d="M15 8a5 5 0 0 0-10 0c0 5.5-2.25 5.5-2.25 7h14.5c0-1.5-2.25-1.5-2.25-7ZM8.25 17h3.5" />
+  </svg>;
 }
 
 export default function App() {
@@ -109,7 +114,6 @@ export default function App() {
           <nav aria-label="Primary navigation">
             <NavLink className="nav-home" to="/" end>Home</NavLink>
             {primaryNavigation.map(([to, label]) => {
-              const notifications = to === '/comms';
               const voteRouteActive = to === '/voting' && location.pathname.startsWith('/vote/');
               return <NavLink
                 key={to}
@@ -117,12 +121,20 @@ export default function App() {
                 className={({ isActive }) => (isActive || voteRouteActive ? 'active' : undefined)}
               >
                 <span>{label}</span>
-                {notifications && unreadCount > 0 && <span
-                  className="notification-badge"
-                  aria-label={`${unreadCount} unread notifications`}
-                >{unreadCount > 99 ? '99+' : unreadCount}</span>}
               </NavLink>;
             })}
+            <NavLink
+              to="/comms"
+              className={({ isActive }) => `nav-comms-icon${isActive ? ' active' : ''}`}
+              aria-label="Wallet Comms"
+              title="Wallet Comms"
+            >
+              <BellIcon />
+              {unreadCount > 0 && <span
+                className="notification-badge"
+                aria-label={`${unreadCount} unread notifications`}
+              >{unreadCount > 99 ? '99+' : unreadCount}</span>}
+            </NavLink>
           </nav>
         </div>
 
