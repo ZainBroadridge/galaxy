@@ -360,7 +360,6 @@ export default function OrganiserDashboard() {
             <div className="restored-resource-card">
               <span className="create-support-icon"><AnnouncementIcon /></span>
               <div><strong>Automatic event announcement</strong><small>Publishes after deployment to {form.snapDeliveryMode === 'ELIGIBLE' ? 'eligible holders' : form.snapDeliveryMode === 'SUBSCRIBERS_ONLY' ? 'subscribers' : 'no audience (disabled)'}</small></div>
-              <span className="support-badge">No signature</span>
             </div>
           </div>
           <DocumentSelection
