@@ -2237,3 +2237,45 @@ textarea:focus {
     justify-self: start;
   }
 }
+
+/* Create Event — make Event Details controls match the rest of the form */
+
+.create-token-input {
+  min-height: var(--ui-control-height);
+  grid-template-columns: minmax(0, 1fr) 40px;
+  border-radius: 4px;
+}
+
+.create-token-input input {
+  min-height: calc(var(--ui-control-height) - 2px);
+  height: calc(var(--ui-control-height) - 2px);
+  padding: 7px 8px;
+}
+
+.create-token-inspect-button {
+  min-width: 40px;
+  min-height: calc(var(--ui-control-height) - 2px);
+}
+
+.create-token-inspect-button svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* Ratio + title use the same normal input styling as other sections */
+.create-token-grid > label:nth-child(2) > input,
+.create-copy-grid input {
+  min-height: var(--ui-control-height);
+  height: var(--ui-control-height);
+  padding: 7px 8px;
+  border-radius: 4px;
+}
+
+/* Description behaves like the other textareas on the page */
+.create-copy-grid textarea {
+  min-height: 80px;
+  height: auto;
+  padding: 7px 8px;
+  border-radius: 4px;
+  resize: vertical;
+}
