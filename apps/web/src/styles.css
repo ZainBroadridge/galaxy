@@ -2281,3 +2281,15 @@ textarea:focus {
   line-height: 20px;
   overflow: hidden;
 }
+
+.wallet-control {
+  width: fit-content;
+  min-width: 0;
+  padding: 0 12px;
+  gap: 8px;
+}
+
+.wallet-control.connected {
+  width: fit-content;
+  min-width: 0;
+}
