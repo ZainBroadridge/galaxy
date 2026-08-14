@@ -49,6 +49,14 @@ export const eventInput = z.object({
   });
 });
 
+export const publicEventInput = eventInput.and(z.object({
+  creatorAddress: address,
+}));
+
+export const publicCreatorInput = z.object({
+  publisherAddress: address,
+});
+
 export const voteInput = z.object({
   voterAddress: address,
   choices: z.array(z.number().int().min(0).max(MAX_OPTIONS - 1)).min(1).max(MAX_PROPOSALS),
@@ -133,6 +141,12 @@ export const publicSubscriptionInput = subscriptionInput.extend({
 export const platformCommunicationInput = communicationFields.extend({
   publisherAddress: address,
   audience: eventAudience,
+}).superRefine(validateCommunicationDates);
+
+export const platformTokenCommunicationInput = communicationFields.extend({
+  publisherAddress: address,
+  tokenAddress: address,
+  audience: tokenAudience,
 }).superRefine(validateCommunicationDates);
 
 export const announcementTriggerInput = z.object({

@@ -123,18 +123,6 @@ export default function App() {
                 <span>{label}</span>
               </NavLink>;
             })}
-            <NavLink
-              to="/notifications"
-              className={({ isActive }) => `nav-comms-icon${isActive ? ' active' : ''}`}
-              aria-label="Notifications"
-              title="Notifications"
-            >
-              <BellIcon />
-              {unreadCount > 0 && <span
-                className="notification-badge"
-                aria-label={`${unreadCount} unread notifications`}
-              >{unreadCount > 99 ? '99+' : unreadCount}</span>}
-            </NavLink>
           </nav>
         </div>
 
@@ -152,6 +140,18 @@ export default function App() {
             <span className="network-control-label">{networkBusy ? 'Opening wallet…' : 'Polygon Amoy Testnet'}</span>
             <span className="network-add-icon"><PlusIcon /></span>
           </button>
+          <NavLink
+            to="/notifications"
+            className={({ isActive }) => `notification-control${isActive ? ' active' : ''}`}
+            aria-label="Notifications"
+            title="Notifications"
+          >
+            <BellIcon />
+            {unreadCount > 0 && <span
+              className="notification-badge"
+              aria-label={`${unreadCount} unread notifications`}
+            >{unreadCount > 99 ? '99+' : unreadCount}</span>}
+          </NavLink>
           <button
             className={`wallet-control${wallet.connected ? ' connected' : ''}`}
             type="button"

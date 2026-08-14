@@ -78,12 +78,14 @@ export function apiBlob(path, options = {}) {
   return request(path, options, 'blob');
 }
 
-export function uploadEventPdf(eventId, file) {
+export function uploadEventPdf(eventId, file, walletAddress) {
   return api(`/v1/events/${eventId}/documents`, {
     method: 'POST',
+    auth: false,
     headers: {
       'content-type': 'application/pdf',
       'x-file-name': encodeURIComponent(file.name),
+      ...(walletAddress ? { 'x-wallet-address': walletAddress } : {}),
     },
     body: file,
   });

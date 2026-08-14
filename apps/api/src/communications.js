@@ -114,6 +114,19 @@ async function insertEventCommunication(event, message, signature) {
   );
 }
 
+async function insertTokenCommunication(message, signature) {
+  await query(
+    `INSERT INTO communications(
+       message_id,event_id,scope,chain_id,token_address,token_name,token_symbol,creator_address,authenticity_status,
+       category,audience,title,body,action_url,published_at,expires_at,creator_signature
+     ) VALUES ($1,NULL,'TOKEN',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+     ON CONFLICT(message_id) DO NOTHING`,
+    [message.messageId, message.chainId, message.tokenAddress, message.tokenName, message.tokenSymbol,
+      message.creatorAddress, message.authenticityStatus, message.category, message.audience, message.title,
+      message.body, message.actionUrl, message.publishedAt, message.expiresAt, signature],
+  );
+}
+
 export async function draftCommunication(eventId, wallet, input) {
   const event = await getEventRow(eventId);
   if (event.creator_address !== normalizeAddress(wallet)) throw new HttpError(403, 'Only the event creator can publish communications.', 'FORBIDDEN');
@@ -158,6 +171,27 @@ export async function publishPlatformCommunication(eventId, input) {
   return { ...message, signature, issuedBy: 'PLATFORM' };
 }
 
+export async function publishPlatformTokenCommunication(input) {
+  const publisher = normalizeAddress(input.publisherAddress, 'publisherAddress');
+  const token = await inspectToken(input.tokenAddress);
+  const authenticityStatus = tokenAuthenticity(token, publisher, input.audience);
+  validateActionUrl(input.actionUrl);
+  const message = tokenMessageFor(
+    token,
+    relayer.address.toLowerCase(),
+    authenticityStatus,
+    input,
+  );
+  const signature = await relayer.signMessage(buildTokenCommunicationSigningMessage(message));
+  await insertTokenCommunication(message, signature);
+  return {
+    ...message,
+    signature,
+    issuedBy: 'PLATFORM',
+    publisherAddress: publisher,
+  };
+}
+
 export async function draftTokenCommunication(wallet, input) {
   const creator = normalizeAddress(wallet);
   const token = await inspectToken(input.tokenAddress);
@@ -179,16 +213,7 @@ export async function publishTokenCommunication(wallet, input) {
   let signer;
   try { signer = normalizeAddress(verifyMessage(buildTokenCommunicationSigningMessage(expected), input.signature)); } catch { signer = null; }
   if (signer !== creator) throw new HttpError(401, 'Communication signature is invalid.', 'INVALID_SIGNATURE');
-  await query(
-    `INSERT INTO communications(
-       message_id,event_id,scope,chain_id,token_address,token_name,token_symbol,creator_address,authenticity_status,
-       category,audience,title,body,action_url,published_at,expires_at,creator_signature
-     ) VALUES ($1,NULL,'TOKEN',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-     ON CONFLICT(message_id) DO NOTHING`,
-    [expected.messageId, expected.chainId, expected.tokenAddress, expected.tokenName, expected.tokenSymbol,
-      expected.creatorAddress, expected.authenticityStatus, expected.category, expected.audience, expected.title,
-      expected.body, expected.actionUrl, expected.publishedAt, expected.expiresAt, input.signature],
-  );
+  await insertTokenCommunication(expected, input.signature);
   return expected;
 }
 

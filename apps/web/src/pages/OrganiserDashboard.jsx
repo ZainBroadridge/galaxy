@@ -165,8 +165,10 @@ export default function OrganiserDashboard() {
   const navigate = useNavigate();
   const wallet = useWallet();
   const events = useLoad(
-    () => (wallet.authenticated ? api('/v1/dashboard/organiser') : Promise.resolve([])),
-    [wallet.authenticated, wallet.account],
+    () => (wallet.account
+      ? api(`/v1/dashboard/organiser?wallet=${encodeURIComponent(wallet.account)}`, { auth: false })
+      : Promise.resolve([])),
+    [wallet.account],
   );
   const [form, setForm] = useState(initialForm);
   const [documents, setDocuments] = useState([]);
@@ -175,33 +177,16 @@ export default function OrganiserDashboard() {
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
 
-  async function unlock() {
-    setError(null);
-    try {
-      await wallet.ensureAuthenticated();
-      await events.reload();
-    } catch (value) { setError(value); }
-  }
-
   async function inspect() {
     setError(null);
     setToken(null);
     try {
-      // This form is rendered only after the organizer has explicitly unlocked
-      // the portal. Reuse that session rather than opening a wallet signature
-      // prompt from an ordinary form control.
       setToken(await api('/v1/tokens/inspect', {
         method: 'POST',
+        auth: false,
         body: { tokenAddress: form.tokenAddress },
       }));
-    } catch (value) {
-      if (value?.status === 401) {
-        await wallet.logoutPortal();
-        setError(new Error('Organizer access expired. Unlock the organizer once, then inspect the token again.'));
-      } else {
-        setError(value);
-      }
-    }
+    } catch (value) { setError(value); }
   }
 
   function chooseDocuments(event) {
@@ -217,16 +202,15 @@ export default function OrganiserDashboard() {
 
   async function submit(event) {
     event.preventDefault();
+    if (!wallet.account) return;
     setBusyStage('Creating event…');
     setError(null);
     try {
-      // The organizer portal is explicitly unlocked before this form is shown.
-      // Do not call ensureAuthenticated here: Create Event must never open a
-      // second MetaMask signature request. The existing session token is used
-      // by api(); an expired session returns to the explicit unlock screen.
       const created = await api('/v1/events', {
         method: 'POST',
+        auth: false,
         body: {
+          creatorAddress: wallet.account,
           ...form,
           recordDateAt: iso(form.recordDateAt),
           votingStartAt: iso(form.votingStartAt),
@@ -236,11 +220,10 @@ export default function OrganiserDashboard() {
       });
 
       const warnings = [];
-
       if (documents.length) {
         setBusyStage('Uploading proxy voting documents…');
         for (const file of documents) {
-          try { await uploadEventPdf(created.event.id, file); }
+          try { await uploadEventPdf(created.event.id, file, wallet.account); }
           catch { warnings.push(`${file.name} could not be uploaded. It can be added from Manage Event.`); }
         }
       }
@@ -252,12 +235,7 @@ export default function OrganiserDashboard() {
         },
       });
     } catch (value) {
-      if (value?.status === 401) {
-        await wallet.logoutPortal();
-        setError(new Error('Organizer access expired. Unlock the organizer once, then submit again. Creating the event itself never requests a wallet signature.'));
-      } else {
-        setError(value);
-      }
+      setError(value);
     } finally {
       setBusyStage('');
     }
@@ -272,16 +250,6 @@ export default function OrganiserDashboard() {
     </Page>;
   }
 
-  if (!wallet.authenticated) {
-    return <Page title="Organizer">
-      <ErrorBox error={error} />
-      <Panel><Empty>
-        <p>Authenticate once to unlock organizer actions.</p>
-        <button className="button" onClick={unlock} disabled={wallet.authBusy}>Unlock organizer</button>
-      </Empty></Panel>
-    </Page>;
-  }
-
   if (!creating) {
     return <Page
       className="organiser-index-page"
@@ -289,7 +257,7 @@ export default function OrganiserDashboard() {
       intro={`${events.data?.length ?? 0} event${events.data?.length === 1 ? '' : 's'} created by this wallet`}
       actions={<button className="button" type="button" onClick={() => setCreating(true)}>Create Voting Event</button>}
     >
-      <ErrorBox error={error} />
+      <ErrorBox error={events.error || error} />
       {events.loading
         ? <Spinner />
         : events.data?.length
@@ -308,152 +276,105 @@ export default function OrganiserDashboard() {
     </Page>;
   }
 
-  return <main className="page organiser-create-page">
+  return <main className="page organiser-create-page organiser-create-restored">
     <button className="back-link-button" type="button" onClick={() => setCreating(false)}>← Back to your events</button>
-    <header className="organiser-create-heading">
-      <h1>Create Voting Event</h1>
-    </header>
-
+    <header className="organiser-create-heading"><h1>Create Voting Event</h1></header>
     <ErrorBox error={error} />
-    <form className="form organiser-create-form" onSubmit={submit}>
-      <section className="form-section-card">
-        <header className="form-section-heading">
-          <span className="form-section-step">1</span>
-          <div><h2>Event details</h2><p>Identify the token and define the voting event shown to eligible holders.</p></div>
-        </header>
-        <div className="field-grid token-config-grid">
-          <label>ERC-20 token address<div className="input-action">
-            <input
-              value={form.tokenAddress}
-              onChange={(event) => {
-                setForm({ ...form, tokenAddress: event.target.value });
-                setToken(null);
-              }}
-              placeholder="0x…"
+
+    <Panel title="Create event" className="create-event-shell">
+      <form className="form organiser-create-form restored-create-form" onSubmit={submit}>
+        <section className="restored-form-block">
+          <header><h3>Event details</h3><p>Choose the ERC-20 token and describe the voting event shown to eligible holders.</p></header>
+          <div className="field-grid two token-config-grid">
+            <label>ERC-20 token address<div className="input-action">
+              <input
+                value={form.tokenAddress}
+                onChange={(event) => {
+                  setForm({ ...form, tokenAddress: event.target.value });
+                  setToken(null);
+                }}
+                placeholder="0x…"
+                required
+              />
+              <button type="button" className="button secondary compact" onClick={inspect}>Inspect</button>
+            </div></label>
+            <label>Token-to-vote ratio<input
+              type="number"
+              min="1"
+              step="1"
+              value={form.tokenToVoteRatio}
+              onChange={(event) => setForm({ ...form, tokenToVoteRatio: event.target.value })}
               required
-            />
-            <button type="button" className="button secondary compact" onClick={inspect}>Inspect</button>
-          </div></label>
-          <label>Token-to-vote ratio<input
-            type="number"
-            min="1"
-            step="1"
-            value={form.tokenToVoteRatio}
-            onChange={(event) => setForm({ ...form, tokenToVoteRatio: event.target.value })}
-            required
-          /><small>Voting power = whole tokens ÷ X</small></label>
-        </div>
-        {token && <Notice tone="success">
-          {token.name} ({token.symbol}), {token.decimals} decimals. Standard ERC-20 interface confirmed.
-        </Notice>}
-        <div className="field-grid event-copy-grid">
-          <label>Event title<input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
-          <label>Description<textarea rows="3" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Explain the purpose of the vote and any context holders should know." /></label>
-        </div>
-      </section>
+            /><small>Voting power = whole tokens ÷ X</small></label>
+          </div>
+          {token && <Notice tone="success">
+            {token.name} ({token.symbol}), {token.decimals} decimals. Standard ERC-20 interface confirmed.
+          </Notice>}
+          <div className="field-grid restored-event-copy-grid">
+            <label>Event title<input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
+            <label>Description<textarea rows="3" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Explain the purpose of the vote and any context holders should know." /></label>
+          </div>
+        </section>
 
-      <section className="form-section-card">
-        <header className="form-section-heading">
-          <span className="form-section-step">2</span>
-          <div><h2>Proposals</h2><p>Define each resolution, its available options, and an optional board recommendation.</p></div>
-        </header>
-        <ProposalEditor proposals={form.proposals} onChange={(proposals) => setForm({ ...form, proposals })} />
-      </section>
+        <section className="restored-form-block">
+          <header><h3>Proposals</h3><p>Define each resolution, its available options, and an optional recommendation.</p></header>
+          <ProposalEditor proposals={form.proposals} onChange={(proposals) => setForm({ ...form, proposals })} />
+        </section>
 
-      <section className="form-section-card">
-        <header className="form-section-heading">
-          <span className="form-section-step">3</span>
-          <div><h2>Schedule &amp; eligibility</h2><p>Set the record date, voting window, discovery, and notification audience.</p></div>
-        </header>
-        <div className="field-grid three schedule-grid">
-          <label>Voting start<input type="datetime-local" value={form.votingStartAt} onChange={(event) => setForm({ ...form, votingStartAt: event.target.value })} required /></label>
-          <label>Voting end<input type="datetime-local" value={form.votingEndAt} onChange={(event) => setForm({ ...form, votingEndAt: event.target.value })} required /></label>
-          <label>Record date<input type="datetime-local" max={localDate(new Date())} value={form.recordDateAt} onChange={(event) => setForm({ ...form, recordDateAt: event.target.value })} required /></label>
-        </div>
-        <div className="field-grid three create-access-fields">
-          <label>Authenticity<select value={form.authenticityClaim} onChange={(event) => setForm({ ...form, authenticityClaim: event.target.value })}>
-            <option value="COMMUNITY">Community-created</option>
-            <option value="ISSUER_AUTHORIZED">Issuer-authorized claim</option>
-          </select></label>
-          <label>Discovery<select value={form.discoveryMode} onChange={(event) => setForm({ ...form, discoveryMode: event.target.value })}>
-            <option value="PUBLIC_ELIGIBLE">Eligible holders</option>
-            <option value="SUBSCRIBERS_ONLY">Subscribed holders</option>
-            <option value="DIRECT_LINK">Direct link only</option>
-          </select></label>
-          <label>Notification audience<select value={form.snapDeliveryMode} onChange={(event) => setForm({ ...form, snapDeliveryMode: event.target.value })}>
-            <option value="ELIGIBLE">Eligible holders</option>
-            <option value="SUBSCRIBERS_ONLY">Subscribers only</option>
-            <option value="DISABLED">Disabled</option>
-          </select></label>
-        </div>
+        <section className="restored-form-block">
+          <header><h3>Schedule &amp; eligibility</h3><p>Set the record date, voting window, discovery, and notification audience.</p></header>
+          <div className="field-grid three schedule-grid">
+            <label>Voting start<input type="datetime-local" value={form.votingStartAt} onChange={(event) => setForm({ ...form, votingStartAt: event.target.value })} required /></label>
+            <label>Voting end<input type="datetime-local" value={form.votingEndAt} onChange={(event) => setForm({ ...form, votingEndAt: event.target.value })} required /></label>
+            <label>Record date<input type="datetime-local" max={localDate(new Date())} value={form.recordDateAt} onChange={(event) => setForm({ ...form, recordDateAt: event.target.value })} required /></label>
+          </div>
+          <div className="field-grid three create-access-fields">
+            <label>Authenticity<select value={form.authenticityClaim} onChange={(event) => setForm({ ...form, authenticityClaim: event.target.value })}>
+              <option value="COMMUNITY">Community-created</option>
+              <option value="ISSUER_AUTHORIZED">Issuer-authorized claim</option>
+            </select></label>
+            <label>Discovery<select value={form.discoveryMode} onChange={(event) => setForm({ ...form, discoveryMode: event.target.value })}>
+              <option value="PUBLIC_ELIGIBLE">Eligible holders</option>
+              <option value="SUBSCRIBERS_ONLY">Subscribed holders</option>
+              <option value="DIRECT_LINK">Direct link only</option>
+            </select></label>
+            <label>Notification audience<select value={form.snapDeliveryMode} onChange={(event) => setForm({ ...form, snapDeliveryMode: event.target.value })}>
+              <option value="ELIGIBLE">Eligible holders</option>
+              <option value="SUBSCRIBERS_ONLY">Subscribers only</option>
+              <option value="DISABLED">Disabled</option>
+            </select></label>
+          </div>
+        </section>
 
-      </section>
-
-      <section className="form-section-card create-resources-section">
-        <header className="form-section-heading">
-          <span className="form-section-step">4</span>
-          <div><h2>Documents &amp; notifications</h2><p>Add voter materials and confirm how the automatic event notice will be delivered.</p></div>
-        </header>
-
-        <div className="create-support-grid">
-          <section className="create-support-card document-select-card">
-            <div className="create-support-card-main">
+        <section className="restored-form-block restored-resources-block">
+          <header><h3>Documents &amp; notifications</h3><p>Add supporting voter material and review the automatic announcement behavior.</p></header>
+          <div className="restored-resource-grid">
+            <div className="restored-resource-card">
               <span className="create-support-icon"><DocumentIcon /></span>
-              <div className="create-support-copy">
-                <div className="create-support-title-line">
-                  <strong>Proxy voting documents</strong>
-                  <span className="support-badge">Optional</span>
-                </div>
-                <small>Give voters the supporting material they need before opening and submitting the ballot.</small>
-              </div>
-            </div>
-            <div className="create-support-control">
-              <div className="create-support-meta" aria-label="PDF upload limits">
-                <span>PDF only</span>
-                <span>Up to 3 files</span>
-                <span>10 MB each</span>
-              </div>
-              <label className="button secondary file-button">
-                {documents.length ? `${documents.length} PDF${documents.length === 1 ? '' : 's'} selected` : 'Select PDFs'}
+              <div><strong>Proxy voting documents</strong><small>Optional · Up to three PDF files · 10 MB each</small></div>
+              <label className="button secondary compact file-button">
+                {documents.length ? `${documents.length} selected` : 'Select PDFs'}
                 <input type="file" accept="application/pdf,.pdf" multiple onChange={chooseDocuments} />
               </label>
             </div>
-          </section>
-
-          <section className="create-support-card comms-create-card">
-            <div className="create-support-card-main">
+            <div className="restored-resource-card">
               <span className="create-support-icon"><AnnouncementIcon /></span>
-              <div className="create-support-copy">
-                <div className="create-support-title-line">
-                  <strong>Automatic event announcement</strong>
-                  <span className="support-badge">After deployment</span>
-                </div>
-                <small>The platform publishes the event notice automatically as soon as the VoteEvent contract is deployed.</small>
-              </div>
+              <div><strong>Automatic event announcement</strong><small>Publishes after deployment to {form.snapDeliveryMode === 'ELIGIBLE' ? 'eligible holders' : form.snapDeliveryMode === 'SUBSCRIBERS_ONLY' ? 'subscribers' : 'no audience (disabled)'}</small></div>
+              <span className="support-badge">No signature</span>
             </div>
-            <div className="create-support-control">
-              <div className="notification-delivery-summary">
-                <span>Delivery</span>
-                <strong>{form.snapDeliveryMode === 'ELIGIBLE' ? 'Eligible holders' : form.snapDeliveryMode === 'SUBSCRIBERS_ONLY' ? 'Subscribers only' : 'Disabled'}</strong>
-              </div>
-              <p className="create-support-note">No additional authentication or MetaMask signature is required for automatic or manual announcements.</p>
-            </div>
-          </section>
-        </div>
+          </div>
+          <DocumentSelection
+            files={documents}
+            onRemove={(index) => setDocuments((current) => current.filter((_file, position) => position !== index))}
+          />
+        </section>
 
-        <DocumentSelection
-          files={documents}
-          onRemove={(index) => setDocuments((current) => current.filter((_file, position) => position !== index))}
-        />
-      </section>
-
-      <footer className="create-form-actions">
-        <div><strong>Ready to create the voting event?</strong><span>The snapshot and deployment run in the background after submission.</span></div>
-        <button className="button" disabled={Boolean(busyStage)}>
-          {busyStage || 'Create Event'}
-        </button>
-      </footer>
-    </form>
+        <footer className="create-form-actions restored-create-actions">
+          <div><strong>Ready to create the voting event?</strong><span>The snapshot and deployment continue in the background.</span></div>
+          <button className="button" disabled={Boolean(busyStage)}>{busyStage || 'Create Event'}</button>
+        </footer>
+      </form>
+    </Panel>
   </main>;
 }
 
@@ -487,8 +408,12 @@ export function OrganiserEventPage() {
     setRetryError(null);
     setRetrySuccess(null);
     try {
-      await wallet.ensureAuthenticated();
-      await api(`/v1/events/${eventId}/retry`, { method: 'POST' });
+      if (!wallet.account) throw new Error('Connect the event creator wallet first.');
+      await api(`/v1/events/${eventId}/retry`, {
+        method: 'POST',
+        auth: false,
+        body: { publisherAddress: wallet.account },
+      });
       await view.reload();
       setRetrySuccess('Retry queued successfully. Processing will resume from the last safe step.');
     } catch (error) {
@@ -524,8 +449,8 @@ export function OrganiserEventPage() {
     setDocumentBusy(true);
     setDocumentFeedback(null);
     try {
-      await wallet.ensureAuthenticated();
-      for (const file of documentFiles) await uploadEventPdf(eventId, file);
+      if (!wallet.account) throw new Error('Connect the event creator wallet first.');
+      for (const file of documentFiles) await uploadEventPdf(eventId, file, wallet.account);
       setDocumentFiles([]);
       await view.reload();
       setDocumentFeedback({ tone: 'success', message: 'Proxy voting documents uploaded successfully.' });
@@ -541,8 +466,9 @@ export function OrganiserEventPage() {
     setDocumentBusy(true);
     setDocumentFeedback(null);
     try {
-      await wallet.ensureAuthenticated();
-      await api(`/v1/events/${eventId}/documents/${documentId}`, { method: 'DELETE' });
+      if (!wallet.account) throw new Error('Connect the event creator wallet first.');
+      const query = new URLSearchParams({ wallet: wallet.account });
+      await api(`/v1/events/${eventId}/documents/${documentId}?${query}`, { method: 'DELETE', auth: false });
       await view.reload();
       setDocumentFeedback({ tone: 'success', message: 'Document removed.' });
     } catch (error) {

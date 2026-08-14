@@ -43,10 +43,10 @@ export default function HomePage() {
     [wallet.account],
   );
   const organisedEvents = useLoad(
-    () => (wallet.authenticated
-      ? api('/v1/dashboard/organiser')
+    () => (wallet.account
+      ? api(`/v1/dashboard/organiser?wallet=${encodeURIComponent(wallet.account)}`, { auth: false })
       : Promise.resolve([])),
-    [wallet.account, wallet.authenticated],
+    [wallet.account],
   );
 
   const votingCount = votingEvents.loading ? '—' : (votingEvents.data?.length ?? 0);
