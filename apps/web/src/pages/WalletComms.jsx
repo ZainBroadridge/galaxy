@@ -342,7 +342,7 @@ export default function WalletComms() {
       <div className="comms-utilities">
         <section className="comms-utility-card">
           <div className="utility-card-heading">
-            <div><span className="panel-eyebrow">MetaMask</span><h2>Background wallet alerts</h2></div>
+            <div><span className="panel-eyebrow">MetaMask</span><h2>Background wallet alerts (FLASK FEATURE ONLY)</h2></div>
             <Status value={backgroundEnabled ? 'ACTIVE' : snapInstalled ? 'INSTALLED' : 'NOT_INSTALLED'} />
           </div>
           <p>Receive verified notices inside MetaMask automatically, even when this dApp is closed.</p>
