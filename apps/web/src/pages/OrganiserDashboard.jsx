@@ -40,6 +40,68 @@ const initialForm = () => ({
   }],
 });
 
+const SAMPLE_DEMO_SCHEDULE = Object.freeze({
+  recordDateAt: '2026-08-14T17:00',
+  votingStartAt: '2026-08-18T09:00',
+  votingEndAt: '2026-08-21T17:00',
+});
+
+function demoSchedule() {
+  const sampleEnd = new Date(SAMPLE_DEMO_SCHEDULE.votingEndAt).getTime();
+  if (sampleEnd > Date.now() + 5 * 60_000) return { ...SAMPLE_DEMO_SCHEDULE };
+
+  const now = Date.now();
+  return {
+    recordDateAt: localDate(new Date(now - 10 * 60_000)),
+    votingStartAt: localDate(new Date(now + 30 * 60_000)),
+    votingEndAt: localDate(new Date(now + 3 * 24 * 60 * 60_000)),
+  };
+}
+
+function demoProposals() {
+  return [{
+    title: 'P-01 - Election of Director Slate',
+    description: 'Should Galaxy shareholders elect the proposed director slate for the next annual cycle? This demonstrates a director-election style ballot with a slate-level choice.',
+    options: ['For all nominees', 'Withhold all nominees', 'For all except Nominee C'],
+    recommendation: 0,
+  }, {
+    title: 'P-02 - Ratification of Independent Auditor',
+    description: "Should Zenith & Co. LLP be ratified as Galaxy's independent auditor for FY2026? This demonstrates the common auditor-ratification pattern.",
+    options: ['For', 'Against', 'Abstain'],
+    recommendation: 0,
+  }, {
+    title: 'P-03 - Advisory Vote on Executive Compensation',
+    description: "Should shareholders approve, on an advisory basis, Galaxy's executive compensation program? This demonstrates a non-binding say-on-pay vote.",
+    options: ['For', 'Against', 'Abstain'],
+    recommendation: 0,
+  }, {
+    title: 'P-04 - Frequency of Future Advisory Compensation Votes',
+    description: 'How often should Galaxy hold future advisory votes on executive compensation? This demonstrates a non-binary say-on-frequency ballot.',
+    options: ['Every 1 year', 'Every 2 years', 'Every 3 years', 'Abstain'],
+    recommendation: 0,
+  }, {
+    title: 'P-05 - Tokenized Shareholder Recordkeeping Charter',
+    description: 'Should Galaxy approve the Tokenized Shareholder Recordkeeping Charter for using on-chain vote proof in future pilots? This fictional governance proposal demonstrates on-chain proof and recordkeeping concepts.',
+    options: ['For', 'Against', 'Abstain'],
+    recommendation: 0,
+  }];
+}
+
+function demoForm(current) {
+  return {
+    ...current,
+    tokenAddress: current.tokenAddress,
+    title: '2026 Annual Proxy Voting Demonstration',
+    description: 'Fictional Galaxy Holdings Ltd. Mini Galaxy on-chain proxy-voting demonstration (GAL-2026-AGM-DEMO). Eligible record-date holders may submit one weighted ballot covering five sample proposals. This event is for UI, workflow, reporting, and technical proof-of-concept use only; it is not a legal proxy solicitation or production voting record.',
+    ...demoSchedule(),
+    tokenToVoteRatio: 1,
+    authenticityClaim: 'COMMUNITY',
+    discoveryMode: 'PUBLIC_ELIGIBLE',
+    snapDeliveryMode: 'ELIGIBLE',
+    proposals: demoProposals(),
+  };
+}
+
 function validateDocuments(files, existingCount = 0) {
   const selected = [...files];
   if (existingCount + selected.length > MAX_DOCUMENTS) {
@@ -186,6 +248,13 @@ export default function OrganiserDashboard() {
   const [error, setError] = useState(null);
   const [announcementAudience, setAnnouncementAudience] = useState('ELIGIBLE');
 
+  function fillDemoData() {
+    setForm((current) => demoForm(current));
+    setAnnouncementAudience('ELIGIBLE');
+    setError(null);
+    setInspectError(null);
+  }
+
   async function inspect() {
     setInspectError(null);
     setToken(null);
@@ -307,7 +376,15 @@ export default function OrganiserDashboard() {
   return <Page
     className="organiser-create-page"
     title="Create event"
-    actions={<button className="button secondary" type="button" onClick={() => setCreating(false)}>Back to events</button>}
+    actions={<>
+      <button
+        className="button secondary"
+        type="button"
+        onClick={fillDemoData}
+        title="Fill every demo field except the ERC-20 address and PDFs"
+      >Auto fill dummy data</button>
+      <button className="button secondary" type="button" onClick={() => setCreating(false)}>Back to events</button>
+    </>}
   >
     <ErrorBox error={error} />
     <Panel className="create-event-panel">
@@ -386,17 +463,14 @@ export default function OrganiserDashboard() {
               <option value="SUBSCRIBERS_ONLY">Subscribed holders</option>
               <option value="DIRECT_LINK">Direct link only</option>
             </select></label>
-            <label>
-              Announcement audience
-              <select
-                value={announcementEnabled ? form.snapDeliveryMode : announcementAudience}
-                onChange={(event) => setAnnouncementDelivery(event.target.value)}
-                disabled={!announcementEnabled}
-              >
-                <option value="ELIGIBLE">Eligible holders</option>
-                <option value="SUBSCRIBERS_ONLY">Subscribers only</option>
-              </select>
-            </label>
+            <label>Announcement audience<select
+              value={announcementEnabled ? form.snapDeliveryMode : announcementAudience}
+              onChange={(event) => setAnnouncementDelivery(event.target.value)}
+              disabled={!announcementEnabled}
+            >
+              <option value="ELIGIBLE">Eligible holders</option>
+              <option value="SUBSCRIBERS_ONLY">Subscribers only</option>
+            </select></label>
           </div>
         </section>
 
