@@ -2053,10 +2053,27 @@ textarea:focus {
 }
 
 /* Preserve the previous full communications workspace under Notifications. */
+.notifications-page .comms-tabs {
+  width: min(100%, 360px);
+  display: flex;
+  align-items: stretch;
+  gap: 3px;
+  box-sizing: border-box;
+}
+.notifications-page .comms-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  white-space: nowrap;
+}
 .notifications-page .comms-tab > span {
   min-width: 18px;
   height: 18px;
-  margin-left: 7px;
+  margin-left: 0;
   padding-inline: 5px;
   border-radius: 999px;
   background: #d92d20;
