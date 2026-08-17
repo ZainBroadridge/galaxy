@@ -324,7 +324,13 @@ export default function WalletComms() {
           aria-selected={activeTab === 'announcements'}
           className={`comms-tab${activeTab === 'announcements' ? ' active' : ''}`}
           onClick={() => setActiveTab('announcements')}
-        >Announcements{notificationCount > 0 && <span>{notificationCount}</span>}</button>
+        >
+          <span>Announcements</span>
+          {notificationCount > 0 && <span
+            className="comms-tab-count"
+            aria-label={`${notificationCount} announcement${notificationCount === 1 ? '' : 's'}`}
+          >{notificationCount > 99 ? '99+' : notificationCount}</span>}
+        </button>
         <button
           type="button"
           id="comms-tab-organiser"
@@ -402,7 +408,7 @@ export default function WalletComms() {
       <div className="comms-utilities">
         <section className="comms-utility-card">
           <div className="utility-card-heading">
-            <div><span className="panel-eyebrow">MetaMask</span><h2>Background alerts (FLASK FEATURE ONLY)</h2></div>
+            <div><span className="panel-eyebrow">MetaMask</span><h2>Background alerts</h2></div>
             <Status value={backgroundEnabled ? 'ACTIVE' : snapInstalled ? 'INSTALLED' : 'NOT_INSTALLED'} />
           </div>
           <p>Keep a verified copy of voting notices inside MetaMask while the dApp is closed.</p>
