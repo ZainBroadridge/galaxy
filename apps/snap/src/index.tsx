@@ -4,7 +4,7 @@ import type {
   OnRpcRequestHandler,
 } from '@metamask/snaps-sdk';
 import { UnauthorizedError } from '@metamask/snaps-sdk';
-import { Bold, Box, Heading, Link, Text } from '@metamask/snaps-sdk/jsx';
+import { Box, Heading, Link, Text } from '@metamask/snaps-sdk/jsx';
 import { getAddress, keccak256, toUtf8Bytes, verifyMessage } from 'ethers';
 
 const CHAIN_ID = 80002;
@@ -13,7 +13,6 @@ const API_BASE_URL = 'https://mini-galaxy-pv-v2-bz12.onrender.com';
 const POLL_METHOD = 'pollCommunications';
 const MAX_MESSAGES = 100;
 const MAX_IN_APP_NOTIFICATIONS = 3;
-const NATIVE_NOTIFICATION_INTERVAL_MS = 5 * 60_000;
 const REQUEST_TIMEOUT_MS = 12_000;
 
 const CATEGORIES = new Set([
@@ -66,6 +65,7 @@ type SnapState = {
   messages: Communication[];
   lastCheckedAt: string | null;
   lastError: string | null;
+  lastDeliveryError: string | null;
   lastNativeNotificationAt: string | null;
   updatedAt: string | null;
 };
@@ -75,6 +75,8 @@ type PollResult = {
   acceptedMessageIds: string[];
   total: number;
   rejected: number;
+  notificationErrors: string[];
+  nativeNotified: boolean;
   error?: string;
 };
 
@@ -84,6 +86,7 @@ const EMPTY_STATE: SnapState = {
   messages: [],
   lastCheckedAt: null,
   lastError: null,
+  lastDeliveryError: null,
   lastNativeNotificationAt: null,
   updatedAt: null,
 };
@@ -99,7 +102,8 @@ async function readUnencryptedState(): Promise<SnapState> {
     backgroundEnabled: stored?.backgroundEnabled === true,
     messages: Array.isArray(stored?.messages) ? stored.messages : [],
     lastCheckedAt: stored?.lastCheckedAt ?? null,
-    lastError: stored?.lastError ?? null,
+    lastError: typeof stored?.lastError === 'string' ? stored.lastError : null,
+    lastDeliveryError: typeof stored?.lastDeliveryError === 'string' ? stored.lastDeliveryError : null,
     lastNativeNotificationAt: stored?.lastNativeNotificationAt ?? null,
     updatedAt: stored?.updatedAt ?? null,
   };
@@ -339,46 +343,32 @@ function activeMessages(messages: Communication[]): Communication[] {
   return messages.filter((message) => Date.parse(message.expiresAt) > now);
 }
 
+function errorMessage(value: unknown): string {
+  return value instanceof Error ? value.message : String(value);
+}
+
 async function notifyInApp(message: Communication): Promise<void> {
   await snap.request({
     method: 'snap_notify',
     params: {
       type: 'inApp',
       message: `${message.tokenSymbol}: ${message.title}`.slice(0, 80),
-      title: message.title.slice(0, 80),
-      content: (
-        <Box>
-          <Text><Bold>{contextTitle(message)}</Bold></Text>
-          <Text>{message.body.slice(0, 1_200)}</Text>
-          <Text>Creator signature verified</Text>
-          <Text>{message.authenticityStatus.replaceAll('_', ' ')}</Text>
-        </Box>
-      ),
-      footerLink: {
-        href: message.actionUrl,
-        text: message.scope === 'TOKEN' ? 'Open Wallet Comms' : 'Open voting event',
-      },
     },
   });
 }
 
-async function notifyNative(messages: Communication[]): Promise<boolean> {
+async function notifyNative(messages: Communication[]): Promise<void> {
   const notification = messages.length === 1
     ? `${messages[0].tokenSymbol}: ${messages[0].title}`
     : `${messages.length} new investor communications`;
 
-  try {
-    await snap.request({
-      method: 'snap_notify',
-      params: {
-        type: 'native',
-        message: notification.slice(0, 80),
-      },
-    });
-    return true;
-  } catch {
-    return false;
-  }
+  await snap.request({
+    method: 'snap_notify',
+    params: {
+      type: 'native',
+      message: notification.slice(0, 80),
+    },
+  });
 }
 
 async function fetchInbox(walletAddress: string): Promise<unknown[]> {
@@ -415,6 +405,8 @@ async function pollCommunications(throwOnError = false): Promise<PollResult> {
       acceptedMessageIds: [],
       total: state.messages.length,
       rejected: 0,
+      notificationErrors: [],
+      nativeNotified: false,
     };
   }
 
@@ -438,11 +430,9 @@ async function pollCommunications(throwOnError = false): Promise<PollResult> {
     const messages = [...fresh, ...existingMessages].slice(0, MAX_MESSAGES);
 
     let lastNativeNotificationAt = state.lastNativeNotificationAt;
-    const lastNativeTime = lastNativeNotificationAt
-      ? Date.parse(lastNativeNotificationAt)
-      : 0;
-    const canNotifyNatively = fresh.length > 0
-      && Date.now() - lastNativeTime >= NATIVE_NOTIFICATION_INTERVAL_MS;
+    let lastDeliveryError = state.lastDeliveryError;
+    const notificationErrors: string[] = [];
+    let nativeNotified = false;
 
     const nextState: SnapState = {
       ...state,
@@ -451,26 +441,48 @@ async function pollCommunications(throwOnError = false): Promise<PollResult> {
       lastError: null,
       updatedAt: checkedAt,
     };
+
+    // Commit the verified inbox first. Notification presentation is best-effort
+    // and must never cause a message to disappear from MetaMask state.
     await writeState(nextState);
 
     for (const message of fresh.slice(0, MAX_IN_APP_NOTIFICATIONS)) {
       try {
         await notifyInApp(message);
-      } catch {
-        // The persistent inbox remains authoritative if MetaMask suppresses a notification.
+      } catch (error) {
+        notificationErrors.push(`In-app alert: ${errorMessage(error)}`);
       }
     }
 
-    if (canNotifyNatively && await notifyNative(fresh)) {
-      lastNativeNotificationAt = checkedAt;
-      await writeState({ ...nextState, lastNativeNotificationAt });
+    // Fresh message IDs are already deduplicated, so one native notification per
+    // fresh batch is sufficient and does not need an additional five-minute gate.
+    if (fresh.length > 0) {
+      try {
+        await notifyNative(fresh);
+        nativeNotified = true;
+        lastNativeNotificationAt = checkedAt;
+      } catch (error) {
+        notificationErrors.push(`Native alert: ${errorMessage(error)}`);
+      }
+      lastDeliveryError = notificationErrors.length
+        ? notificationErrors.join(' | ')
+        : null;
     }
+
+    const finalState: SnapState = {
+      ...nextState,
+      lastDeliveryError,
+      lastNativeNotificationAt,
+    };
+    await writeState(finalState);
 
     return {
       ok: true,
       acceptedMessageIds: fresh.map((message) => message.messageId),
       total: messages.length,
       rejected,
+      notificationErrors,
+      nativeNotified,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -486,6 +498,8 @@ async function pollCommunications(throwOnError = false): Promise<PollResult> {
       acceptedMessageIds: [],
       total: state.messages.length,
       rejected: 0,
+      notificationErrors: [],
+      nativeNotified: false,
       error: message,
     };
   }
@@ -524,6 +538,7 @@ export const onRpcRequest: OnRpcRequestHandler = async ({ origin, request }) => 
         backgroundEnabled: true,
         messages: walletChanged ? [] : activeMessages(state.messages),
         lastError: null,
+        lastDeliveryError: walletChanged ? null : state.lastDeliveryError,
         updatedAt: new Date().toISOString(),
       });
       const result = await pollCommunications(true);
@@ -576,39 +591,59 @@ export const onRpcRequest: OnRpcRequestHandler = async ({ origin, request }) => 
   }
 };
 
+function displayTime(value: string | null): string {
+  if (!value) return 'Not yet';
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return 'Unknown';
+  return `${new Date(timestamp).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+}
+
+function shortWallet(value: string | null): string {
+  if (!value) return 'Not configured';
+  return `${value.slice(0, 8)}...${value.slice(-6)}`;
+}
+
 export const onHomePage: OnHomePageHandler = async () => {
   const state = await readUnencryptedState().catch(() => EMPTY_STATE);
   const messages = activeMessages(state.messages);
   const unread = messages.filter((message) => !message.read).length;
+  const latest = messages[0] ?? null;
 
+  // Keep this tree deliberately simple. MetaMask validates every Snap JSX child;
+  // a nested array produced by Array.map caused the previous home-page assertion.
   return {
     content: (
       <Box>
         <Heading>PV Investor Communications</Heading>
-        <Text>
-          Background alerts: <Bold>{state.backgroundEnabled ? 'Enabled' : 'Disabled'}</Bold>
-        </Text>
-        {state.walletAddress && <Text>Wallet: {state.walletAddress}</Text>}
-        {state.lastCheckedAt && <Text>Last checked: {new Date(state.lastCheckedAt).toLocaleString()}</Text>}
-        {state.lastError && <Text>Last check failed: {state.lastError}</Text>}
-        <Text><Bold>{unread}</Bold> unread message(s)</Text>
-        {messages.length === 0 ? (
-          <Text>
-            {state.backgroundEnabled
-              ? 'New verified notices are checked automatically every minute.'
-              : 'Open the Mini Galaxy dApp and enable background alerts.'}
-          </Text>
-        ) : messages.slice(0, 10).map((message) => (
-          <Box key={message.messageId}>
-            <Heading>{message.title}</Heading>
-            <Text>{contextTitle(message)}</Text>
-            <Text>{message.body.slice(0, 500)}</Text>
-            <Text>Creator signature verified</Text>
-            <Link href={message.actionUrl}>
-              {message.scope === 'TOKEN' ? 'Open Wallet Comms' : 'Open voting event'}
+        <Text>{`Background alerts: ${state.backgroundEnabled ? 'Enabled' : 'Disabled'}`}</Text>
+        <Text>{`Wallet: ${shortWallet(state.walletAddress)}`}</Text>
+        <Text>{`Last checked: ${displayTime(state.lastCheckedAt)}`}</Text>
+        <Text>{`Stored notices: ${messages.length}; unread: ${unread}`}</Text>
+        <Text>{state.lastError
+          ? `Last background check failed: ${state.lastError}`
+          : 'Last background check: No polling error recorded'}</Text>
+        <Text>{state.lastDeliveryError
+          ? `Last alert issue: ${state.lastDeliveryError}`
+          : 'Last alert delivery: No Snap error recorded'}</Text>
+        {latest ? (
+          <Box>
+            <Heading>Latest communication</Heading>
+            <Text>{latest.title}</Text>
+            <Text>{contextTitle(latest)}</Text>
+            <Text>{latest.body.slice(0, 500)}</Text>
+            <Text>{`Published: ${displayTime(latest.publishedAt)}`}</Text>
+            <Link href={latest.actionUrl}>
+              {latest.scope === 'TOKEN' ? 'Open Notifications' : 'Open voting event'}
             </Link>
           </Box>
-        ))}
+        ) : (
+          <Text>{state.backgroundEnabled
+            ? 'New verified notices are checked automatically every minute.'
+            : 'Open the dApp and enable background alerts.'}</Text>
+        )}
+        <Text>{messages.length > 1
+          ? `${messages.length - 1} additional communication(s) are stored in the MetaMask inbox.`
+          : 'The full notification history is also available in the dApp.'}</Text>
       </Box>
     ),
   };

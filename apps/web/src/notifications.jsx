@@ -1,12 +1,11 @@
 import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from 'react';
-import { API_BASE_URL } from './api.js';
 import { fetchCommunications } from './communications.js';
 import { useWallet } from './wallet.jsx';
 
 const NotificationsContext = createContext(null);
-const fallbackRefreshMs = 60_000;
+const refreshIntervalMs = 15_000;
 const maxStoredReadIds = 500;
 const readStoragePrefix = 'pv-v2-read-communications:';
 
@@ -68,11 +67,15 @@ export function NotificationsProvider({ children }) {
           setMessages(nextMessages);
           setError(null);
           setLastUpdatedAt(new Date().toISOString());
+          setLive(true);
         }
         return nextMessages;
       })
       .catch((value) => {
-        if (activeAccount.current === account) setError(value);
+        if (activeAccount.current === account) {
+          setError(value);
+          setLive(false);
+        }
         throw value;
       })
       .finally(() => {
@@ -87,37 +90,20 @@ export function NotificationsProvider({ children }) {
   useEffect(() => {
     if (!wallet.connected || !wallet.account) return undefined;
 
-    let cancelled = false;
-    let fallbackTimer;
     const refreshSilently = () => refresh({ silent: true }).catch(() => {});
-    const scheduleFallback = () => {
-      fallbackTimer = setTimeout(() => {
-        if (document.visibilityState === 'visible') refreshSilently();
-        if (!cancelled) scheduleFallback();
-      }, fallbackRefreshMs);
-    };
-    const handleVisibility = () => {
+    const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible') refreshSilently();
     };
 
     refresh({ silent: false }).catch(() => {});
-    scheduleFallback();
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    const stream = new EventSource(`${API_BASE_URL}/v1/communications/stream`);
-    stream.addEventListener('open', () => {
-      if (!cancelled) setLive(true);
-    });
-    stream.addEventListener('refresh', refreshSilently);
-    stream.addEventListener('error', () => {
-      if (!cancelled) setLive(false);
-    });
+    const timer = setInterval(refreshWhenVisible, refreshIntervalMs);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    window.addEventListener('focus', refreshSilently);
 
     return () => {
-      cancelled = true;
-      clearTimeout(fallbackTimer);
-      document.removeEventListener('visibilitychange', handleVisibility);
-      stream.close();
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      window.removeEventListener('focus', refreshSilently);
     };
   }, [refresh, wallet.account, wallet.connected]);
 

@@ -1,13 +1,13 @@
 {
-  "version": "0.4.0",
-  "description": "Verified investor communications delivered automatically inside MetaMask.",
+  "version": "0.4.1",
+  "description": "Verified investor communications with background polling and schema-safe MetaMask alerts.",
   "proposedName": "PV Investor Communications",
   "repository": {
     "type": "git",
     "url": "https://github.com/ZainBroadridge/galaxy.git"
   },
   "source": {
-    "shasum": "jEDT8iPQUP/vIwYtE73JVRGcSgvpm1183Ei/PNAFQIA=",
+    "shasum": "yXc+tPX7QuX2NE6qkNmk35CtlJd9O8+8P0qu99k2ULs=",
     "location": {
       "npm": {
         "filePath": "dist/bundle.js",

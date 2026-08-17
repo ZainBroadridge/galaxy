@@ -2,7 +2,7 @@ import { getAddress } from 'ethers';
 
 const configuredId = import.meta.env.VITE_SNAP_ID?.trim();
 export const SNAP_ID = configuredId || (location.hostname === 'localhost' ? 'local:http://localhost:8080' : null);
-export const SNAP_VERSION = import.meta.env.VITE_SNAP_VERSION || '*';
+export const SNAP_VERSION = import.meta.env.VITE_SNAP_VERSION?.trim() || '0.4.1';
 
 export function snapConfiguration() {
   if (!SNAP_ID) return { ready: false, message: 'Set VITE_SNAP_ID to the published npm Snap ID.' };
