@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { formatUnits } from 'ethers';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFString, StandardFonts, rgb } from 'pdf-lib';
 import { config } from './config.js';
 import { query } from './db.js';
 import { readAllEventDocuments } from './documents.js';
@@ -12,8 +12,11 @@ const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
 const MARGIN = 42;
 const HEADER_HEIGHT = 68;
+const CONTENT_BOTTOM = 48;
+const CONTENT_TOP = PAGE_HEIGHT - HEADER_HEIGHT - 28;
+const CONTENT_HEIGHT = CONTENT_TOP - CONTENT_BOTTOM;
 const NAVY = rgb(0.02, 0.13, 0.29);
-const BLUE = rgb(0.08, 0.34, 0.65);
+const LINK_BLUE = rgb(0, 0.33, 0.88);
 const TEXT = rgb(0.11, 0.14, 0.18);
 const MUTED = rgb(0.39, 0.43, 0.49);
 const LINE = rgb(0.87, 0.89, 0.92);
@@ -56,6 +59,55 @@ function pdfText(value) {
     .replace(/…/gu, '...')
     .replace(/•/gu, '-')
     .replace(/[^ -~]/gu, '?');
+}
+
+function httpUrl(value) {
+  try {
+    const parsed = new URL(String(value));
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function explorerPath(path) {
+  const base = String(config.explorerUrl ?? '').replace(/\/+$/gu, '');
+  return base ? httpUrl(`${base}/${String(path).replace(/^\/+/gu, '')}`) : null;
+}
+
+function linkedValue(text, url) {
+  return {
+    text: String(text ?? ''),
+    url: httpUrl(url),
+    linkStyle: true,
+  };
+}
+
+function valueDescriptor(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value) && 'text' in value) {
+    const url = httpUrl(value.url);
+    return {
+      text: String(value.text ?? '-'),
+      url,
+      linkStyle: value.linkStyle === true || Boolean(url),
+    };
+  }
+
+  const text = String(value ?? '-');
+  const url = httpUrl(text);
+  return { text, url, linkStyle: Boolean(url) };
+}
+
+function addressValue(address, url = null) {
+  return address
+    ? linkedValue(address, url ?? explorerPath(`address/${address}`))
+    : 'Not deployed';
+}
+
+function transactionValue(hash) {
+  return hash
+    ? linkedValue(hash, explorerPath(`tx/${hash}`))
+    : 'Queued for relayer submission';
 }
 
 function splitToWidth(word, font, size, width) {
@@ -149,47 +201,127 @@ class ReportWriter {
         color: rgb(0.82, 0.87, 0.94),
       });
     }
-    this.y = PAGE_HEIGHT - HEADER_HEIGHT - 28;
+    this.y = CONTENT_TOP;
   }
 
   ensure(height) {
-    if (this.y - height < 48) this.addPage();
+    const required = Math.min(Math.max(0, height), CONTENT_HEIGHT);
+    if (this.y - required < CONTENT_BOTTOM) this.addPage();
   }
 
-  heading(text, size = 15) {
-    this.ensure(size + 18);
+  heading(text, size = 15, keepWithNext = 0) {
+    this.ensure(size + 10 + keepWithNext);
     this.page.drawText(pdfText(text), { x: MARGIN, y: this.y, size, font: this.fonts.bold, color: NAVY });
     this.y -= size + 10;
+  }
+
+  paragraphHeight(text, { size = 9.5, gap = 10 } = {}) {
+    const lines = wrapText(text, this.fonts.regular, size, PAGE_WIDTH - 2 * MARGIN);
+    return lines.length * size * 1.35 + gap;
   }
 
   paragraph(text, { size = 9.5, color = TEXT, gap = 10 } = {}) {
     const lines = wrapText(text, this.fonts.regular, size, PAGE_WIDTH - 2 * MARGIN);
     const lineHeight = size * 1.35;
-    this.ensure(lines.length * lineHeight + gap);
+    const totalHeight = lines.length * lineHeight + gap;
+
+    if (totalHeight <= CONTENT_HEIGHT) {
+      this.ensure(totalHeight);
+      for (const line of lines) {
+        this.page.drawText(line, { x: MARGIN, y: this.y, size, font: this.fonts.regular, color });
+        this.y -= lineHeight;
+      }
+      this.y -= gap;
+      return;
+    }
+
     for (const line of lines) {
+      if (this.y - lineHeight < CONTENT_BOTTOM) this.addPage();
       this.page.drawText(line, { x: MARGIN, y: this.y, size, font: this.fonts.regular, color });
       this.y -= lineHeight;
     }
-    this.y -= gap;
+    if (this.y - gap < CONTENT_BOTTOM) this.addPage();
+    else this.y -= gap;
+  }
+
+  keyValueLayouts(rows) {
+    const labelWidth = 142;
+    const valueWidth = PAGE_WIDTH - 2 * MARGIN - labelWidth;
+    return rows.map(([label, value]) => {
+      const descriptor = valueDescriptor(value);
+      const lines = wrapText(descriptor.text, this.fonts.regular, 9, valueWidth);
+      return {
+        label,
+        ...descriptor,
+        lines,
+        height: Math.max(18, lines.length * 12 + 6),
+      };
+    });
+  }
+
+  keyValuesHeight(rows) {
+    return this.keyValueLayouts(rows).reduce((sum, row) => sum + row.height, 6);
+  }
+
+  addLinkAnnotation({ x, y, width, height, url }) {
+    if (!url || width <= 0 || height <= 0) return;
+    const annotation = this.document.context.obj({
+      Type: PDFName.of('Annot'),
+      Subtype: PDFName.of('Link'),
+      Rect: [x, y, x + width, y + height],
+      Border: [0, 0, 0],
+      H: PDFName.of('I'),
+      A: {
+        Type: PDFName.of('Action'),
+        S: PDFName.of('URI'),
+        URI: PDFString.of(url),
+      },
+    });
+    this.page.node.addAnnot(this.document.context.register(annotation));
+  }
+
+  drawValueLine(text, {
+    x, y, size, font, url = null, linkStyle = false,
+  }) {
+    const styledAsLink = linkStyle || Boolean(url);
+    this.page.drawText(text, {
+      x,
+      y,
+      size,
+      font,
+      color: styledAsLink ? LINK_BLUE : TEXT,
+    });
+    if (!styledAsLink || !text) return;
+
+    const width = font.widthOfTextAtSize(text, size);
+    const height = font.heightAtSize(size);
+    this.page.drawLine({
+      start: { x, y: y - 1.35 },
+      end: { x: x + width, y: y - 1.35 },
+      thickness: 0.7,
+      color: LINK_BLUE,
+    });
+    if (url) this.addLinkAnnotation({ x, y: y - 2, width, height: height + 3, url });
   }
 
   keyValues(rows) {
     const labelWidth = 142;
-    for (const [label, value] of rows) {
-      const lines = wrapText(String(value ?? '-'), this.fonts.regular, 9, PAGE_WIDTH - 2 * MARGIN - labelWidth);
-      const height = Math.max(18, lines.length * 12 + 6);
-      this.ensure(height);
-      this.page.drawText(pdfText(label), { x: MARGIN, y: this.y, size: 9, font: this.fonts.bold, color: MUTED });
-      lines.forEach((line, index) => {
-        this.page.drawText(line, {
-          x: MARGIN + labelWidth,
-          y: this.y - index * 12,
-          size: 9,
-          font: this.fonts.regular,
-          color: TEXT,
-        });
-      });
-      this.y -= height;
+    const layouts = this.keyValueLayouts(rows);
+    const totalHeight = layouts.reduce((sum, row) => sum + row.height, 6);
+    if (totalHeight <= CONTENT_HEIGHT) this.ensure(totalHeight);
+
+    for (const row of layouts) {
+      this.ensure(row.height);
+      this.page.drawText(pdfText(row.label), { x: MARGIN, y: this.y, size: 9, font: this.fonts.bold, color: MUTED });
+      row.lines.forEach((line, index) => this.drawValueLine(line, {
+        x: MARGIN + labelWidth,
+        y: this.y - index * 12,
+        size: 9,
+        font: this.fonts.regular,
+        url: row.url,
+        linkStyle: row.linkStyle,
+      }));
+      this.y -= row.height;
     }
     this.y -= 6;
   }
@@ -202,11 +334,33 @@ class ReportWriter {
     this.y -= 68;
   }
 
-  table(headers, rows, widths) {
+  tableLayouts(rows, widths) {
     const totalWidth = PAGE_WIDTH - 2 * MARGIN;
     const actualWidths = widths.map((width) => width * totalWidth);
+    const layouts = rows.map((row) => {
+      const cells = row.map((value, index) => {
+        const descriptor = valueDescriptor(value);
+        return {
+          ...descriptor,
+          lines: wrapText(descriptor.text, this.fonts.regular, 7.5, actualWidths[index] - 10),
+        };
+      });
+      return {
+        cells,
+        height: Math.max(22, Math.max(...cells.map((cell) => cell.lines.length)) * 10 + 8),
+      };
+    });
+    return { totalWidth, actualWidths, layouts };
+  }
+
+  tableStartHeight(rows, widths) {
+    const { layouts } = this.tableLayouts(rows, widths);
+    return 26 + (layouts[0]?.height ?? 0);
+  }
+
+  table(headers, rows, widths) {
+    const { totalWidth, actualWidths, layouts } = this.tableLayouts(rows, widths);
     const drawHeader = () => {
-      this.ensure(26);
       this.page.drawRectangle({ x: MARGIN, y: this.y - 18, width: totalWidth, height: 24, color: NAVY });
       let x = MARGIN + 6;
       headers.forEach((header, index) => {
@@ -216,24 +370,27 @@ class ReportWriter {
       this.y -= 26;
     };
 
+    this.ensure(26 + (layouts[0]?.height ?? 0));
     drawHeader();
-    for (const row of rows) {
-      const cellLines = row.map((value, index) => wrapText(String(value ?? '-'), this.fonts.regular, 7.5, actualWidths[index] - 10));
-      const rowHeight = Math.max(22, Math.max(...cellLines.map((lines) => lines.length)) * 10 + 8);
-      if (this.y - rowHeight < 48) { this.addPage(); drawHeader(); }
-      this.page.drawRectangle({ x: MARGIN, y: this.y - rowHeight + 4, width: totalWidth, height: rowHeight, color: rgb(1, 1, 1), borderColor: LINE, borderWidth: 0.5 });
+    for (const row of layouts) {
+      if (this.y - row.height < CONTENT_BOTTOM) {
+        this.addPage();
+        drawHeader();
+      }
+      this.page.drawRectangle({ x: MARGIN, y: this.y - row.height + 4, width: totalWidth, height: row.height, color: rgb(1, 1, 1), borderColor: LINE, borderWidth: 0.5 });
       let x = MARGIN + 6;
-      cellLines.forEach((lines, index) => {
-        lines.forEach((line, lineIndex) => this.page.drawText(line, {
+      row.cells.forEach((cell, index) => {
+        cell.lines.forEach((line, lineIndex) => this.drawValueLine(line, {
           x,
           y: this.y - 8 - lineIndex * 10,
           size: 7.5,
           font: this.fonts.regular,
-          color: TEXT,
+          url: cell.url,
+          linkStyle: cell.linkStyle,
         }));
         x += actualWidths[index];
       });
-      this.y -= rowHeight;
+      this.y -= row.height;
     }
     this.y -= 12;
   }
@@ -274,15 +431,19 @@ async function viewerContext(eventId, walletInput) {
 }
 
 function eventDetails(event) {
+  const contractUrl = event.contract_address
+    ? (verifiedContractUrl(event) ?? explorerPath(`address/${event.contract_address}`))
+    : null;
   return [
     ['Event', event.title],
     ['Token', `${event.token_name} (${event.token_symbol})`],
-    ['Token address', event.token_address],
-    ['Creator', event.creator_address],
+    ['Token address', addressValue(event.token_address)],
+    ['Creator', addressValue(event.creator_address)],
     ['Record date', formatDate(event.record_date_at)],
     ['Voting period', `${formatDate(event.voting_start_at)} - ${formatDate(event.voting_end_at)}`],
     ['Token-to-vote ratio', `${event.token_to_vote_ratio} token(s) per vote`],
-    ['VoteEvent contract', event.contract_address ?? 'Not deployed'],
+    ['VoteEvent contract', addressValue(event.contract_address, contractUrl)],
+    ...(contractUrl ? [['Verified VoteEvent URL', linkedValue(contractUrl, contractUrl)]] : []),
   ];
 }
 
@@ -331,73 +492,117 @@ export async function createResultsReport(eventId, walletInput) {
 
   const pdf = await PDFDocument.create();
   const writer = await ReportWriter.create(pdf, 'Proxy Voting Results Report', context.event.token_symbol);
-  writer.heading(context.event.title, 18);
-  writer.paragraph(context.event.description || 'Final proxy voting report.', { color: MUTED });
-  writer.heading('Event details');
-  writer.keyValues(eventDetails(context.event));
-  writer.heading('Participation');
-  writer.keyValues([
+  const introduction = context.event.description || 'Final proxy voting report.';
+  writer.heading(context.event.title, 18, writer.paragraphHeight(introduction, { size: 9.5, gap: 10 }));
+  writer.paragraph(introduction, { color: MUTED });
+
+  const detailRows = eventDetails(context.event);
+  writer.heading('Event details', 15, writer.keyValuesHeight(detailRows));
+  writer.keyValues(detailRows);
+
+  const participationRows = [
     ['Eligible token holders', participation.eligible_holders],
     ['Eligible voting power', participation.eligible_power],
     ['Confirmed ballots', participation.ballots_cast],
     ['Voting power cast', participation.power_cast],
     ['Voting-power turnout', `${turnout.toFixed(2)}%`],
-  ]);
+  ];
+  writer.heading('Participation', 15, writer.keyValuesHeight(participationRows));
+  writer.keyValues(participationRows);
 
-  writer.heading('Proposal results');
-  result.proposals.forEach((proposal, proposalIndex) => {
-    writer.heading(`${proposalIndex + 1}. ${proposal.title}`, 12);
-    if (proposal.description) writer.paragraph(proposal.description, { size: 8.5, color: MUTED, gap: 5 });
+  const proposalWidths = [0.42, 0.23, 0.18, 0.17];
+  const proposalBlocks = result.proposals.map((proposal, proposalIndex) => {
     const total = proposal.tallies.reduce((sum, value) => sum + BigInt(value), 0n);
+    const rows = proposal.options.map((option, optionIndex) => {
+      const value = BigInt(proposal.tallies[optionIndex]);
+      const percent = total === 0n ? 0 : Number((value * 10_000n) / total) / 100;
+      return [
+        option.text,
+        proposal.recommendation === optionIndex ? 'Recommended' : '-',
+        value.toString(),
+        `${percent.toFixed(2)}%`,
+      ];
+    });
+    const descriptionHeight = proposal.description
+      ? writer.paragraphHeight(proposal.description, { size: 8.5, gap: 5 })
+      : 0;
+    return {
+      proposal,
+      proposalIndex,
+      rows,
+      keepHeight: 22 + descriptionHeight + writer.tableStartHeight(rows, proposalWidths),
+      descriptionHeight,
+    };
+  });
+
+  writer.heading('Proposal results', 15, proposalBlocks[0]?.keepHeight ?? 0);
+  proposalBlocks.forEach(({ proposal, proposalIndex, rows, descriptionHeight }) => {
+    writer.heading(
+      `${proposalIndex + 1}. ${proposal.title}`,
+      12,
+      descriptionHeight + writer.tableStartHeight(rows, proposalWidths),
+    );
+    if (proposal.description) writer.paragraph(proposal.description, { size: 8.5, color: MUTED, gap: 5 });
     writer.table(
       ['Option', 'Board recommendation', 'Voting power', 'Percentage'],
-      proposal.options.map((option, optionIndex) => {
-        const value = BigInt(proposal.tallies[optionIndex]);
-        const percent = total === 0n ? 0 : Number((value * 10_000n) / total) / 100;
-        return [
-          option.text,
-          proposal.recommendation === optionIndex ? 'Recommended' : '-',
-          value.toString(),
-          `${percent.toFixed(2)}%`,
-        ];
-      }),
-      [0.42, 0.23, 0.18, 0.17],
+      rows,
+      proposalWidths,
     );
   });
 
   if (context.creator) {
-    writer.heading('Record-date holder register');
-    writer.paragraph('Holdings and voting power are taken from the final record-date snapshot.', { size: 8.5, color: MUTED });
+    const holderRows = holdersResult.rows.map((holder) => [
+      addressValue(holder.wallet_address),
+      formatToken(holder.raw_balance, context.event.token_decimals, context.event.token_symbol),
+      String(holder.voting_power),
+      holder.status === 'CONFIRMED' ? 'Voted' : 'Not voted',
+    ]);
+    const holderWidths = [0.42, 0.24, 0.16, 0.18];
+    const holderIntro = 'Holdings and voting power are taken from the final record-date snapshot.';
+    writer.heading(
+      'Record-date holder register',
+      15,
+      writer.paragraphHeight(holderIntro, { size: 8.5, gap: 10 }) + writer.tableStartHeight(holderRows, holderWidths),
+    );
+    writer.paragraph(holderIntro, { size: 8.5, color: MUTED });
     writer.table(
       ['Wallet', 'Record-date holding', 'Voting power', 'Participation'],
-      holdersResult.rows.map((holder) => [
-        holder.wallet_address,
-        formatToken(holder.raw_balance, context.event.token_decimals, context.event.token_symbol),
-        String(holder.voting_power),
-        holder.status === 'CONFIRMED' ? 'Voted' : 'Not voted',
-      ]),
-      [0.42, 0.24, 0.16, 0.18],
+      holderRows,
+      holderWidths,
     );
   } else {
-    writer.heading('Your participation');
+    const participationRowsForViewer = context.event.proposals.map((proposal, index) => [
+      proposal.title,
+      optionText(proposal, context.vote.choices[index]),
+    ]);
+    const viewerWidths = [0.58, 0.42];
+    writer.heading(
+      'Your participation',
+      15,
+      68 + writer.tableStartHeight(participationRowsForViewer, viewerWidths),
+    );
     writer.callout('Voting power', context.vote.voting_power);
     writer.table(
       ['Proposal', 'Selected option'],
-      context.event.proposals.map((proposal, index) => [
-        proposal.title,
-        optionText(proposal, context.vote.choices[index]),
-      ]),
-      [0.58, 0.42],
+      participationRowsForViewer,
+      viewerWidths,
     );
   }
 
   if (documents.length) {
-    writer.heading('Supporting documents');
-    writer.paragraph('The following organiser-provided proxy voting documents are appended to this report.');
+    const documentRows = documents.map((document) => [document.fileName, document.pageCount, document.sha256]);
+    const documentWidths = [0.45, 0.1, 0.45];
+    const documentIntro = 'The following organiser-provided proxy voting documents are appended to this report.';
+    writer.heading(
+      'Supporting documents',
+      15,
+      writer.paragraphHeight(documentIntro) + writer.tableStartHeight(documentRows, documentWidths),
+    );
+    writer.paragraph(documentIntro);
     writer.table(
       ['Document', 'Pages', 'SHA-256'],
-      documents.map((document) => [document.fileName, document.pageCount, document.sha256]),
-      [0.45, 0.1, 0.45],
+      documentRows,
+      documentWidths,
     );
   }
 
@@ -429,32 +634,37 @@ export async function createVoteReceipt(eventId, walletInput) {
 
   const pdf = await PDFDocument.create();
   const writer = await ReportWriter.create(pdf, 'Proxy Voting Receipt', event.token_symbol);
-  writer.heading(event.title, 18);
-  writer.paragraph('Receipt of submitted proxy voting instructions.', { color: MUTED });
-  writer.heading('Event details');
-  writer.keyValues([
-    ...eventDetails(event),
-    ['Verified VoteEvent URL', contractUrl],
-  ]);
-  writer.heading('Voter details');
-  writer.keyValues([
-    ['Wallet', wallet],
+  const receiptIntroduction = 'Receipt of submitted proxy voting instructions.';
+  writer.heading(event.title, 18, writer.paragraphHeight(receiptIntroduction));
+  writer.paragraph(receiptIntroduction, { color: MUTED });
+
+  const detailRows = eventDetails(event);
+  writer.heading('Event details', 15, writer.keyValuesHeight(detailRows));
+  writer.keyValues(detailRows);
+
+  const voterRows = [
+    ['Wallet', addressValue(wallet)],
     ['Status', vote.status],
-    ['Transaction', vote.transaction_hash ?? 'Queued for relayer submission'],
+    ['Transaction', transactionValue(vote.transaction_hash)],
     ['Submitted', formatDate(vote.created_at)],
-  ]);
+  ];
+  writer.heading('Voter details', 15, writer.keyValuesHeight(voterRows) + 68);
+  writer.keyValues(voterRows);
   writer.callout('Voting power', vote.voting_power);
-  writer.heading('Selected options');
+
+  const selectedRows = event.proposals.map((proposal, index) => [
+    proposal.title,
+    optionText(proposal, vote.choices[index]),
+    proposal.recommendation === null || proposal.recommendation === undefined
+      ? '-'
+      : optionText(proposal, proposal.recommendation),
+  ]);
+  const selectedWidths = [0.43, 0.34, 0.23];
+  writer.heading('Selected options', 15, writer.tableStartHeight(selectedRows, selectedWidths));
   writer.table(
     ['Proposal', 'Selected option', 'Board recommendation'],
-    event.proposals.map((proposal, index) => [
-      proposal.title,
-      optionText(proposal, vote.choices[index]),
-      proposal.recommendation === null || proposal.recommendation === undefined
-        ? '-'
-        : optionText(proposal, proposal.recommendation),
-    ]),
-    [0.43, 0.34, 0.23],
+    selectedRows,
+    selectedWidths,
   );
   writer.finishFooters();
 
