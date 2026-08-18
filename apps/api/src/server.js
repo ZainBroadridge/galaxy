@@ -22,7 +22,7 @@ import {
   readEventDocument,
   uploadEventDocument,
 } from './documents.js';
-import { triggerEventAnnouncement } from './event-announcements.js';
+import { publishReadyEventAnnouncements, triggerEventAnnouncement } from './event-announcements.js';
 import { closeEventStreams, openEventStream } from './event-stream.js';
 import { HttpError } from './errors.js';
 import {
@@ -102,6 +102,15 @@ const authWalletLimiter = limiter(
   (request) => String(request.body?.walletAddress ?? 'invalid-wallet').toLowerCase(),
 );
 const writeLimiter = limiter(40, (request) => request.auth?.wallet_address ?? 'anonymous');
+const publicWriteLimiter = limiter(40, (request) => String(
+  request.body?.creatorAddress
+    ?? request.body?.publisherAddress
+    ?? request.body?.walletAddress
+    ?? request.query?.wallet
+    ?? request.get('x-wallet-address')
+    ?? request.ip
+    ?? 'anonymous',
+).toLowerCase());
 const voteLimiter = limiter(
   20,
   (request) => String(request.body?.voterAddress ?? 'invalid-voter').toLowerCase(),
@@ -111,6 +120,47 @@ const pdfBody = express.raw({
   limit: '10mb',
 });
 const parse = (schema, value) => schema.parse(value);
+const announcementSweepIntervalMs = 30_000;
+let announcementSweepTimer = null;
+let announcementSweepRunning = false;
+let announcementSweepStatus = {
+  lastCheckedAt: null,
+  lastPublished: 0,
+  lastError: null,
+};
+
+async function sweepReadyAnnouncements() {
+  if (announcementSweepRunning) return;
+  announcementSweepRunning = true;
+  try {
+    const result = await publishReadyEventAnnouncements();
+    announcementSweepStatus = {
+      lastCheckedAt: new Date().toISOString(),
+      lastPublished: result.published,
+      lastError: result.failures.length ? result.failures[0].message : null,
+    };
+    if (result.published > 0) announceCommunication();
+    if (result.failures.length) {
+      logger.warn({ failures: result.failures }, 'Some automatic announcements still need a retry');
+    }
+  } catch (error) {
+    announcementSweepStatus = {
+      lastCheckedAt: new Date().toISOString(),
+      lastPublished: 0,
+      lastError: error?.message ?? String(error),
+    };
+    logger.warn({ err: error }, 'Automatic announcement recovery sweep failed');
+  } finally {
+    announcementSweepRunning = false;
+  }
+}
+
+function startAnnouncementSweep() {
+  queueMicrotask(() => sweepReadyAnnouncements());
+  announcementSweepTimer = setInterval(sweepReadyAnnouncements, announcementSweepIntervalMs);
+  announcementSweepTimer.unref?.();
+}
+
 
 function sendPdf(response, report) {
   response.set({
@@ -130,6 +180,7 @@ app.get('/health', async (_request, response, next) => {
       service: 'mini-galaxy-pv-v2',
       chainId: config.chainId,
       jobs: jobRunnerStatus(),
+      notifications: announcementSweepStatus,
       time: new Date().toISOString(),
     });
   } catch (error) { next(error); }
@@ -145,10 +196,10 @@ app.post('/v1/auth/logout', writeLimiter, async (request, response, next) => {
   try { await revokeSession(request); response.status(204).end(); } catch (error) { next(error); }
 });
 
-app.post('/v1/tokens/inspect', writeLimiter, async (request, response, next) => {
+app.post('/v1/tokens/inspect', publicWriteLimiter, async (request, response, next) => {
   try { response.json(await inspectToken(request.body?.tokenAddress)); } catch (error) { next(error); }
 });
-app.post('/v1/events', writeLimiter, async (request, response, next) => {
+app.post('/v1/events', publicWriteLimiter, async (request, response, next) => {
   try {
     const creator = parse(announcementTriggerInput, {
       publisherAddress: request.body?.creatorAddress,
@@ -160,7 +211,7 @@ app.get('/v1/events/:id/view', async (request, response, next) => {
   try { response.json(await eventView(request.params.id, request.query.wallet)); } catch (error) { next(error); }
 });
 app.get('/v1/events/:id/stream', openEventStream);
-app.post('/v1/events/:id/retry', writeLimiter, async (request, response, next) => {
+app.post('/v1/events/:id/retry', publicWriteLimiter, async (request, response, next) => {
   try {
     const publisher = parse(announcementTriggerInput, request.body).publisherAddress;
     response.json(await retryEvent(request.params.id, publisher));
@@ -170,7 +221,7 @@ app.get('/v1/events/:id/results', async (request, response, next) => {
   try { response.json(await eventResults(request.params.id, request.query.wallet)); } catch (error) { next(error); }
 });
 
-app.post('/v1/events/:id/announcement', writeLimiter, async (request, response, next) => {
+app.post('/v1/events/:id/announcement', publicWriteLimiter, async (request, response, next) => {
   try {
     const input = parse(announcementTriggerInput, request.body);
     const result = await triggerEventAnnouncement(request.params.id, input.publisherAddress);
@@ -179,7 +230,7 @@ app.post('/v1/events/:id/announcement', writeLimiter, async (request, response, 
   } catch (error) { next(error); }
 });
 // Backwards-compatible alias for earlier frontend packages. No wallet signature is required.
-app.put('/v1/events/:id/announcement', writeLimiter, async (request, response, next) => {
+app.put('/v1/events/:id/announcement', publicWriteLimiter, async (request, response, next) => {
   try {
     const input = parse(announcementTriggerInput, request.body);
     const result = await triggerEventAnnouncement(request.params.id, input.publisherAddress);
@@ -188,7 +239,7 @@ app.put('/v1/events/:id/announcement', writeLimiter, async (request, response, n
   } catch (error) { next(error); }
 });
 
-app.post('/v1/events/:id/documents', writeLimiter, pdfBody, async (request, response, next) => {
+app.post('/v1/events/:id/documents', publicWriteLimiter, pdfBody, async (request, response, next) => {
   try {
     const publisher = parse(announcementTriggerInput, {
       publisherAddress: request.query.wallet || request.get('x-wallet-address'),
@@ -201,7 +252,7 @@ app.post('/v1/events/:id/documents', writeLimiter, pdfBody, async (request, resp
     ));
   } catch (error) { next(error); }
 });
-app.delete('/v1/events/:id/documents/:documentId', writeLimiter, async (request, response, next) => {
+app.delete('/v1/events/:id/documents/:documentId', publicWriteLimiter, async (request, response, next) => {
   try {
     const publisher = parse(announcementTriggerInput, {
       publisherAddress: request.query.wallet || request.get('x-wallet-address'),
@@ -290,7 +341,7 @@ app.get('/v1/communications/subscriptions', async (request, response, next) => {
     response.json(await subscriptions(wallet));
   } catch (error) { next(error); }
 });
-app.put('/v1/communications/subscriptions', writeLimiter, async (request, response, next) => {
+app.put('/v1/communications/subscriptions', publicWriteLimiter, async (request, response, next) => {
   try {
     const input = parse(publicSubscriptionInput, request.body);
     response.json(await saveSubscription(input.walletAddress, input));
@@ -322,7 +373,7 @@ app.post('/v1/communications/token', requireAuth, writeLimiter, async (request, 
     response.status(201).json(message);
   } catch (error) { next(error); }
 });
-app.post('/v1/communications/token/platform', writeLimiter, async (request, response, next) => {
+app.post('/v1/communications/token/platform', publicWriteLimiter, async (request, response, next) => {
   try {
     const message = await publishPlatformTokenCommunication(
       parse(platformTokenCommunicationInput, request.body),
@@ -332,7 +383,7 @@ app.post('/v1/communications/token/platform', writeLimiter, async (request, resp
   } catch (error) { next(error); }
 });
 
-app.post('/v1/events/:id/communications/platform', writeLimiter, async (request, response, next) => {
+app.post('/v1/events/:id/communications/platform', publicWriteLimiter, async (request, response, next) => {
   try {
     const message = await publishPlatformCommunication(
       request.params.id,
@@ -389,10 +440,12 @@ app.use((error, request, response, _next) => {
 const server = app.listen(config.port, '0.0.0.0', () => {
   logger.info({ port: config.port, chainId: config.chainId }, 'API and durable job runner started');
   startJobRunner(logger).catch((error) => logger.error({ err: error }, 'Job runner startup failed'));
+  startAnnouncementSweep();
 });
 
 async function shutdown(signal) {
   logger.info({ signal }, 'Shutting down');
+  if (announcementSweepTimer) clearInterval(announcementSweepTimer);
   closeCommunicationStreams();
   closeEventStreams();
   server.close(async () => {
