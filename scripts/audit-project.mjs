@@ -19,12 +19,13 @@ async function walk(directory) {
 }
 
 const files = await walk(root);
-const relative = (file) => path.relative(root, file);
+const relative = (file) => path.relative(root, file).split(path.sep).join('/');
 const read = (name) => readFile(path.join(root, name), 'utf8');
 
 const solidity = files.filter((file) => file.endsWith('.sol'));
-if (solidity.length !== 1 || relative(solidity[0] ?? '') !== 'packages/contracts/contracts/VoteEvent.sol') {
-  failures.push(`Expected one VoteEvent.sol source; found ${solidity.length}.`);
+const solidityPaths = solidity.map(relative);
+if (solidityPaths.length !== 1 || solidityPaths[0] !== 'packages/contracts/contracts/VoteEvent.sol') {
+  failures.push(`Expected only packages/contracts/contracts/VoteEvent.sol; found ${solidityPaths.length}: ${solidityPaths.join(', ') || 'none'}.`);
 }
 
 for (const file of files.filter((value) => value.endsWith('.json'))) {
