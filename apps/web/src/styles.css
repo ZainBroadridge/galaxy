@@ -1570,9 +1570,91 @@ textarea:focus {
   font-size: 12px;
   line-height: 16px;
 }
-.create-form-actions .button {
+  .create-form-actions .button {
   min-width: 132px;
 }
+
+/* Broadridge brand refresh */
+:root {
+  --navy: #002b5c;
+  --navy-2: #071f41;
+  --blue: #0057b8;
+  --blue-hover: #00438f;
+  --link-blue: #0057b8;
+  --cyan: #00a3e0;
+  --ink: #102a43;
+  --muted: #5b7083;
+  --line: #d8e2ec;
+  --line-soft: #e8eff5;
+  --page: #f4f8fb;
+  --soft: #eef4f8;
+  --selected: #e2f4fb;
+  --shadow: 0 8px 24px rgba(0, 43, 92, .08);
+  --radius: 10px;
+}
+
+body { background: var(--page); color: var(--ink); }
+.topbar { background: var(--navy-2); border-bottom: 3px solid var(--cyan); }
+.topbar-inner { min-height: 72px; height: 72px; padding-inline: 28px; }
+.brand { color: #fff; gap: 14px; }
+.brand:hover { color: #fff; }
+.brand-logo { width: 128px; filter: brightness(0) invert(1); }
+.brand > span { border-left-color: rgba(255,255,255,.25); color: #fff; font-size: 15px; font-weight: 600; letter-spacing: .01em; }
+.topbar nav { height: 72px; gap: 20px; }
+.topbar nav a { color: #c8d7e6; font-size: 13px; }
+.topbar nav a:hover, .topbar nav a.active, .nav-home.active { color: #fff !important; }
+.topbar nav a.active { position: relative; }
+.topbar nav a.active::after { content: ''; position: absolute; right: 0; bottom: 0; left: 0; height: 3px; background: var(--cyan); }
+.network-control, .wallet-control { min-height: 36px; height: 36px; }
+.network-control { border-color: rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #d5e4f1; }
+.network-control:hover { background: rgba(255,255,255,.15); border-color: rgba(255,255,255,.45); }
+.wallet-control { background: var(--cyan); border-color: var(--cyan); color: var(--navy-2); }
+.wallet-control:hover { background: #38b9e8; border-color: #38b9e8; color: var(--navy-2); }
+.wallet-control.connected { background: #fff; border-color: #fff; color: var(--navy); }
+.app-content { background: linear-gradient(180deg, #f7fbfe 0, var(--page) 220px); }
+.page, .home-page { padding-top: 36px; padding-bottom: 48px; }
+.page-head { margin-bottom: 28px; }
+.page-head h1, .home-page > h1, .organiser-create-heading h1, .wallet-comms-header h1 { color: var(--navy); font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+.page-head p { font-size: 14px; line-height: 20px; }
+.button { border-radius: 6px; background: var(--blue); border-color: var(--blue); box-shadow: 0 2px 4px rgba(0,87,184,.16); }
+.button:hover:not(:disabled) { background: var(--blue-hover); border-color: var(--blue-hover); }
+.button.secondary { border-color: var(--blue); color: var(--blue); }
+.button.secondary:hover:not(:disabled) { border-color: var(--blue); background: #eaf4fb; color: var(--blue-hover); }
+.panel, .event-card, .results-table-card, .results-summary-card, .result-proposal-card, .notification-center, .comms-utility-card, .form-section { border-color: var(--line); box-shadow: var(--shadow); }
+.panel-heading { background: #f8fbfd; }
+.panel-heading h2, .panel > h2 { color: var(--navy); }
+.home-page > h1 { font-size: 32px; }
+.home-quick-actions { margin-top: 30px; }
+.home-metrics { gap: 20px; }
+.home-metric-card { min-height: 190px; border: 1px solid var(--line); box-shadow: var(--shadow); }
+.home-metric-primary { background: var(--navy); color: #fff; }
+.home-metric-primary h2, .home-metric-primary .home-metric-count, .home-metric-primary .home-metric-icon { color: #fff; }
+.home-metric-primary .home-metric-link { color: #7dd8f5; }
+.home-metric-card:not(.home-metric-primary) { background: #fff; }
+.home-metric-card h2 { color: var(--muted); }
+.home-metric-count { color: var(--navy); }
+.home-connect-card { border-color: var(--line); box-shadow: var(--shadow); }
+.status { border-radius: 999px; }
+.notice { border-radius: 8px; }
+input, select, textarea { border-color: #b9c9d7; border-radius: 6px; }
+input:focus, select:focus, textarea:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0,163,224,.16); }
+.event-card-heading h3 { color: var(--navy); }
+.event-card-power { background: #edf8fc; }
+.site-footer { margin-top: 72px; background: var(--navy-2); border-top: 3px solid var(--cyan); }
+.site-footer-inner { color: #b7cadb; }
+.footer-brand { color: #fff; }
+
+@media (max-width: 980px) {
+  .topbar { background: var(--navy-2); }
+  .topbar-inner { height: auto; }
+}
+
+@media (max-width: 767px) {
+  .topbar-inner { padding-inline: 16px; }
+  .home-page > h1 { font-size: 26px; }
+  .home-metric-primary { background: var(--navy); }
+}
+
 
 /* Notifications is a regular page, not a separate product surface. */
 .notifications-page {
