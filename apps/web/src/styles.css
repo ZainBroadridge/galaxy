@@ -2322,3 +2322,38 @@ input:focus, select:focus, textarea:focus { border-color: var(--cyan); box-shado
     justify-self: start;
   }
 }
+
+/* Sidebar application shell */
+.app-shell { min-height: 100vh; }
+.app-frame { min-height: 100vh; display: flex; }
+.sidebar { position: sticky; top: 0; width: 252px; min-height: 100vh; flex: 0 0 252px; display: flex; flex-direction: column; padding: 28px 16px 20px; background: var(--navy-2); border-right: 1px solid rgba(255,255,255,.12); }
+.sidebar-brand { display: flex; align-items: center; min-height: 54px; padding: 0 14px 24px; border-bottom: 1px solid rgba(255,255,255,.16); }
+.sidebar-logo { display: block; width: 156px; height: auto; object-fit: contain; filter: brightness(0) invert(1); }
+.sidebar-nav { display: flex; flex-direction: column; gap: 6px; padding-top: 26px; }
+.sidebar-nav a { display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding: 0 14px; border-radius: 6px; color: #b9cbdb; font-size: 14px; font-weight: 600; text-decoration: none; }
+.sidebar-nav a:hover { background: rgba(255,255,255,.08); color: #fff; }
+.sidebar-nav a.active { background: var(--blue); color: #fff; }
+.sidebar-actions { display: flex; flex-direction: column; gap: 10px; margin-top: auto; padding-top: 24px; }
+.sidebar-actions .network-control, .sidebar-actions .wallet-control { width: 100%; justify-content: flex-start; gap: 8px; padding-inline: 12px; }
+.sidebar-actions .network-control-label, .sidebar-actions .wallet-control span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-actions .network-add-icon, .sidebar-actions .wallet-control svg:last-child { margin-left: auto; }
+.app-main { min-width: 0; min-height: 100vh; flex: 1; display: flex; flex-direction: column; }
+.app-titlebar { min-height: 64px; display: flex; align-items: center; gap: 10px; padding: 0 34px; background: #fff; border-bottom: 1px solid var(--line); color: var(--navy); font-size: 17px; letter-spacing: -.01em; }
+.app-titlebar strong { font-weight: 600; }
+.app-main .app-content { flex: 1 0 auto; width: 100%; }
+.site-footer { margin-top: auto; }
+.site-footer-inner { padding-inline: 34px; }
+
+@media (max-width: 767px) {
+  .app-frame { display: block; }
+  .sidebar { position: static; width: 100%; min-height: 0; padding: 14px 16px; }
+  .sidebar-brand { min-height: 42px; padding: 0 4px 14px; }
+  .sidebar-logo { width: 132px; }
+  .sidebar-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding-top: 14px; }
+  .sidebar-nav a { min-height: 36px; padding-inline: 10px; font-size: 12px; }
+  .sidebar-actions { flex-direction: row; padding-top: 14px; }
+  .sidebar-actions .network-control, .sidebar-actions .wallet-control { min-width: 0; flex: 1; }
+  .app-titlebar { min-height: 52px; padding-inline: 18px; font-size: 14px; }
+  .site-footer-inner { min-height: 58px; padding-inline: 18px; font-size: 11px; flex-wrap: wrap; }
+  .footer-copyright { margin-left: 0; width: 100%; padding-bottom: 10px; }
+}
