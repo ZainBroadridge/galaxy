@@ -5,34 +5,75 @@ import test from 'node:test';
 const root = new URL('../../../', import.meta.url);
 const read = (path) => readFile(new URL(path, root), 'utf8');
 
-test('clickable browser notifications disclose only a message reference before wallet connection', async () => {
-  const [serviceWorker, browserPush, page] = await Promise.all([
+test('clickable browser notifications route through the mounted React application', async () => {
+  const [serviceWorker, browserPush, app, page] = await Promise.all([
     read('apps/web/public/pv-push-sw.js'),
+    read('apps/web/src/browser-push.js'),
+    read('apps/web/src/App.jsx'),
+    read('apps/web/src/pages/WalletComms.jsx'),
+  ]);
+
+  assert.match(serviceWorker, /pvPushMessageId/u);
+  assert.match(serviceWorker, /frameType === 'top-level'/u);
+  assert.match(serviceWorker, /client\.postMessage/u);
+  assert.match(serviceWorker, /client\.focus\(\)/u);
+  assert.match(serviceWorker, /clients\.openWindow\(bootstrapUrl\(messageId\)\)/u);
+  assert.doesNotMatch(serviceWorker, /\.navigate\(/u);
+  assert.doesNotMatch(serviceWorker, /actionUrl|walletAddress|message\.body/u);
+
+  assert.match(browserPush, /listenForBrowserPushOpen/u);
+  assert.match(browserPush, /consumeBrowserPushBootstrap/u);
+  assert.match(browserPush, /showBrowserPushClickTest/u);
+  assert.match(browserPush, /click-routing-4/u);
+  assert.doesNotMatch(browserPush, /window\.history\.pushState|PopStateEvent/u);
+
+  assert.match(app, /useNavigate/u);
+  assert.match(app, /listenForBrowserPushOpen/u);
+  assert.match(app, /consumeBrowserPushBootstrap/u);
+  assert.match(app, /navigate\(browserPushNotificationPath\(messageId\)/u);
+
+  assert.match(page, /!wallet\.connected && <Panel/u);
+  assert.match(page, /Connect the wallet that received this notification/u);
+  assert.match(page, /This communication is not available for the connected wallet/u);
+  assert.match(page, /Test click routing/u);
+});
+
+test('push registration reports VAPID, Brave and managed-network failures clearly', async () => {
+  const [browserPush, page] = await Promise.all([
     read('apps/web/src/browser-push.js'),
     read('apps/web/src/pages/WalletComms.jsx'),
   ]);
 
-  assert.match(serviceWorker, /\/notifications\?messageId=/u);
-  assert.match(serviceWorker, /data: \{ messageId \}/u);
-  assert.match(serviceWorker, /frameType === 'top-level'/u);
-  assert.match(serviceWorker, /postMessage\(\{ type: OPEN_NOTIFICATION_MESSAGE, messageId \}\)/u);
-  assert.doesNotMatch(serviceWorker, /\.navigate\(/u);
-  assert.match(serviceWorker, /OPEN_WINDOW_TIMEOUT_MS/u);
-  assert.match(serviceWorker, /CLICK_TIMEOUT_MS/u);
-  assert.match(serviceWorker, /bounded\(\(\) => openNotification\(messageId\), CLICK_TIMEOUT_MS\)/u);
-  assert.doesNotMatch(serviceWorker, /actionUrl|walletAddress|message\.body/u);
-  assert.match(page, /!wallet\.connected && <Panel/u);
-  assert.match(page, /Connect the wallet that received this notification/u);
-  assert.match(page, /This communication is not available for the connected wallet/u);
-  assert.match(browserPush, /Notification\.requestPermission\(\)/u);
-  assert.match(browserPush, /navigator\.serviceWorker\.addEventListener\('message'/u);
-  assert.match(browserPush, /window\.history\.pushState/u);
-  assert.match(browserPush, /new PopStateEvent\('popstate'/u);
-  assert.match(browserPush, /pv-push-sw\.js\?v=click-routing-2/u);
-  assert.match(browserPush, /updateViaCache: 'none'/u);
-  assert.match(browserPush, /current\.update\(\)/u);
-  assert.match(browserPush, /getRegistration\(serviceWorkerScope\)/u);
+  assert.match(browserPush, /bytes\.length !== 65 \|\| bytes\[0\] !== 4/u);
+  assert.match(browserPush, /Use Google services for push messaging/u);
+  assert.match(browserPush, /brave:\/\/settings\/privacy/u);
+  assert.match(browserPush, /office proxy or firewall/u);
+  assert.match(browserPush, /PUSH_SERVICE_UNAVAILABLE/u);
+  assert.match(browserPush, /VITE_WEB_PUSH_PUBLIC_KEY/u);
+  assert.match(browserPush, /sessionStorage/u);
+  assert.match(page, /browserPush\?\.issue\?\.message/u);
+  assert.match(page, /readableSnapIssue/u);
+  assert.match(page, /MetaMask in-app alerts stay inside MetaMask/u);
+  assert.match(page, /Use Google services for push messaging/u);
+  assert.match(page, /returned no readable detail/u);
   assert.doesNotMatch(browserPush, /signMessage|signTypedData|ensureAuthenticated|getSigner/u);
+});
+
+test('Snap owns only the MetaMask inbox and in-app alert channel', async () => {
+  const [snapSource, snapPackage, snapManifest, snapClient] = await Promise.all([
+    read('apps/snap/src/index.tsx'),
+    read('apps/snap/package.json'),
+    read('apps/snap/snap.manifest.json'),
+    read('apps/web/src/snap.js'),
+  ]);
+
+  assert.match(snapPackage, /"version": "0\.4\.2"/u);
+  assert.match(snapManifest, /"version": "0\.4\.2"/u);
+  assert.match(snapSource, /type: 'inApp'/u);
+  assert.doesNotMatch(snapSource, /type: 'native'|notifyNative|lastNativeNotificationAt|nativeNotified/u);
+  assert.match(snapSource, /MetaMask returned an unreadable alert error/u);
+  assert.match(snapSource, /Clickable[\s\S]*Web Push worker/u);
+  assert.match(snapClient, /SNAP_VERSION.*'0\.4\.2'/u);
 });
 
 test('browser push reuses inbox audience rules and keeps one subscription resource route', async () => {

@@ -1,7 +1,7 @@
 {
   "name": "@zainbroadridge/pv-communications-snap",
-  "version": "0.4.1",
-  "description": "Background, verified investor communications with schema-safe MetaMask alerts.",
+  "version": "0.4.2",
+  "description": "Verified investor communications with background polling and MetaMask in-app alerts.",
   "repository": {
     "type": "git",
     "url": "https://github.com/ZainBroadridge/galaxy.git"

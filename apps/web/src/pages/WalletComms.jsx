@@ -7,6 +7,7 @@ import {
   browserPushState,
   disableBrowserPush,
   enableBrowserPush,
+  showBrowserPushClickTest,
 } from '../browser-push.js';
 import { ErrorBox, Notice, Panel, Spinner, Status } from '../components/UI.jsx';
 import { useNotifications } from '../notifications.jsx';
@@ -50,6 +51,26 @@ const messageIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-
 function messageIdFromSearch(search) {
   const value = new URLSearchParams(search).get('messageId');
   return value && messageIdPattern.test(value) ? value.toLowerCase() : null;
+}
+
+function readableSnapIssue(value) {
+  if (!value) return null;
+  if (typeof value === 'object') {
+    const nested = value.message ?? value.error?.message ?? value.data?.message;
+    if (typeof nested === 'string' && nested.trim()) return nested.trim();
+    try {
+      const encoded = JSON.stringify(value);
+      if (encoded && encoded !== '{}') return encoded;
+    } catch {
+      return 'MetaMask returned an unreadable native-alert error.';
+    }
+  }
+
+  const text = String(value).trim();
+  if (/^\[object\s*,?\s*object\]$/iu.test(text)) {
+    return 'MetaMask rejected the native alert, but the installed Snap returned no readable detail. The verified message remains available in the MetaMask and dApp inboxes.';
+  }
+  return text;
 }
 
 export default function WalletComms() {
@@ -226,7 +247,7 @@ export default function WalletComms() {
       const accepted = Number(result.accepted ?? 0);
       const rejected = Number(result.rejected ?? 0);
       const notificationErrors = Array.isArray(result.notificationErrors)
-        ? result.notificationErrors
+        ? result.notificationErrors.map(readableSnapIssue).filter(Boolean)
         : [];
       setFeedback({
         action: 'sync',
@@ -256,13 +277,19 @@ export default function WalletComms() {
 
   async function enableBrowserNotifications() {
     await runAction('browser-push', async () => {
-      const state = await enableBrowserPush(wallet.account);
-      setBrowserPush(state);
-      setFeedback({
-        action: 'browser-push',
-        tone: 'success',
-        message: 'Clickable browser notifications enabled for this wallet.',
-      });
+      try {
+        const state = await enableBrowserPush(wallet.account);
+        setBrowserPush(state);
+        setFeedback({
+          action: 'browser-push',
+          tone: 'success',
+          message: 'Clickable browser notifications enabled for this wallet.',
+        });
+      } catch (value) {
+        const state = await browserPushState(wallet.account).catch(() => null);
+        if (state) setBrowserPush(state);
+        throw value;
+      }
     });
   }
 
@@ -274,6 +301,18 @@ export default function WalletComms() {
         action: 'browser-push',
         tone: 'success',
         message: 'Browser notifications disabled.',
+      });
+    });
+  }
+
+  async function testBrowserNotificationClick() {
+    await runAction('browser-push-test', async () => {
+      const messageId = notifications.messages[0]?.messageId;
+      await showBrowserPushClickTest(messageId);
+      setFeedback({
+        action: 'browser-push-test',
+        tone: 'info',
+        message: 'Test notification sent. Click it to verify dApp routing.',
       });
     });
   }
@@ -373,6 +412,8 @@ export default function WalletComms() {
   const snapLastChecked = snapState?.lastCheckedAt
     ? new Date(snapState.lastCheckedAt).toLocaleString()
     : null;
+  const snapDeliveryIssue = readableSnapIssue(snapState?.lastDeliveryError);
+  const latestMessageId = notifications.messages[0]?.messageId ?? null;
 
   const targetMessage = targetMessageId
     ? notifications.messages.find((message) => message.messageId?.toLowerCase() === targetMessageId)
@@ -392,7 +433,9 @@ export default function WalletComms() {
         ? 'UNSUPPORTED'
         : browserPush.permission === 'denied'
           ? 'BLOCKED'
-          : browserPush.enabledForWallet ? 'ACTIVE' : 'NOT_ENABLED';
+          : browserPush.issue?.code === 'PUSH_SERVICE_UNAVAILABLE'
+            ? 'UNAVAILABLE'
+            : browserPush.enabledForWallet ? 'ACTIVE' : 'NOT_ENABLED';
   const browserPushUnavailable = !browserPush?.configured
     || !browserPush?.supported
     || browserPush?.permission === 'denied';
@@ -508,10 +551,10 @@ export default function WalletComms() {
       <div className="comms-utilities">
         <section className="comms-utility-card">
           <div className="utility-card-heading">
-            <div><span className="panel-eyebrow">MetaMask</span><h2>Background alerts</h2></div>
+            <div><span className="panel-eyebrow">MetaMask</span><h2>In-wallet alerts</h2></div>
             <Status value={backgroundEnabled ? 'ACTIVE' : snapInstalled ? 'INSTALLED' : 'NOT_INSTALLED'} />
           </div>
-          <p>Keep a verified copy of voting notices inside MetaMask while the dApp is closed.</p>
+          <p>Keep a verified copy of voting notices inside MetaMask while the dApp is closed. MetaMask in-app alerts stay inside MetaMask; clickable desktop alerts are handled below.</p>
           {snapInstalled && <p className="muted">
             {backgroundEnabled ? 'Checks every minute' : 'Background alerts are disabled'}
             {snapLastChecked ? ` · Last checked ${snapLastChecked}` : ''}
@@ -528,7 +571,7 @@ export default function WalletComms() {
           {actionNotice('install')}
           {actionNotice('disable-alerts')}
           {snapState?.lastError && <Notice tone="error">Last background check: {snapState.lastError}</Notice>}
-          {snapState?.lastDeliveryError && <Notice tone="error">Last MetaMask alert: {snapState.lastDeliveryError}</Notice>}
+          {snapDeliveryIssue && <Notice tone="error">Last MetaMask in-app alert: {snapDeliveryIssue}</Notice>}
 
           <div style={{ borderTop: '1px solid var(--line)', marginTop: 14, paddingTop: 14 }}>
             <div className="utility-card-heading">
@@ -538,6 +581,8 @@ export default function WalletComms() {
             <p>Show the same concise voting alert as a browser notification. Clicking it opens this inbox; message contents remain hidden until the receiving wallet is connected.</p>
             {browserPush?.permission === 'denied' && <Notice tone="warning">Browser notifications are blocked. Allow them in the browser site settings before enabling this feature.</Notice>}
             {!browserPush?.configured && browserPush && <Notice tone="info">Set the Web Push public key in Vercel to enable clickable browser alerts.</Notice>}
+            {browserPush?.browser === 'brave' && !browserPush?.enabledForWallet && <Notice tone="info">Brave requires <code>Use Google services for push messaging</code> in <code>brave://settings/privacy</code>. If that setting is locked, your browser administrator must enable it.</Notice>}
+            {browserPush?.issue?.message && <Notice tone="warning">{browserPush.issue.message}</Notice>}
             <div className="inline-actions">
               {browserPush?.enabledForWallet
                 ? <button type="button" className="button secondary" onClick={disableBrowserNotifications} disabled={busy}>
@@ -548,8 +593,15 @@ export default function WalletComms() {
                     ? 'Enabling…'
                     : browserPush?.boundWalletAddress ? 'Enable for this wallet' : 'Enable browser alerts'}
                 </button>}
+              {browserPush?.serviceWorkerReady && browserPush?.permission === 'granted' && latestMessageId && <button
+                type="button"
+                className="button secondary"
+                onClick={testBrowserNotificationClick}
+                disabled={busy}
+              >{pendingAction === 'browser-push-test' ? 'Sending test…' : 'Test click routing'}</button>}
             </div>
             {actionNotice('browser-push')}
+            {actionNotice('browser-push-test')}
           </div>
         </section>
 

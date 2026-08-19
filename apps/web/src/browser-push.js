@@ -2,11 +2,12 @@ import { api } from './api.js';
 
 const publicKey = String(import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY || '').trim();
 const bindingKey = 'pv-v2-browser-push-binding';
-const serviceWorkerPath = '/pv-push-sw.js?v=click-routing-2';
+const issueKey = 'pv-v2-browser-push-issue';
+const serviceWorkerPath = '/pv-push-sw.js?v=click-routing-4';
 const serviceWorkerScope = '/';
 const openNotificationMessage = 'PV_PUSH_OPEN_NOTIFICATION';
+const bootstrapParameter = 'pvPushMessageId';
 const messageIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const navigationListenerMarker = Symbol.for('pv.browserPushNavigationListener');
 
 function supported() {
   return typeof window !== 'undefined'
@@ -19,38 +20,35 @@ function notificationPath(messageId) {
   return `/notifications?messageId=${encodeURIComponent(messageId)}`;
 }
 
-function handleServiceWorkerMessage(event) {
-  const type = event.data?.type;
-  const messageId = String(event.data?.messageId ?? '').toLowerCase();
-  if (type !== openNotificationMessage || !messageIdPattern.test(messageId)) return;
-
-  const target = notificationPath(messageId);
-  const current = `${window.location.pathname}${window.location.search}`;
-  const priorState = window.history.state && typeof window.history.state === 'object'
-    ? window.history.state
-    : {};
-  const nextState = { ...priorState, pvPushMessageId: messageId };
-
-  if (current === target) window.history.replaceState(nextState, '', target);
-  else window.history.pushState(nextState, '', target);
-
-  // BrowserRouter listens for popstate. This performs a local SPA transition,
-  // so an already-open dApp does not need a full page request through a proxy.
-  window.dispatchEvent(new PopStateEvent('popstate', { state: nextState }));
+function normalizedMessageId(value) {
+  const result = String(value ?? '').toLowerCase();
+  return messageIdPattern.test(result) ? result : null;
 }
 
-if (supported() && !window[navigationListenerMarker]) {
-  navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
-  window[navigationListenerMarker] = true;
+export function browserPushNotificationPath(messageId) {
+  const normalized = normalizedMessageId(messageId);
+  return normalized ? notificationPath(normalized) : '/notifications';
 }
 
-// Users who already enabled browser alerts should receive click-handler fixes
-// on any dApp load, without registering a service worker for users who never
-// opted in.
-if (supported()) {
-  navigator.serviceWorker.getRegistration(serviceWorkerScope)
-    .then((existing) => existing ? registration() : null)
-    .catch(() => null);
+export function consumeBrowserPushBootstrap() {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  return normalizedMessageId(params.get(bootstrapParameter));
+}
+
+export function listenForBrowserPushOpen(handler) {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+    return () => {};
+  }
+
+  const listener = (event) => {
+    if (event.data?.type !== openNotificationMessage) return;
+    const messageId = normalizedMessageId(event.data?.messageId);
+    if (messageId) handler(messageId);
+  };
+
+  navigator.serviceWorker.addEventListener('message', listener);
+  return () => navigator.serviceWorker.removeEventListener('message', listener);
 }
 
 function readBinding() {
@@ -71,26 +69,123 @@ function saveBinding(value) {
   else localStorage.removeItem(bindingKey);
 }
 
-function applicationServerKey(value) {
-  const padding = '='.repeat((4 - value.length % 4) % 4);
-  const base64 = (value + padding).replaceAll('-', '+').replaceAll('_', '/');
-  const bytes = atob(base64);
-  return Uint8Array.from(bytes, (character) => character.charCodeAt(0));
+function readIssue() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(issueKey) || 'null');
+    if (!value?.message) return null;
+    return {
+      code: String(value.code || 'BROWSER_PUSH_ERROR'),
+      message: String(value.message),
+    };
+  } catch {
+    return null;
+  }
 }
 
-function waitForActivation(worker, timeoutMs = 4_000) {
+function saveIssue(value) {
+  try {
+    if (!value) sessionStorage.removeItem(issueKey);
+    else sessionStorage.setItem(issueKey, JSON.stringify(value));
+  } catch {
+    // Diagnostics are a convenience and must never block notifications.
+  }
+}
+
+function errorText(value) {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (value instanceof Error && value.message) return value.message;
+  if (typeof value?.message === 'string' && value.message.trim()) return value.message.trim();
+  if (typeof value?.error?.message === 'string') return value.error.message;
+  if (typeof value?.data?.message === 'string') return value.data.message;
+  try {
+    const encoded = JSON.stringify(value);
+    if (encoded && encoded !== '{}') return encoded;
+  } catch {
+    // Fall through to a stable generic message.
+  }
+  return 'Browser push failed without a readable error.';
+}
+
+function browserPushError(code, message, cause = undefined) {
+  const error = new Error(message, cause === undefined ? undefined : { cause });
+  error.name = 'BrowserPushError';
+  error.code = code;
+  return error;
+}
+
+async function isBraveBrowser() {
+  try {
+    return Boolean(navigator.brave && await navigator.brave.isBrave?.());
+  } catch {
+    return false;
+  }
+}
+
+async function subscriptionError(value) {
+  const detail = errorText(value);
+  const fingerprint = `${value?.name ?? ''} ${detail}`.toLowerCase();
+
+  if (fingerprint.includes('push service error') || value?.name === 'AbortError') {
+    const brave = await isBraveBrowser();
+    const message = brave
+      ? 'Brave could not register with its push service. Enable "Use Google services for push messaging" in brave://settings/privacy. If that setting is locked or this still fails, the office proxy or firewall is blocking the managed browser push service; ask IT to allow it. The dApp cannot bypass an administrator policy.'
+      : 'The browser could not register with its push service. On a managed office device, ask IT to allow the browser push service and exempt it from proxy or TLS inspection. The dApp cannot bypass an administrator policy.';
+    return browserPushError('PUSH_SERVICE_UNAVAILABLE', message, value);
+  }
+
+  if (value?.name === 'InvalidAccessError' || fingerprint.includes('applicationserverkey')) {
+    return browserPushError(
+      'INVALID_VAPID_PUBLIC_KEY',
+      'The Web Push public key configured in Vercel is invalid. Replace VITE_WEB_PUSH_PUBLIC_KEY with the public key from the same VAPID pair used by Render.',
+      value,
+    );
+  }
+
+  return browserPushError('PUSH_SUBSCRIPTION_FAILED', detail, value);
+}
+
+function applicationServerKey(value) {
+  let bytes;
+  try {
+    const padding = '='.repeat((4 - value.length % 4) % 4);
+    const base64 = (value + padding).replaceAll('-', '+').replaceAll('_', '/');
+    const decoded = atob(base64);
+    bytes = Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+  } catch (error) {
+    throw browserPushError(
+      'INVALID_VAPID_PUBLIC_KEY',
+      'VITE_WEB_PUSH_PUBLIC_KEY is not valid URL-safe Base64.',
+      error,
+    );
+  }
+
+  if (bytes.length !== 65 || bytes[0] !== 4) {
+    throw browserPushError(
+      'INVALID_VAPID_PUBLIC_KEY',
+      'VITE_WEB_PUSH_PUBLIC_KEY must be an uncompressed 65-byte P-256 public key.',
+    );
+  }
+  return bytes;
+}
+
+function sameApplicationServerKey(subscription, expected) {
+  const actual = subscription?.options?.applicationServerKey;
+  if (!actual) return true;
+  const bytes = new Uint8Array(actual);
+  if (bytes.length !== expected.length) return false;
+  return bytes.every((value, index) => value === expected[index]);
+}
+
+function waitForActivation(worker, timeoutMs = 5_000) {
   if (!worker || worker.state === 'activated') return Promise.resolve();
   return new Promise((resolve) => {
-    let timeout;
-    const finish = () => {
+    const timeout = setTimeout(resolve, timeoutMs);
+    const onStateChange = () => {
+      if (worker.state !== 'activated' && worker.state !== 'redundant') return;
       clearTimeout(timeout);
       worker.removeEventListener('statechange', onStateChange);
       resolve();
     };
-    const onStateChange = () => {
-      if (worker.state === 'activated' || worker.state === 'redundant') finish();
-    };
-    timeout = setTimeout(finish, timeoutMs);
     worker.addEventListener('statechange', onStateChange);
   });
 }
@@ -100,20 +195,18 @@ async function registration() {
     scope: serviceWorkerScope,
     updateViaCache: 'none',
   });
-
-  // Force an update check whenever the Notifications page evaluates push state.
-  // This avoids an old click handler being retained by a browser or proxy cache.
   await current.update().catch(() => null);
   await waitForActivation(current.installing || current.waiting);
-  return current;
+  return navigator.serviceWorker.ready;
 }
 
-function state(walletAddress, subscription = null) {
+function state(walletAddress, subscription = null, extra = {}) {
   const binding = readBinding();
   const normalizedWallet = walletAddress?.toLowerCase() ?? null;
   return {
     configured: Boolean(publicKey),
     supported: supported(),
+    browser: typeof navigator !== 'undefined' && navigator.brave ? 'brave' : 'chromium',
     permission: supported() ? Notification.permission : 'unsupported',
     subscribed: Boolean(subscription),
     enabledForWallet: Boolean(
@@ -122,14 +215,35 @@ function state(walletAddress, subscription = null) {
       && binding.walletAddress === normalizedWallet,
     ),
     boundWalletAddress: binding?.walletAddress ?? null,
+    issue: readIssue(),
+    ...extra,
   };
 }
 
 export async function browserPushState(walletAddress) {
   if (!supported() || !publicKey) return state(walletAddress);
-  const currentRegistration = await registration();
-  const subscription = await currentRegistration.pushManager.getSubscription() ?? null;
-  return state(walletAddress, subscription);
+  try {
+    const currentRegistration = await registration();
+    const subscription = await currentRegistration.pushManager.getSubscription() ?? null;
+    return state(walletAddress, subscription, { serviceWorkerReady: true });
+  } catch (error) {
+    return state(walletAddress, null, {
+      serviceWorkerReady: false,
+      issue: {
+        code: error?.code || 'SERVICE_WORKER_ERROR',
+        message: errorText(error),
+      },
+    });
+  }
+}
+
+async function removeServerBinding(subscription, walletAddress) {
+  if (!subscription?.endpoint || !walletAddress) return;
+  await api('/v1/communications/push-subscription', {
+    method: 'DELETE',
+    auth: false,
+    body: { walletAddress, endpoint: subscription.endpoint },
+  }).catch(() => null);
 }
 
 export async function enableBrowserPush(walletAddress) {
@@ -144,18 +258,39 @@ export async function enableBrowserPush(walletAddress) {
     throw new Error('Browser notification permission was not granted.');
   }
 
+  const key = applicationServerKey(publicKey);
   const currentRegistration = await registration();
   let subscription = await currentRegistration.pushManager.getSubscription();
+
+  if (subscription && !sameApplicationServerKey(subscription, key)) {
+    const binding = readBinding();
+    await removeServerBinding(subscription, binding?.walletAddress);
+    await subscription.unsubscribe().catch(() => null);
+    saveBinding(null);
+    subscription = null;
+  }
+
   if (!subscription) {
-    subscription = await currentRegistration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: applicationServerKey(publicKey),
-    });
+    try {
+      subscription = await currentRegistration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: key,
+      });
+    } catch (value) {
+      const error = await subscriptionError(value);
+      saveIssue({ code: error.code, message: error.message });
+      throw error;
+    }
   }
 
   const serialized = subscription.toJSON();
   if (!serialized.keys?.p256dh || !serialized.keys?.auth) {
-    throw new Error('The browser returned an incomplete push subscription.');
+    const error = browserPushError(
+      'INCOMPLETE_PUSH_SUBSCRIPTION',
+      'The browser returned an incomplete push subscription.',
+    );
+    saveIssue({ code: error.code, message: error.message });
+    throw error;
   }
 
   await api('/v1/communications/push-subscription', {
@@ -170,7 +305,27 @@ export async function enableBrowserPush(walletAddress) {
     },
   });
   saveBinding({ endpoint: subscription.endpoint, walletAddress: walletAddress.toLowerCase() });
-  return state(walletAddress, subscription);
+  saveIssue(null);
+  return state(walletAddress, subscription, { serviceWorkerReady: true });
+}
+
+export async function showBrowserPushClickTest(messageId) {
+  const normalized = normalizedMessageId(messageId);
+  if (!normalized) throw new Error('A received communication is required to test click routing.');
+  if (!supported()) throw new Error('This browser does not support service-worker notifications.');
+  if (Notification.permission !== 'granted') {
+    throw new Error('Allow browser notifications before testing click routing.');
+  }
+  const currentRegistration = await registration();
+  await currentRegistration.showNotification('Mini Galaxy Proxy Voting', {
+    body: 'Click to open the corresponding dApp notification.',
+    icon: '/favicon.png',
+    badge: '/favicon.png',
+    tag: `pv-click-test-${normalized}`,
+    renotify: true,
+    data: { messageId: normalized },
+  });
+  return { messageId: normalized };
 }
 
 export async function disableBrowserPush(walletAddress) {
@@ -181,13 +336,10 @@ export async function disableBrowserPush(walletAddress) {
   const boundWallet = binding?.walletAddress ?? walletAddress?.toLowerCase();
 
   if (subscription && boundWallet) {
-    await api('/v1/communications/push-subscription', {
-      method: 'DELETE',
-      auth: false,
-      body: { walletAddress: boundWallet, endpoint: subscription.endpoint },
-    }).catch(() => null);
+    await removeServerBinding(subscription, boundWallet);
     await subscription.unsubscribe();
   }
   saveBinding(null);
+  saveIssue(null);
   return state(walletAddress);
 }

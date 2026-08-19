@@ -66,7 +66,6 @@ type SnapState = {
   lastCheckedAt: string | null;
   lastError: string | null;
   lastDeliveryError: string | null;
-  lastNativeNotificationAt: string | null;
   updatedAt: string | null;
 };
 
@@ -76,7 +75,6 @@ type PollResult = {
   total: number;
   rejected: number;
   notificationErrors: string[];
-  nativeNotified: boolean;
   error?: string;
 };
 
@@ -87,7 +85,6 @@ const EMPTY_STATE: SnapState = {
   lastCheckedAt: null,
   lastError: null,
   lastDeliveryError: null,
-  lastNativeNotificationAt: null,
   updatedAt: null,
 };
 
@@ -104,7 +101,6 @@ async function readUnencryptedState(): Promise<SnapState> {
     lastCheckedAt: stored?.lastCheckedAt ?? null,
     lastError: typeof stored?.lastError === 'string' ? stored.lastError : null,
     lastDeliveryError: typeof stored?.lastDeliveryError === 'string' ? stored.lastDeliveryError : null,
-    lastNativeNotificationAt: stored?.lastNativeNotificationAt ?? null,
     updatedAt: stored?.updatedAt ?? null,
   };
 }
@@ -344,7 +340,22 @@ function activeMessages(messages: Communication[]): Communication[] {
 }
 
 function errorMessage(value: unknown): string {
-  return value instanceof Error ? value.message : String(value);
+  if (value instanceof Error && value.message) return value.message;
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const nested = record.message
+      ?? (record.error as Record<string, unknown> | undefined)?.message
+      ?? (record.data as Record<string, unknown> | undefined)?.message;
+    if (typeof nested === 'string' && nested.trim()) return nested.trim();
+    try {
+      const encoded = JSON.stringify(value);
+      if (encoded && encoded !== '{}') return encoded;
+    } catch {
+      // Fall through to a stable, user-readable message.
+    }
+  }
+  return 'MetaMask returned an unreadable alert error.';
 }
 
 async function notifyInApp(message: Communication): Promise<void> {
@@ -353,20 +364,6 @@ async function notifyInApp(message: Communication): Promise<void> {
     params: {
       type: 'inApp',
       message: `${message.tokenSymbol}: ${message.title}`.slice(0, 80),
-    },
-  });
-}
-
-async function notifyNative(messages: Communication[]): Promise<void> {
-  const notification = messages.length === 1
-    ? `${messages[0].tokenSymbol}: ${messages[0].title}`
-    : `${messages.length} new investor communications`;
-
-  await snap.request({
-    method: 'snap_notify',
-    params: {
-      type: 'native',
-      message: notification.slice(0, 80),
     },
   });
 }
@@ -406,7 +403,6 @@ async function pollCommunications(throwOnError = false): Promise<PollResult> {
       total: state.messages.length,
       rejected: 0,
       notificationErrors: [],
-      nativeNotified: false,
     };
   }
 
@@ -429,10 +425,8 @@ async function pollCommunications(throwOnError = false): Promise<PollResult> {
     const fresh = incoming.filter((message) => !known.has(message.messageId));
     const messages = [...fresh, ...existingMessages].slice(0, MAX_MESSAGES);
 
-    let lastNativeNotificationAt = state.lastNativeNotificationAt;
     let lastDeliveryError = state.lastDeliveryError;
     const notificationErrors: string[] = [];
-    let nativeNotified = false;
 
     const nextState: SnapState = {
       ...state,
@@ -454,16 +448,10 @@ async function pollCommunications(throwOnError = false): Promise<PollResult> {
       }
     }
 
-    // Fresh message IDs are already deduplicated, so one native notification per
-    // fresh batch is sufficient and does not need an additional five-minute gate.
+    // The Snap owns the verified MetaMask inbox and in-app alerts. Clickable
+    // operating-system notifications are handled by the dApp's Web Push worker,
+    // avoiding two competing native-notification channels.
     if (fresh.length > 0) {
-      try {
-        await notifyNative(fresh);
-        nativeNotified = true;
-        lastNativeNotificationAt = checkedAt;
-      } catch (error) {
-        notificationErrors.push(`Native alert: ${errorMessage(error)}`);
-      }
       lastDeliveryError = notificationErrors.length
         ? notificationErrors.join(' | ')
         : null;
@@ -472,7 +460,6 @@ async function pollCommunications(throwOnError = false): Promise<PollResult> {
     const finalState: SnapState = {
       ...nextState,
       lastDeliveryError,
-      lastNativeNotificationAt,
     };
     await writeState(finalState);
 
@@ -482,7 +469,6 @@ async function pollCommunications(throwOnError = false): Promise<PollResult> {
       total: messages.length,
       rejected,
       notificationErrors,
-      nativeNotified,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -499,7 +485,6 @@ async function pollCommunications(throwOnError = false): Promise<PollResult> {
       total: state.messages.length,
       rejected: 0,
       notificationErrors: [],
-      nativeNotified: false,
       error: message,
     };
   }
@@ -538,7 +523,7 @@ export const onRpcRequest: OnRpcRequestHandler = async ({ origin, request }) => 
         backgroundEnabled: true,
         messages: walletChanged ? [] : activeMessages(state.messages),
         lastError: null,
-        lastDeliveryError: walletChanged ? null : state.lastDeliveryError,
+        lastDeliveryError: null,
         updatedAt: new Date().toISOString(),
       });
       const result = await pollCommunications(true);

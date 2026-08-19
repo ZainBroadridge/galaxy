@@ -1,7 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppKit } from '@reown/appkit/react';
-import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { reownConfigured } from './appkit.js';
+import {
+  browserPushNotificationPath,
+  consumeBrowserPushBootstrap,
+  listenForBrowserPushOpen,
+} from './browser-push.js';
 import { Notice } from './components/UI.jsx';
 import { useNotifications } from './notifications.jsx';
 import { useWallet } from './wallet.jsx';
@@ -55,10 +60,22 @@ function BellIcon() {
 export default function App() {
   const wallet = useWallet();
   const location = useLocation();
+  const navigate = useNavigate();
   const { open } = useAppKit();
   const { unreadCount } = useNotifications();
   const [networkBusy, setNetworkBusy] = useState(false);
   const [networkError, setNetworkError] = useState(null);
+
+  useEffect(() => {
+    const openNotification = (messageId, replace = false) => {
+      navigate(browserPushNotificationPath(messageId), { replace });
+    };
+
+    const bootstrapMessageId = consumeBrowserPushBootstrap();
+    if (bootstrapMessageId) openNotification(bootstrapMessageId, true);
+
+    return listenForBrowserPushOpen((messageId) => openNotification(messageId));
+  }, [navigate]);
 
   async function addOrSwitchAmoy() {
     if (networkBusy) return;
