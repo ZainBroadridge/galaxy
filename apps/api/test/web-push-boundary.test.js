@@ -14,11 +14,24 @@ test('clickable browser notifications disclose only a message reference before w
 
   assert.match(serviceWorker, /\/notifications\?messageId=/u);
   assert.match(serviceWorker, /data: \{ messageId \}/u);
+  assert.match(serviceWorker, /frameType === 'top-level'/u);
+  assert.match(serviceWorker, /postMessage\(\{ type: OPEN_NOTIFICATION_MESSAGE, messageId \}\)/u);
+  assert.doesNotMatch(serviceWorker, /\.navigate\(/u);
+  assert.match(serviceWorker, /OPEN_WINDOW_TIMEOUT_MS/u);
+  assert.match(serviceWorker, /CLICK_TIMEOUT_MS/u);
+  assert.match(serviceWorker, /bounded\(\(\) => openNotification\(messageId\), CLICK_TIMEOUT_MS\)/u);
   assert.doesNotMatch(serviceWorker, /actionUrl|walletAddress|message\.body/u);
   assert.match(page, /!wallet\.connected && <Panel/u);
   assert.match(page, /Connect the wallet that received this notification/u);
   assert.match(page, /This communication is not available for the connected wallet/u);
   assert.match(browserPush, /Notification\.requestPermission\(\)/u);
+  assert.match(browserPush, /navigator\.serviceWorker\.addEventListener\('message'/u);
+  assert.match(browserPush, /window\.history\.pushState/u);
+  assert.match(browserPush, /new PopStateEvent\('popstate'/u);
+  assert.match(browserPush, /pv-push-sw\.js\?v=click-routing-2/u);
+  assert.match(browserPush, /updateViaCache: 'none'/u);
+  assert.match(browserPush, /current\.update\(\)/u);
+  assert.match(browserPush, /getRegistration\(serviceWorkerScope\)/u);
   assert.doesNotMatch(browserPush, /signMessage|signTypedData|ensureAuthenticated|getSigner/u);
 });
 
