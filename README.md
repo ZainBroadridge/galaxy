@@ -6,7 +6,7 @@ A lightweight Polygon Amoy proxy-voting dApp with:
 - record-date holder snapshots built from Alchemy's indexed ERC-20 transfer history;
 - concise Neon storage for events, Merkle proofs, jobs, votes, and wallet communications;
 - Reown AppKit wallet connection;
-- dApp-triggered MetaMask Snap communications;
+- background MetaMask Snap communications plus optional clickable browser notifications;
 - optional private proxy-voting PDFs and on-demand Broadridge-branded reports;
 - event-scoped live progress for snapshots, relayer deployment, and verification;
 - four user-facing areas: Voting Dashboard, Organiser Dashboard, Results, and Wallet Comms.
@@ -29,7 +29,8 @@ One Render web service
    +--> Neon PostgreSQL
    `--> Polygon Amoy: one VoteEvent per event
 
-MetaMask Snap <--- explicit install/sync from the Vercel dApp
+MetaMask Snap <--- verified in-wallet inbox + background polling
+Web Push     <--- optional clickable browser notification -> wallet-gated dApp inbox
 ```
 
 There is no separate indexer service, no continuous `eth_getLogs` scan, no deployment registry, no factory, no access-list contract, and no per-event token contract.
@@ -56,6 +57,7 @@ Requirements:
 - a Polygon Amoy Alchemy HTTPS endpoint;
 - a funded Amoy relayer wallet;
 - MetaMask Extension;
+- a VAPID key pair when clickable browser notifications are enabled;
 - a Reown project ID.
 
 On Windows Command Prompt:
@@ -106,6 +108,12 @@ This release supports event-complete ERC-20 tokens whose balance and supply chan
 Rebasing, reflection, silent balance mutation, incomplete mint/burn history, malformed transfer history, and tokens that did not exist at the record date are rejected rather than snapshotted approximately. This compatibility gate is strong for standard OpenZeppelin-style ERC-20 tokens; arbitrary contracts whose balances can change without `Transfer` events remain outside the supported boundary.
 
 The default transfer-history cap is `100,000` records (`ALCHEMY_MAX_PAGES=100`, `ALCHEMY_PAGE_SIZE=1000`). A normal POC token with modest history should normally complete in one indexed-transfer page plus bounded recent-state reconciliation. A universal two-minute guarantee is not technically possible for arbitrarily large histories or holder sets.
+
+## Notification delivery
+
+The dApp inbox is wallet-scoped and remains the source of truth. The optional MetaMask Snap keeps a verified in-wallet copy and checks in the background. Optional Web Push stores only the browser endpoint, encryption keys, and bound wallet address; notification clicks open `/notifications?messageId=...`. The page reveals the message only after the receiving wallet is connected. Web Push never requests a wallet signature.
+
+The old communication-wide SSE route was removed because the frontend already uses bounded visible-tab polling and the Snap has its own background path. Event-specific SSE remains for snapshot/deployment progress.
 
 ## Commands
 

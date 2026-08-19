@@ -291,6 +291,9 @@ RPC_HTTP_URL
 RELAYER_PRIVATE_KEY
 ETHERSCAN_API_KEY
 CORS_ORIGINS
+WEB_PUSH_PUBLIC_KEY       # optional
+WEB_PUSH_PRIVATE_KEY      # optional secret
+WEB_PUSH_SUBJECT          # optional, HTTPS URL or mailto address
 ```
 
 Use these production values initially:
@@ -347,7 +350,8 @@ VITE_BLOCK_EXPLORER_URL=https://amoy.polygonscan.com
 VITE_REOWN_PROJECT_ID=YOUR_REOWN_PROJECT_ID
 VITE_APP_URL=https://YOUR_APP.vercel.app
 VITE_SNAP_ID=npm:@YOUR_NPM_SCOPE/pv-communications-snap
-VITE_SNAP_VERSION=^0.2.0
+VITE_SNAP_VERSION=0.4.1
+VITE_WEB_PUSH_PUBLIC_KEY=YOUR_VAPID_PUBLIC_KEY
 ```
 
 The production Snap values can be added after the first web deployment and then redeployed.
@@ -418,7 +422,7 @@ Run this sequence after the final deployments:
 2. Open the new Render `/health` endpoint.
 3. Open the new Vercel application in a fresh tab.
 4. Connect MetaMask through Reown on chain `80002`.
-5. Unlock the Organiser Dashboard by signing the nonce once.
+5. Confirm the organiser dashboard loads for the connected address without a wallet signature.
 6. Inspect a standard, modest-history Amoy ERC-20.
 7. Create an event with:
    - record date in the past/present;
@@ -435,9 +439,10 @@ Run this sequence after the final deployments:
 14. Confirm the ballot disappears immediately and the wallet remains connected.
 15. Refresh/reconnect and confirm the receipt remains instead of the ballot.
 16. Close voting or use an already completed test event and inspect Results.
-17. Install/update the Snap from Wallet Comms.
-18. Publish a creator-signed communication.
-19. Use **Sync now** from an eligible wallet and confirm it appears in the Snap inbox.
+17. Install/update the Snap from Notifications.
+18. Publish a platform-issued communication without a wallet signature.
+19. Confirm it appears in the dApp and Snap inboxes.
+20. Enable browser alerts, publish a new message, click the notification, and confirm the dApp requires/uses the receiving wallet before revealing the message.
 
 ## 14. Snapshot timing expectations
 
@@ -519,3 +524,36 @@ npm run build:web
 ```
 
 Commit the updated `package-lock.json` together with the source changes.
+
+## Clickable browser notifications
+
+Web Push is optional and independent of the Snap package. It uses the single `web-push` server dependency and one static service worker.
+
+After installing dependencies, generate one VAPID key pair:
+
+```cmd
+npx web-push generate-vapid-keys --json
+```
+
+Set on Render:
+
+```text
+WEB_PUSH_PUBLIC_KEY=...
+WEB_PUSH_PRIVATE_KEY=...
+WEB_PUSH_SUBJECT=https://YOUR_APP.vercel.app
+```
+
+Set the same public key on Vercel:
+
+```text
+VITE_WEB_PUSH_PUBLIC_KEY=...
+```
+
+Apply only the new migration to an existing database:
+
+```text
+db/migrations/004_web_push_subscriptions.sql
+```
+
+Then redeploy Render and Vercel. On the Notifications page, connect the intended receiving wallet and select **Enable browser alerts**. The browser permission prompt is not a wallet signature. A notification click opens `/notifications?messageId=...`; if the dApp is disconnected, it displays only the wallet-connect gate. If another wallet is connected, the referenced communication is not displayed.
+

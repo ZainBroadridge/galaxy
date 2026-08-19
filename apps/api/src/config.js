@@ -53,6 +53,11 @@ export const config = Object.freeze({
   alchemyPageSize: integer('ALCHEMY_PAGE_SIZE', 1000, { min: 1, max: 1000 }),
   alchemyMaxPages: integer('ALCHEMY_MAX_PAGES', 100, { min: 1, max: 1000 }),
   alchemyMaxRetries: integer('ALCHEMY_MAX_RETRIES', 6, { min: 0, max: 10 }),
+  webPush: Object.freeze({
+    publicKey: process.env.WEB_PUSH_PUBLIC_KEY ?? '',
+    privateKey: process.env.WEB_PUSH_PRIVATE_KEY ?? '',
+    subject: process.env.WEB_PUSH_SUBJECT ?? webAppUrl,
+  }),
   r2: Object.freeze({
     accountId: process.env.R2_ACCOUNT_ID ?? '',
     accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
@@ -70,6 +75,15 @@ export function assertConfig() {
   if (missing.length) throw new Error(`Missing environment variables: ${missing.join(', ')}`);
   if (config.chainId !== 80002) throw new Error('This release is locked to Polygon Amoy (chain ID 80002).');
   if (!/^https:\/\//i.test(config.rpcUrl)) throw new Error('RPC_HTTP_URL must be an HTTPS endpoint.');
+
+  const pushValues = [config.webPush.publicKey, config.webPush.privateKey];
+  const configuredPushValues = pushValues.filter(Boolean).length;
+  if (configuredPushValues > 0 && configuredPushValues !== pushValues.length) {
+    throw new Error('WEB_PUSH_PUBLIC_KEY and WEB_PUSH_PRIVATE_KEY must be configured together.');
+  }
+  if (configuredPushValues > 0 && !/^(?:mailto:|https?:\/\/)/iu.test(config.webPush.subject)) {
+    throw new Error('WEB_PUSH_SUBJECT must be an HTTPS URL or mailto address.');
+  }
 
   const r2Values = Object.values(config.r2);
   const configuredR2Values = r2Values.filter(Boolean).length;

@@ -1,6 +1,5 @@
 import { Contract, ContractFactory } from 'ethers';
 import { VOTE_EVENT_ABI } from '@pv/shared';
-import { announceCommunication } from './communication-stream.js';
 import { config } from './config.js';
 import { query, transaction } from './db.js';
 import { publishPendingEventAnnouncement } from './event-announcements.js';
@@ -10,6 +9,7 @@ import { enqueueJob, updateJob } from './jobs.js';
 import { loadArtifact } from './artifact.js';
 import { broadcastTransaction, prepareTransaction } from './relayer.js';
 import { provider } from './rpc.js';
+import { queueBrowserPush } from './web-push.js';
 
 export function constructorArguments(event) {
   return [
@@ -29,6 +29,18 @@ function lifecycle(event) {
   if (Date.now() < new Date(event.voting_start_at).getTime()) return 'SCHEDULED';
   if (Date.now() <= new Date(event.voting_end_at).getTime()) return 'OPEN';
   return 'CLOSED';
+}
+
+async function publishAutomaticAnnouncement(eventId) {
+  try {
+    const result = await publishPendingEventAnnouncement(eventId);
+    if (result.published && result.message) queueBrowserPush(result.message);
+  } catch (error) {
+    logger.warn(
+      { err: error, eventId },
+      'VoteEvent is deployed, but its automatic notification announcement needs a retry',
+    );
+  }
 }
 
 async function validate(event, address) {
@@ -52,7 +64,16 @@ export async function deployEvent(job) {
   const found = await query('SELECT * FROM events WHERE id=$1', [job.event_id]);
   if (!found.rowCount) throw permanentError('Event no longer exists.');
   const event = found.rows[0];
-  if (event.deployment_block !== null) return { contractAddress: event.contract_address, transactionHash: event.deployment_tx_hash, alreadyComplete: true };
+  if (event.deployment_block !== null) {
+    // A recovered DEPLOY_EVENT job may refer to a contract that was already
+    // mined. Still repair its pending automatic announcement before returning.
+    await publishAutomaticAnnouncement(event.id);
+    return {
+      contractAddress: event.contract_address,
+      transactionHash: event.deployment_tx_hash,
+      alreadyComplete: true,
+    };
+  }
   if (!event.snapshot_root || event.record_date_block === null) throw permanentError('Snapshot is not ready.');
   if (new Date(event.voting_end_at).getTime() <= Date.now()) throw permanentError('Voting ended before deployment.');
 
@@ -90,14 +111,7 @@ export async function deployEvent(job) {
     }
   });
 
-  try {
-    if (await publishPendingEventAnnouncement(event.id)) announceCommunication();
-  } catch (error) {
-    logger.warn(
-      { err: error, eventId: event.id },
-      'VoteEvent deployed, but its automatic notification announcement needs a retry',
-    );
-  }
+  await publishAutomaticAnnouncement(event.id);
   await updateJob(job.id, 96, 'VoteEvent mined and validated');
   return {
     contractAddress: address,

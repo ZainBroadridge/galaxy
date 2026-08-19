@@ -10,22 +10,16 @@ V2 is deliberately narrow:
 4. Record-date eligibility proven with a Merkle proof.
 5. Neon is the fast catalogue/read layer, not a replacement for on-chain vote enforcement.
 6. No permanent blockchain log indexer.
-7. No background Snap network polling.
+7. The Snap is an optional verified background wallet inbox; clickable browser notifications use standard Web Push.
 8. Optional event PDFs are private objects; Neon stores metadata only.
 9. Reports are generated on demand and never persisted.
+10. Notification clicks reveal content only after the receiving wallet is connected.
 
 ## Components
 
 ### Vercel web application
 
-The React/Vite app contains only four primary routes:
-
-- `/` — Voting Dashboard;
-- `/organiser` — Organiser Dashboard;
-- `/results` — Results;
-- `/comms` — Wallet Comms.
-
-Nested event routes stay within those products. Reown AppKit supplies wallet connection. Account changes invalidate wallet-specific state without redirecting or disconnecting the page.
+The React/Vite app exposes Home, Voting, Organiser, Results, and Notifications routes. `/notifications` is the current inbox route and `/comms` remains a compatibility redirect. Nested event routes stay within those products. Reown AppKit supplies wallet connection. Account changes invalidate wallet-specific state without redirecting or disconnecting the page.
 
 Event workflow pages subscribe to one event-scoped server-sent event stream while work is active. Every persisted job update emits a lightweight refresh signal; a controlled 15-second read is retained only as a recovery fallback. Requests never overlap.
 
@@ -97,23 +91,29 @@ The schema intentionally contains only:
 - durable jobs;
 - votes/receipts;
 - crash-safe relayer transactions;
-- Snap subscriptions;
+- token-following subscriptions;
 - signed communications;
-- event-document metadata and automatic-announcement authorisations.
+- minimal Web Push subscriptions (wallet, endpoint, encryption keys, timestamps);
+- event-document metadata and automatic-announcement state.
 
 Results are read directly from the completed `VoteEvent` contract, so there is no mirrored tally table or log index.
 
-### MetaMask Snap
+### MetaMask Snap and clickable Web Push
 
-The Snap has no background network access. The dApp explicitly:
+The Snap is an optional verified wallet inbox. Its cron path reads the selected wallet, fetches the wallet-specific Render inbox, validates canonical signatures and trusted origins, deduplicates by message ID, persists messages, and attempts MetaMask in-app/native notifications. Snap-native desktop presentation is best effort and does not provide a controllable click URL.
 
-1. installs or updates it;
-2. verifies that the same wallet is active in MetaMask and Reown;
-3. authenticates to the API;
-4. fetches the wallet's current notices once;
-5. invokes the Snap.
+Clickable desktop notifications therefore use a small, separate Web Push adapter:
 
-The browser and Snap both recover the organiser signature over every displayed field. The Snap stores read/unread state and shows at most three notifications per explicit sync so MetaMask notification limits do not break inbox delivery.
+1. The connected wallet explicitly enables browser notifications.
+2. The browser creates one Push subscription.
+3. Render stores only the wallet address, endpoint, encryption keys, and timestamps.
+4. On publication, Render reuses `inbox(wallet)` as the single audience/eligibility rule and sends only a concise title plus `messageId`.
+5. The service worker opens `/notifications?messageId=...` when clicked.
+6. The page displays no inbox content while disconnected. After connection, it highlights the message only when that wallet's inbox contains it.
+
+Web Push does not add a wallet signature or a second authentication system. It implements the requested wallet-connection gate; production identity assurance for organiser/report actions remains a separate hardening concern.
+
+The obsolete communication-wide SSE module and route were removed. The web inbox uses one immediate read plus bounded visible-tab/focus polling. Event-specific SSE remains for durable job progress.
 
 ## Request and 429 control
 
@@ -121,7 +121,7 @@ The browser and Snap both recover the organiser signature over every displayed f
 - Write limits are keyed by authenticated wallet, not a shared corporate proxy address.
 - Authentication also has a generous IP guard plus a wallet-specific limit.
 - Public event/status reads do not attach a bearer token, avoiding an unnecessary session query.
-- Wallet Comms uses a live refresh stream with one bounded fallback refresh; requests never overlap.
+- Wallet communications use an immediate read plus one bounded visible-tab/focus refresh loop; requests never overlap.
 - Result RPC reads are sequential rather than a burst of up to 32 calls.
 - Alchemy retry/backoff is confined to the snapshot job.
 - Current-balance reconciliation uses a fixed small concurrency limit rather than an unbounded RPC burst.

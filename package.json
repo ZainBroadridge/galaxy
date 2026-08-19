@@ -2,13 +2,13 @@
   "name": "mini-galaxy-pv-v2",
   "version": "2.1.0",
   "private": true,
-  "description": "Lightweight proxy voting on Polygon Amoy: one VoteEvent contract per event, Neon snapshots, one Render web service with a durable Neon job runner, Reown AppKit, and dApp-triggered MetaMask Snap communications.",
+  "description": "Record-date ERC-20 proxy voting on Polygon Amoy with one VoteEvent per event, Neon-backed durable jobs, gas sponsorship, wallet communications, and optional clickable Web Push.",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "engines": {
-    "node": "22.x"
+    "node": ">=20.18.0 <23"
   },
   "scripts": {
     "compile": "npm run build --workspace ./packages/contracts",

@@ -181,15 +181,12 @@ export async function publishPendingEventAnnouncement(eventId, client = null) {
   const result = client
     ? await publishWithClient(eventId, client)
     : await transaction((transactionClient) => publishWithClient(eventId, transactionClient));
-  return result.published;
+  return { published: result.published, status: result.status, message: result.message };
 }
 
 export async function triggerEventAnnouncement(eventId, wallet) {
   const publisher = normalizeAddress(wallet, 'publisherAddress');
-  return transaction(async (client) => {
-    const result = await publishWithClient(eventId, client, publisher);
-    return { published: result.published, status: result.status, message: result.message };
-  });
+  return transaction((client) => publishWithClient(eventId, client, publisher));
 }
 
 /**
@@ -221,13 +218,18 @@ export async function publishReadyEventAnnouncements({ limit = 25 } = {}) {
   );
 
   let published = 0;
+  const messages = [];
   const failures = [];
   for (const row of candidates.rows) {
     try {
-      if (await publishPendingEventAnnouncement(row.id)) published += 1;
+      const result = await publishPendingEventAnnouncement(row.id);
+      if (result.published) {
+        published += 1;
+        if (result.message) messages.push(result.message);
+      }
     } catch (error) {
       failures.push({ eventId: row.id, message: error?.message ?? String(error) });
     }
   }
-  return { checked: candidates.rowCount, published, failures };
+  return { checked: candidates.rowCount, published, messages, failures };
 }

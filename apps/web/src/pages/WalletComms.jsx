@@ -1,7 +1,13 @@
 import {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api } from '../api.js';
+import {
+  browserPushState,
+  disableBrowserPush,
+  enableBrowserPush,
+} from '../browser-push.js';
 import { ErrorBox, Notice, Panel, Spinner, Status } from '../components/UI.jsx';
 import { useNotifications } from '../notifications.jsx';
 import {
@@ -39,11 +45,19 @@ const initialCommunication = () => ({
   expiresAt: localDate(new Date(Date.now() + 7 * 24 * 60 * 60_000)),
 });
 const shortAddress = (value) => value ? `${value.slice(0, 8)}…${value.slice(-6)}` : '';
+const messageIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+function messageIdFromSearch(search) {
+  const value = new URLSearchParams(search).get('messageId');
+  return value && messageIdPattern.test(value) ? value.toLowerCase() : null;
+}
 
 export default function WalletComms() {
   const wallet = useWallet();
   const notifications = useNotifications();
   const configuration = snapConfiguration();
+  const location = useLocation();
+  const targetMessageId = useMemo(() => messageIdFromSearch(location.search), [location.search]);
   const [activeTab, setActiveTab] = useState('announcements');
   const [snapInstalled, setSnapInstalled] = useState(false);
   const [snapState, setSnapState] = useState(null);
@@ -54,7 +68,9 @@ export default function WalletComms() {
   const [feedback, setFeedback] = useState(null);
   const [subscription, setSubscription] = useState({ tokenAddress: '', enabled: true });
   const [communication, setCommunication] = useState(initialCommunication);
+  const [browserPush, setBrowserPush] = useState(null);
   const lastSnapMessageId = useRef(null);
+  const targetMessageRef = useRef(null);
 
   useEffect(() => {
     setActiveTab('announcements');
@@ -63,6 +79,7 @@ export default function WalletComms() {
     setSnapState(null);
     setSubscription({ tokenAddress: '', enabled: true });
     setCommunication(initialCommunication());
+    setBrowserPush(null);
     setError(null);
     setFeedback(null);
     lastSnapMessageId.current = null;
@@ -89,6 +106,31 @@ export default function WalletComms() {
       });
     return () => { active = false; };
   }, [configuration.ready]);
+
+  useEffect(() => {
+    let active = true;
+    browserPushState(wallet.account)
+      .then((state) => { if (active) setBrowserPush(state); })
+      .catch(() => { if (active) setBrowserPush(null); });
+    return () => { active = false; };
+  }, [wallet.account]);
+
+  useEffect(() => {
+    if (targetMessageId) setActiveTab('announcements');
+  }, [targetMessageId]);
+
+  useEffect(() => {
+    if (!targetMessageId || activeTab !== 'announcements' || !wallet.connected) return undefined;
+    const target = notifications.messages.find(
+      (message) => message.messageId?.toLowerCase() === targetMessageId,
+    );
+    if (!target) return undefined;
+    const frame = requestAnimationFrame(() => {
+      targetMessageRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      targetMessageRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeTab, notifications.messages, targetMessageId, wallet.connected]);
 
   useEffect(() => {
     if (wallet.connected && activeTab === 'announcements' && notifications.messages.length) {
@@ -212,6 +254,30 @@ export default function WalletComms() {
     });
   }
 
+  async function enableBrowserNotifications() {
+    await runAction('browser-push', async () => {
+      const state = await enableBrowserPush(wallet.account);
+      setBrowserPush(state);
+      setFeedback({
+        action: 'browser-push',
+        tone: 'success',
+        message: 'Clickable browser notifications enabled for this wallet.',
+      });
+    });
+  }
+
+  async function disableBrowserNotifications() {
+    await runAction('browser-push', async () => {
+      const state = await disableBrowserPush(wallet.account);
+      setBrowserPush(state);
+      setFeedback({
+        action: 'browser-push',
+        tone: 'success',
+        message: 'Browser notifications disabled.',
+      });
+    });
+  }
+
   async function saveSubscription() {
     await runAction('subscription', async () => {
       await api('/v1/communications/subscriptions', {
@@ -308,6 +374,29 @@ export default function WalletComms() {
     ? new Date(snapState.lastCheckedAt).toLocaleString()
     : null;
 
+  const targetMessage = targetMessageId
+    ? notifications.messages.find((message) => message.messageId?.toLowerCase() === targetMessageId)
+    : null;
+  const targetMessageMissing = Boolean(
+    targetMessageId
+      && wallet.connected
+      && notifications.lastUpdatedAt
+      && !notifications.loading
+      && !targetMessage,
+  );
+  const browserPushStatus = !browserPush
+    ? 'CHECKING'
+    : !browserPush.configured
+      ? 'NOT_CONFIGURED'
+      : !browserPush.supported
+        ? 'UNSUPPORTED'
+        : browserPush.permission === 'denied'
+          ? 'BLOCKED'
+          : browserPush.enabledForWallet ? 'ACTIVE' : 'NOT_ENABLED';
+  const browserPushUnavailable = !browserPush?.configured
+    || !browserPush?.supported
+    || browserPush?.permission === 'denied';
+
   return <main className="page wallet-comms-page notifications-page">
     <header className="wallet-comms-header">
       <div>
@@ -349,7 +438,7 @@ export default function WalletComms() {
     {!wallet.connected && <Panel className="comms-connect-panel">
       <div>
         <h2>Connect your wallet</h2>
-        <p>Open the notification center and communication tools for this wallet.</p>
+        <p>{targetMessageId ? 'Connect the wallet that received this notification.' : 'Open the notification center and communication tools for this wallet.'}</p>
       </div>
       <button className="button" onClick={wallet.openWallet}>Connect wallet</button>
     </Panel>}
@@ -381,23 +470,34 @@ export default function WalletComms() {
         </header>
 
         {actionNotice('sync')}
+        {targetMessageMissing && <Notice tone="warning">This communication is not available for the connected wallet. Connect the wallet that received the browser notification.</Notice>}
         <div className="notification-feed" aria-live="polite">
           {notifications.loading && !notificationCount
             ? <Spinner />
             : notificationCount
-              ? notifications.messages.map((message) => <article className="notification-row" key={message.messageId}>
-                <div className="notification-token-mark" aria-hidden="true">{message.tokenSymbol?.slice(0, 2) || 'PV'}</div>
-                <div className="notification-row-body">
-                  <div className="notification-row-meta">
-                    <span className="notification-token-name">{message.tokenSymbol}</span>
-                    <span>{categoryLabels.get(message.category) ?? String(message.category).replaceAll('_', ' ')}</span>
-                    <time dateTime={message.publishedAt}>{new Date(message.publishedAt).toLocaleString()}</time>
+              ? notifications.messages.map((message) => {
+                const targeted = message.messageId?.toLowerCase() === targetMessageId;
+                return <article
+                  className="notification-row"
+                  key={message.messageId}
+                  ref={targeted ? targetMessageRef : null}
+                  tabIndex={targeted ? -1 : undefined}
+                  aria-current={targeted ? 'true' : undefined}
+                  style={targeted ? { outline: '2px solid var(--blue)', outlineOffset: '-2px' } : undefined}
+                >
+                  <div className="notification-token-mark" aria-hidden="true">{message.tokenSymbol?.slice(0, 2) || 'PV'}</div>
+                  <div className="notification-row-body">
+                    <div className="notification-row-meta">
+                      <span className="notification-token-name">{message.tokenSymbol}</span>
+                      <span>{categoryLabels.get(message.category) ?? String(message.category).replaceAll('_', ' ')}</span>
+                      <time dateTime={message.publishedAt}>{new Date(message.publishedAt).toLocaleString()}</time>
+                    </div>
+                    <h3>{message.title}</h3>
+                    <p>{message.body}</p>
+                    {message.scope === 'EVENT' && message.actionUrl && <a className="notification-action" href={message.actionUrl}>Open event</a>}
                   </div>
-                  <h3>{message.title}</h3>
-                  <p>{message.body}</p>
-                  {message.scope === 'EVENT' && message.actionUrl && <a className="notification-action" href={message.actionUrl}>Open event</a>}
-                </div>
-              </article>)
+                </article>;
+              })
               : <div className="notification-empty">
                 <strong>You’re all caught up</strong>
                 <span>New voting announcements will appear here automatically.</span>
@@ -429,6 +529,28 @@ export default function WalletComms() {
           {actionNotice('disable-alerts')}
           {snapState?.lastError && <Notice tone="error">Last background check: {snapState.lastError}</Notice>}
           {snapState?.lastDeliveryError && <Notice tone="error">Last MetaMask alert: {snapState.lastDeliveryError}</Notice>}
+
+          <div style={{ borderTop: '1px solid var(--line)', marginTop: 14, paddingTop: 14 }}>
+            <div className="utility-card-heading">
+              <div><span className="panel-eyebrow">Browser</span><h2>Clickable alerts</h2></div>
+              <Status value={browserPushStatus} />
+            </div>
+            <p>Show the same concise voting alert as a browser notification. Clicking it opens this inbox; message contents remain hidden until the receiving wallet is connected.</p>
+            {browserPush?.permission === 'denied' && <Notice tone="warning">Browser notifications are blocked. Allow them in the browser site settings before enabling this feature.</Notice>}
+            {!browserPush?.configured && browserPush && <Notice tone="info">Set the Web Push public key in Vercel to enable clickable browser alerts.</Notice>}
+            <div className="inline-actions">
+              {browserPush?.enabledForWallet
+                ? <button type="button" className="button secondary" onClick={disableBrowserNotifications} disabled={busy}>
+                  {pendingAction === 'browser-push' ? 'Disabling…' : 'Disable browser alerts'}
+                </button>
+                : <button type="button" className="button secondary" onClick={enableBrowserNotifications} disabled={busy || browserPushUnavailable}>
+                  {pendingAction === 'browser-push'
+                    ? 'Enabling…'
+                    : browserPush?.boundWalletAddress ? 'Enable for this wallet' : 'Enable browser alerts'}
+                </button>}
+            </div>
+            {actionNotice('browser-push')}
+          </div>
         </section>
 
         <section className="comms-utility-card">

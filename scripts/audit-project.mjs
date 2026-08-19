@@ -19,8 +19,7 @@ async function walk(directory) {
 }
 
 const files = await walk(root);
-const relative = (file) =>
-  path.relative(root, file).split(path.sep).join('/');
+const relative = (file) => path.relative(root, file);
 const read = (name) => readFile(path.join(root, name), 'utf8');
 
 const solidity = files.filter((file) => file.endsWith('.sol'));
@@ -66,6 +65,16 @@ if (!snap.includes('notificationErrors')) failures.push('Snap notifications must
 
 const server = await read('apps/api/src/server.js');
 if (/app\.use\([^\n]*rateLimit/u.test(server)) failures.push('A global API rate limiter is still installed.');
+if (/communications\/stream|communication-stream|announceCommunication/u.test(server)) {
+  failures.push('Obsolete communication SSE code is still present.');
+}
+const pushMigration = await read('db/migrations/004_web_push_subscriptions.sql');
+if (!pushMigration.includes('CREATE TABLE IF NOT EXISTS web_push_subscriptions')) {
+  failures.push('Web Push subscription migration is missing.');
+}
+if (/\b(?:message|title|body|action_url)\b/u.test(pushMigration)) {
+  failures.push('Web Push subscriptions must not persist communication content.');
+}
 const render = await read('render.yaml');
 if ((render.match(/\n\s*- type: web\b/gu) ?? []).length !== 1 || /type: worker/u.test(render)) {
   failures.push('Render must contain exactly one web service and no worker service.');
@@ -77,8 +86,12 @@ for (const required of [
   'packages/contracts/scripts/export-artifact.cjs',
   'apps/api/src/snapshot.js',
   'apps/api/src/runner.js',
+  'apps/api/src/web-push.js',
   'apps/snap/src/index.tsx',
   'apps/web/src/appkit.js',
+  'apps/web/src/browser-push.js',
+  'apps/web/public/pv-push-sw.js',
+  'db/migrations/004_web_push_subscriptions.sql',
   'render.yaml',
   'vercel.json',
 ]) {

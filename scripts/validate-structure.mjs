@@ -48,6 +48,22 @@ const render = await readFile(path.join(root, 'render.yaml'), 'utf8');
 if ((render.match(/\n\s*- type: web\b/gu) ?? []).length !== 1) throw new Error('render.yaml must define exactly one web service.');
 if (/\n\s*- type: worker\b/u.test(render)) throw new Error('render.yaml must not define a paid background worker.');
 if (!render.includes('RELAYER_PRIVATE_KEY')) throw new Error('The single API/job service requires RELAYER_PRIVATE_KEY.');
+if (!render.includes('WEB_PUSH_PUBLIC_KEY') || !render.includes('WEB_PUSH_PRIVATE_KEY')) {
+  throw new Error('render.yaml must expose the optional Web Push key settings.');
+}
+
+for (const required of [
+  'apps/api/src/web-push.js',
+  'apps/web/src/browser-push.js',
+  'apps/web/public/pv-push-sw.js',
+  'db/migrations/004_web_push_subscriptions.sql',
+]) {
+  if (!await exists(required)) throw new Error(`Missing Web Push component: ${required}`);
+}
+const server = await readFile(path.join(root, 'apps/api/src/server.js'), 'utf8');
+if (/communications\/stream|communication-stream|announceCommunication/u.test(server)) {
+  throw new Error('Obsolete communication SSE code must be removed.');
+}
 
 const snapshot = await readFile(path.join(root, 'apps/api/src/snapshot.js'), 'utf8');
 if (!snapshot.includes('alchemy_getAssetTransfers')) throw new Error('Snapshot implementation must use Alchemy indexed transfers.');

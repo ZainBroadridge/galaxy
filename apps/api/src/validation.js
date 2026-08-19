@@ -152,3 +152,23 @@ export const platformTokenCommunicationInput = communicationFields.extend({
 export const announcementTriggerInput = z.object({
   publisherAddress: address,
 });
+
+
+const pushKey = z.string().min(8).max(512).regex(/^[A-Za-z0-9_-]+={0,2}$/u);
+const browserPushSubscription = z.object({
+  endpoint: z.string().url().max(4096),
+  keys: z.object({
+    p256dh: pushKey,
+    auth: pushKey,
+  }),
+});
+
+export const browserPushSubscriptionInput = z.object({
+  walletAddress: address,
+  subscription: browserPushSubscription,
+});
+
+export const browserPushUnsubscribeInput = z.object({
+  walletAddress: address,
+  endpoint: z.string().url().max(4096),
+});

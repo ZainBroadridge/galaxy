@@ -3,7 +3,6 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { ZodError } from 'zod';
 import { createNonce, optionalAuth, requireAuth, revokeSession, verifyNonce } from './auth.js';
-import { announceCommunication, closeCommunicationStreams, openCommunicationStream } from './communication-stream.js';
 import {
   draftCommunication,
   draftTokenCommunication,
@@ -41,6 +40,8 @@ import { securityHeaders } from './security.js';
 import { inspectToken } from './tokens.js';
 import {
   announcementTriggerInput,
+  browserPushSubscriptionInput,
+  browserPushUnsubscribeInput,
   communicationDraftInput,
   communicationPublishInput,
   platformCommunicationInput,
@@ -52,6 +53,12 @@ import {
   voteInput,
 } from './validation.js';
 import { ballot, submitVote } from './votes.js';
+import {
+  browserPushConfigured,
+  deleteBrowserPushSubscription,
+  queueBrowserPush,
+  saveBrowserPushSubscription,
+} from './web-push.js';
 
 assertConfig();
 const app = express();
@@ -139,7 +146,7 @@ async function sweepReadyAnnouncements() {
       lastPublished: result.published,
       lastError: result.failures.length ? result.failures[0].message : null,
     };
-    if (result.published > 0) announceCommunication();
+    result.messages.forEach(queueBrowserPush);
     if (result.failures.length) {
       logger.warn({ failures: result.failures }, 'Some automatic announcements still need a retry');
     }
@@ -180,7 +187,10 @@ app.get('/health', async (_request, response, next) => {
       service: 'mini-galaxy-pv-v2',
       chainId: config.chainId,
       jobs: jobRunnerStatus(),
-      notifications: announcementSweepStatus,
+      notifications: {
+        ...announcementSweepStatus,
+        browserPushConfigured: browserPushConfigured(),
+      },
       time: new Date().toISOString(),
     });
   } catch (error) { next(error); }
@@ -225,7 +235,7 @@ app.post('/v1/events/:id/announcement', publicWriteLimiter, async (request, resp
   try {
     const input = parse(announcementTriggerInput, request.body);
     const result = await triggerEventAnnouncement(request.params.id, input.publisherAddress);
-    if (result.published) announceCommunication();
+    if (result.published && result.message) queueBrowserPush(result.message);
     response.json(result);
   } catch (error) { next(error); }
 });
@@ -234,7 +244,7 @@ app.put('/v1/events/:id/announcement', publicWriteLimiter, async (request, respo
   try {
     const input = parse(announcementTriggerInput, request.body);
     const result = await triggerEventAnnouncement(request.params.id, input.publisherAddress);
-    if (result.published) announceCommunication();
+    if (result.published && result.message) queueBrowserPush(result.message);
     response.json(result);
   } catch (error) { next(error); }
 });
@@ -322,7 +332,6 @@ app.post('/v1/events/:id/votes', voteLimiter, async (request, response, next) =>
   } catch (error) { next(error); }
 });
 
-app.get('/v1/communications/stream', openCommunicationStream);
 app.get('/v1/communications/portal', async (request, response, next) => {
   try {
     const wallet = request.query.wallet ?? request.auth?.wallet_address;
@@ -347,6 +356,18 @@ app.put('/v1/communications/subscriptions', publicWriteLimiter, async (request, 
     response.json(await saveSubscription(input.walletAddress, input));
   } catch (error) { next(error); }
 });
+app.put('/v1/communications/push-subscription', publicWriteLimiter, async (request, response, next) => {
+  try {
+    const input = parse(browserPushSubscriptionInput, request.body);
+    response.json(await saveBrowserPushSubscription(input.walletAddress, input));
+  } catch (error) { next(error); }
+});
+app.delete('/v1/communications/push-subscription', publicWriteLimiter, async (request, response, next) => {
+  try {
+    const input = parse(browserPushUnsubscribeInput, request.body);
+    response.json(await deleteBrowserPushSubscription(input.walletAddress, input.endpoint));
+  } catch (error) { next(error); }
+});
 app.get('/v1/communications/inbox', async (request, response, next) => {
   try {
     const wallet = request.query.wallet ?? request.auth?.wallet_address;
@@ -369,7 +390,7 @@ app.post('/v1/communications/token', requireAuth, writeLimiter, async (request, 
       request.auth.wallet_address,
       parse(tokenCommunicationPublishInput, request.body),
     );
-    announceCommunication();
+    queueBrowserPush(message);
     response.status(201).json(message);
   } catch (error) { next(error); }
 });
@@ -378,7 +399,7 @@ app.post('/v1/communications/token/platform', publicWriteLimiter, async (request
     const message = await publishPlatformTokenCommunication(
       parse(platformTokenCommunicationInput, request.body),
     );
-    announceCommunication();
+    queueBrowserPush(message);
     response.status(201).json(message);
   } catch (error) { next(error); }
 });
@@ -389,7 +410,7 @@ app.post('/v1/events/:id/communications/platform', publicWriteLimiter, async (re
       request.params.id,
       parse(platformCommunicationInput, request.body),
     );
-    announceCommunication();
+    queueBrowserPush(message);
     response.status(201).json(message);
   } catch (error) { next(error); }
 });
@@ -410,7 +431,7 @@ app.post('/v1/events/:id/communications', requireAuth, writeLimiter, async (requ
       request.auth.wallet_address,
       parse(communicationPublishInput, request.body),
     );
-    announceCommunication();
+    queueBrowserPush(message);
     response.status(201).json(message);
   } catch (error) { next(error); }
 });
@@ -446,7 +467,6 @@ const server = app.listen(config.port, '0.0.0.0', () => {
 async function shutdown(signal) {
   logger.info({ signal }, 'Shutting down');
   if (announcementSweepTimer) clearInterval(announcementSweepTimer);
-  closeCommunicationStreams();
   closeEventStreams();
   server.close(async () => {
     await db.end();

@@ -1,0 +1,9 @@
+Delete this obsolete file after copying the replacement files:
+
+apps/api/src/communication-stream.js
+
+Windows Command Prompt:
+
+del apps\api\src\communication-stream.js
+
+The event-specific stream in apps/api/src/event-stream.js is still required and must not be deleted.

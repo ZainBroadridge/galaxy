@@ -1,0 +1,12 @@
+warning: in the working copy of 'apps/api/src/communications.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/api/src/deploy.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/api/src/event-announcements.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/api/src/events.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/api/src/server.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/api/src/validation.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/api/test/event-announcements.test.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/src/App.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/src/pages/OrganiserDashboard.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/src/pages/VotingDashboard.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/src/pages/WalletComms.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/src/styles.css', LF will be replaced by CRLF the next time Git touches it
