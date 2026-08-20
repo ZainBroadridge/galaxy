@@ -2357,3 +2357,17 @@ input:focus, select:focus, textarea:focus { border-color: var(--cyan); box-shado
   .site-footer-inner { min-height: 58px; padding-inline: 18px; font-size: 11px; flex-wrap: wrap; }
   .footer-copyright { margin-left: 0; width: 100%; padding-bottom: 10px; }
 }
+
+/* Final topbar direction */
+.app-frame, .sidebar, .app-main, .app-titlebar { display: contents; }
+.topbar { display: block; background: var(--navy-2); border-bottom: 3px solid var(--cyan); }
+.topbar-inner { min-height: 72px; height: auto; padding: 0 28px; }
+.brand-logo { display: block; width: 128px; height: 42px; object-fit: contain; filter: brightness(0) invert(1); }
+.brand > span { color: #fff; border-left-color: rgba(255,255,255,.25); }
+.topbar nav a { color: #c8d7e6; }
+.topbar nav a:hover, .topbar nav a.active, .nav-home.active { color: #fff !important; }
+.site-footer { margin-top: auto; }
+
+@media (max-width: 980px) {
+  .brand-logo { display: block; }
+}

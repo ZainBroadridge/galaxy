@@ -102,36 +102,31 @@ export default function App() {
   }
 
   return <div className="app-shell">
-    <div className="app-frame">
-      <aside className="sidebar" aria-label="Application sidebar">
-        <Link to="/" className="sidebar-brand" aria-label="On-Chain Proxy Voting home">
-          <img className="sidebar-logo" src="/brd-logo.svg" alt="Broadridge" />
-        </Link>
-        <nav className="sidebar-nav" aria-label="Primary navigation">
-          <NavLink className="nav-home" to="/" end>Home</NavLink>
-          {primaryNavigation.map(([to, label]) => {
-            const voteRouteActive = to === '/voting' && location.pathname.startsWith('/vote/');
-            return <NavLink key={to} to={to} className={({ isActive }) => (isActive || voteRouteActive ? 'active' : undefined)}>{label}</NavLink>;
-          })}
-          <NavLink to="/notifications" className={({ isActive }) => `sidebar-notifications${isActive ? ' active' : ''}`}>
-            <span>Notifications</span>
-            {unreadCount > 0 && <span className="notification-badge" aria-label={`${unreadCount} unread notifications`}>{unreadCount > 99 ? '99+' : unreadCount}</span>}
-          </NavLink>
-        </nav>
-        <div className="sidebar-actions">
-          <button className="network-control" type="button" onClick={addOrSwitchAmoy} disabled={networkBusy} title="Add or switch to Polygon Amoy Testnet" aria-label="Add or switch to Polygon Amoy Testnet" aria-busy={networkBusy}>
-            <span className="network-dot" aria-hidden="true" />
-            <span className="network-control-label">{networkBusy ? 'Opening wallet…' : 'Polygon Amoy Testnet'}</span>
-            <span className="network-add-icon"><PlusIcon /></span>
-          </button>
-          <button className={`wallet-control${wallet.connected ? ' connected' : ''}`} type="button" onClick={openWallet} aria-label={wallet.connected ? `Open wallet ${shortAddress(wallet.account)}` : 'Connect Wallet'}>
-            <WalletIcon /><span>{shortAddress(wallet.account)}</span>{wallet.connected && <ChevronIcon />}
-          </button>
+    <header className="topbar">
+      <div className="topbar-inner">
+        <div className="topbar-primary">
+          <Link to="/" className="brand" aria-label="On-Chain Proxy Voting home">
+            <img className="brand-logo" src="/brd-logo.svg" alt="Broadridge" />
+            <span>Broadridge | On-chain Proxy Voting</span>
+          </Link>
+          <nav aria-label="Primary navigation">
+            <NavLink className="nav-home" to="/" end>Home</NavLink>
+            {primaryNavigation.map(([to, label]) => {
+              const voteRouteActive = to === '/voting' && location.pathname.startsWith('/vote/');
+              return <NavLink key={to} to={to} className={({ isActive }) => (isActive || voteRouteActive ? 'active' : undefined)}>{label}</NavLink>;
+            })}
+            <NavLink to="/notifications" className={({ isActive }) => `topbar-notifications${isActive ? ' active' : ''}`}>
+              Notifications {unreadCount > 0 && <span className="notification-badge" aria-label={`${unreadCount} unread notifications`}>{unreadCount > 99 ? '99+' : unreadCount}</span>}
+            </NavLink>
+          </nav>
         </div>
-      </aside>
-      <div className="app-main">
-        <header className="app-titlebar"><span>Broadridge</span><span aria-hidden="true">|</span><strong>On-chain Proxy Voting</strong></header>
-        <main className="app-content">
+        <div className="wallet-actions">
+          <button className="network-control" type="button" onClick={addOrSwitchAmoy} disabled={networkBusy} title="Add or switch to Polygon Amoy Testnet" aria-label="Add or switch to Polygon Amoy Testnet" aria-busy={networkBusy}><span className="network-dot" aria-hidden="true" /><span className="network-control-label">{networkBusy ? 'Opening wallet…' : 'Polygon Amoy Testnet'}</span><span className="network-add-icon"><PlusIcon /></span></button>
+          <button className={`wallet-control${wallet.connected ? ' connected' : ''}`} type="button" onClick={openWallet} aria-label={wallet.connected ? `Open wallet ${shortAddress(wallet.account)}` : 'Connect Wallet'}><WalletIcon /><span>{shortAddress(wallet.account)}</span>{wallet.connected && <ChevronIcon />}</button>
+        </div>
+      </div>
+    </header>
+    <main className="app-content">
       {!reownConfigured && <Notice tone="warning">Set <code>VITE_REOWN_PROJECT_ID</code> before deployment.</Notice>}
       {networkError && <Notice tone="error">{networkError.message || 'Unable to add Polygon Amoy to this wallet.'}</Notice>}
       <Routes>
@@ -156,7 +151,5 @@ export default function App() {
         <span className="footer-copyright">© 2026 Broadridge Financial Solutions, Inc. All rights reserved.</span>
       </div>
     </footer>
-      </div>
-    </div>
   </div>;
 }
