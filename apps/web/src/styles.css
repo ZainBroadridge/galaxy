@@ -2405,15 +2405,14 @@ input:focus, select:focus, textarea:focus { border-color: var(--cyan); box-shado
 
 
 @media (max-width: 1100px) and (min-width: 768px) {
-  .topbar-inner { flex-wrap: wrap; gap: 0 18px; padding: 12px 24px 0; }
-  .topbar-primary { flex: 1 1 100%; display: grid; grid-template-columns: 1fr; gap: 6px; }
-  .brand { width: max-content; max-width: 100%; gap: 12px; }
-  .brand > span { display: inline-flex !important; overflow: visible; }
-  .brand-logo { width: 128px; height: 42px; }
-  .brand > span { padding-left: 14px; font-size: 16px; }
-  .topbar nav { height: 52px; gap: 18px; }
-  .topbar nav a { font-size: 14px; }
-  .wallet-actions { margin-left: auto; padding: 10px 0 12px; }
+  .topbar-inner { flex-wrap: wrap; align-items: center; gap: 0; padding: 12px 24px 0; }
+  .topbar-primary { width: 100%; flex: 0 0 100%; display: flex; align-items: center; gap: 18px; }
+  .brand { flex: 0 0 auto; width: auto; max-width: 54%; gap: 12px; }
+  .brand-logo { width: 126px; height: 42px; }
+  .brand > span { display: inline-flex !important; min-width: 0; overflow: hidden; text-overflow: ellipsis; padding-left: 14px; font-size: 16px; }
+  .topbar nav { min-width: 0; flex: 1 1 auto; height: 52px; gap: 16px; overflow-x: auto; }
+  .topbar nav a { flex: 0 0 auto; font-size: 14px; }
+  .wallet-actions { width: 100%; justify-content: flex-end; padding: 10px 0 12px; }
   .network-control { min-width: 220px; }
   .wallet-control, .wallet-control.connected { min-width: 176px; }
 }
