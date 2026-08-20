@@ -715,7 +715,6 @@ export default function WalletComms() {
 
           <div className="form-actions notifications-publish-actions">
             <button className="button" disabled={busy || !canPublish}>{pendingAction === 'publish' ? 'Publishing…' : 'Publish communication'}</button>
-            <span>No organiser unlock or MetaMask signature is required.</span>
           </div>
           {actionNotice('publish')}
         </form>
