@@ -2404,6 +2404,16 @@ input:focus, select:focus, textarea:focus { border-color: var(--cyan); box-shado
 .home-metric-link { margin-top: 20px; color: #0066d6; font-size: 20px; }
 
 
-@media (max-width: 980px) {
-  .brand-logo { display: block; }
+@media (max-width: 1100px) and (min-width: 768px) {
+  .topbar-inner { flex-wrap: wrap; gap: 0 18px; padding: 12px 24px 0; }
+  .topbar-primary { flex: 1 1 100%; display: grid; grid-template-columns: 1fr; gap: 6px; }
+  .brand { width: max-content; max-width: 100%; gap: 12px; }
+  .brand > span { display: inline-flex !important; overflow: visible; }
+  .brand-logo { width: 128px; height: 42px; }
+  .brand > span { padding-left: 14px; font-size: 16px; }
+  .topbar nav { height: 52px; gap: 18px; }
+  .topbar nav a { font-size: 14px; }
+  .wallet-actions { margin-left: auto; padding: 10px 0 12px; }
+  .network-control { min-width: 220px; }
+  .wallet-control, .wallet-control.connected { min-width: 176px; }
 }
