@@ -133,8 +133,11 @@ export const tokenCommunicationPublishInput = z.object({
   signature,
 });
 
-
 export const publicSubscriptionInput = subscriptionInput.extend({
+  walletAddress: address,
+});
+
+export const notificationReadInput = z.object({
   walletAddress: address,
 });
 

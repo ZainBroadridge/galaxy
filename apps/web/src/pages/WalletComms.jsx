@@ -32,9 +32,14 @@ const communicationCategories = [
 ];
 
 const categoryLabels = new Map(communicationCategories.map(({ value, label }) => [value, label]));
+const NOTIFICATIONS_PER_PAGE = 5;
+const DEFAULT_NOTIFICATION_EXPIRY_MS = 48 * 60 * 60_000;
 const localDate = (date) => new Date(
   date.getTime() - date.getTimezoneOffset() * 60_000,
 ).toISOString().slice(0, 16);
+const defaultNotificationExpiry = () => localDate(
+  new Date(Date.now() + DEFAULT_NOTIFICATION_EXPIRY_MS),
+);
 const initialCommunication = () => ({
   scope: 'EVENT',
   eventId: '',
@@ -43,7 +48,7 @@ const initialCommunication = () => ({
   audience: 'ALL_ELIGIBLE',
   title: '',
   body: '',
-  expiresAt: localDate(new Date(Date.now() + 7 * 24 * 60 * 60_000)),
+  expiresAt: defaultNotificationExpiry(),
 });
 const shortAddress = (value) => value ? `${value.slice(0, 8)}…${value.slice(-6)}` : '';
 const messageIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -90,6 +95,7 @@ export default function WalletComms() {
   const [subscription, setSubscription] = useState({ tokenAddress: '', enabled: true });
   const [communication, setCommunication] = useState(initialCommunication);
   const [browserPush, setBrowserPush] = useState(null);
+  const [page, setPage] = useState(1);
   const lastSnapMessageId = useRef(null);
   const targetMessageRef = useRef(null);
 
@@ -101,6 +107,7 @@ export default function WalletComms() {
     setSubscription({ tokenAddress: '', enabled: true });
     setCommunication(initialCommunication());
     setBrowserPush(null);
+    setPage(1);
     setError(null);
     setFeedback(null);
     lastSnapMessageId.current = null;
@@ -141,23 +148,20 @@ export default function WalletComms() {
   }, [targetMessageId]);
 
   useEffect(() => {
-    if (!targetMessageId || activeTab !== 'announcements' || !wallet.connected) return undefined;
-    const target = notifications.messages.find(
+    if (!targetMessageId) return;
+    const targetIndex = notifications.messages.findIndex(
       (message) => message.messageId?.toLowerCase() === targetMessageId,
     );
-    if (!target) return undefined;
-    const frame = requestAnimationFrame(() => {
-      targetMessageRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      targetMessageRef.current?.focus({ preventScroll: true });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [activeTab, notifications.messages, targetMessageId, wallet.connected]);
+    if (targetIndex >= 0) {
+      setPage(Math.floor(targetIndex / NOTIFICATIONS_PER_PAGE) + 1);
+    }
+  }, [notifications.messages, targetMessageId]);
 
   useEffect(() => {
-    if (wallet.connected && activeTab === 'announcements' && notifications.messages.length) {
-      notifications.markAllRead();
+    if (wallet.connected && activeTab === 'announcements' && notifications.unreadCount > 0) {
+      notifications.markAllRead().catch(() => {});
     }
-  }, [activeTab, notifications.markAllRead, notifications.messages, wallet.connected]);
+  }, [activeTab, notifications.markAllRead, notifications.unreadCount, wallet.connected]);
 
   // When the dApp is open, mirror a newly received verified announcement into
   // the installed Snap immediately. The Snap cron remains the closed-tab path.
@@ -369,7 +373,12 @@ export default function WalletComms() {
         ? '/v1/communications/token/platform'
         : `/v1/events/${communication.eventId}/communications/platform`;
       await api(path, { method: 'POST', auth: false, body: input });
-      setCommunication((current) => ({ ...current, title: '', body: '' }));
+      setCommunication((current) => ({
+        ...current,
+        title: '',
+        body: '',
+        expiresAt: defaultNotificationExpiry(),
+      }));
       await notifications.refresh({ silent: true }).catch(() => []);
       if (snapInstalled) {
         const snapResult = await checkSnapNow(wallet.account).catch(() => null);
@@ -408,6 +417,14 @@ export default function WalletComms() {
     ? new Date(notifications.lastUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : null;
   const notificationCount = notifications.messages.length;
+  const unreadCount = notifications.unreadCount;
+  const pageCount = Math.max(1, Math.ceil(notificationCount / NOTIFICATIONS_PER_PAGE));
+  const currentPage = Math.min(page, pageCount);
+  const pageStart = (currentPage - 1) * NOTIFICATIONS_PER_PAGE;
+  const pagedMessages = notifications.messages.slice(
+    pageStart,
+    pageStart + NOTIFICATIONS_PER_PAGE,
+  );
   const backgroundEnabled = snapState?.backgroundEnabled === true;
   const snapLastChecked = snapState?.lastCheckedAt
     ? new Date(snapState.lastCheckedAt).toLocaleString()
@@ -425,6 +442,19 @@ export default function WalletComms() {
       && !notifications.loading
       && !targetMessage,
   );
+
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
+
+  useEffect(() => {
+    if (!targetMessage || activeTab !== 'announcements' || !wallet.connected) return undefined;
+    const frame = requestAnimationFrame(() => {
+      targetMessageRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      targetMessageRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeTab, currentPage, targetMessage, wallet.connected]);
   const browserPushStatus = !browserPush
     ? 'CHECKING'
     : !browserPush.configured
@@ -455,13 +485,13 @@ export default function WalletComms() {
           aria-controls="comms-panel-announcements"
           aria-selected={activeTab === 'announcements'}
           className={`comms-tab${activeTab === 'announcements' ? ' active' : ''}`}
-          onClick={() => setActiveTab('announcements')}
+          onClick={() => { setActiveTab('announcements'); setPage(1); }}
         >
           <span>Announcements</span>
-          {notificationCount > 0 && <span
+          {unreadCount > 0 && <span
             className="comms-tab-count"
-            aria-label={`${notificationCount} announcement${notificationCount === 1 ? '' : 's'}`}
-          >{notificationCount > 99 ? '99+' : notificationCount}</span>}
+            aria-label={`${unreadCount} unread announcement${unreadCount === 1 ? '' : 's'}`}
+          >{unreadCount > 99 ? '99+' : unreadCount}</span>}
         </button>
         <button
           type="button"
@@ -497,7 +527,7 @@ export default function WalletComms() {
           <div>
             <div className="notification-title-line">
               <h2 id="notification-center-title">Announcements</h2>
-              <span className="notification-total">{notificationCount}</span>
+              {unreadCount > 0 && <span className="notification-total">{unreadCount} unread</span>}
             </div>
             <p>Verified voting notices load automatically and update live.</p>
           </div>
@@ -518,7 +548,7 @@ export default function WalletComms() {
           {notifications.loading && !notificationCount
             ? <Spinner />
             : notificationCount
-              ? notifications.messages.map((message) => {
+              ? pagedMessages.map((message) => {
                 const targeted = message.messageId?.toLowerCase() === targetMessageId;
                 return <article
                   className="notification-row"
@@ -546,6 +576,21 @@ export default function WalletComms() {
                 <span>New voting announcements will appear here automatically.</span>
               </div>}
         </div>
+        {pageCount > 1 && <nav className="notification-toolbar" aria-label="Notification pages">
+          <button
+            type="button"
+            className="button secondary compact"
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            disabled={currentPage === 1}
+          >Previous</button>
+          <span className="notification-updated">Page {currentPage} of {pageCount}</span>
+          <button
+            type="button"
+            className="button secondary compact"
+            onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+            disabled={currentPage === pageCount}
+          >Next</button>
+        </nav>}
       </section>
 
       <div className="comms-utilities">

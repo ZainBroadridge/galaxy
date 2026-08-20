@@ -20,6 +20,50 @@ const NON_HOLDER_SUBSCRIBER_CATEGORIES = new Set([
   COMMUNICATION_CATEGORY.RESULTS_AVAILABLE,
 ]);
 
+export async function ensureNotificationState(wallet) {
+  const address = normalizeAddress(wallet, 'walletAddress');
+  let result = await query(
+    `SELECT started_at,last_read_at
+       FROM wallet_notification_state
+      WHERE wallet_address=$1`,
+    [address],
+  );
+  if (!result.rowCount) {
+    await query(
+      `INSERT INTO wallet_notification_state(wallet_address)
+       VALUES ($1)
+       ON CONFLICT(wallet_address) DO NOTHING`,
+      [address],
+    );
+    result = await query(
+      `SELECT started_at,last_read_at
+         FROM wallet_notification_state
+        WHERE wallet_address=$1`,
+      [address],
+    );
+  }
+  return {
+    walletAddress: address,
+    startedAt: result.rows[0].started_at,
+    lastReadAt: result.rows[0].last_read_at,
+  };
+}
+
+export async function markInboxRead(wallet) {
+  const state = await ensureNotificationState(wallet);
+  const result = await query(
+    `UPDATE wallet_notification_state
+        SET last_read_at=now(),updated_at=now()
+      WHERE wallet_address=$1
+      RETURNING last_read_at`,
+    [state.walletAddress],
+  );
+  return {
+    walletAddress: state.walletAddress,
+    lastReadAt: result.rows[0].last_read_at,
+  };
+}
+
 function commonMessage(input) {
   return {
     messageId: input.messageId ?? randomUUID(),
@@ -121,9 +165,23 @@ async function insertTokenCommunication(message, signature) {
        category,audience,title,body,action_url,published_at,expires_at,creator_signature
      ) VALUES ($1,NULL,'TOKEN',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
      ON CONFLICT(message_id) DO NOTHING`,
-    [message.messageId, message.chainId, message.tokenAddress, message.tokenName, message.tokenSymbol,
-      message.creatorAddress, message.authenticityStatus, message.category, message.audience, message.title,
-      message.body, message.actionUrl, message.publishedAt, message.expiresAt, signature],
+    [
+      message.messageId,
+      message.chainId,
+      message.tokenAddress,
+      message.tokenName,
+      message.tokenSymbol,
+      message.creatorAddress,
+      message.authenticityStatus,
+      message.category,
+      message.audience,
+      message.title,
+      message.body,
+      message.actionUrl,
+      message.publishedAt,
+      message.expiresAt,
+      signature,
+    ],
   );
 }
 
@@ -235,11 +293,17 @@ export async function subscriptions(wallet) {
 export async function saveSubscription(wallet, input) {
   const address = normalizeAddress(wallet);
   const token = normalizeAddress(input.tokenAddress, 'tokenAddress');
+  await ensureNotificationState(address);
   const result = await query(
     `INSERT INTO snap_subscriptions(wallet_address,token_address,categories,enabled)
      VALUES ($1,$2,'[]'::jsonb,$3)
-     ON CONFLICT(wallet_address,token_address) DO UPDATE
-       SET categories='[]'::jsonb,enabled=EXCLUDED.enabled,updated_at=now()
+     ON CONFLICT(wallet_address,token_address) DO UPDATE SET
+       categories='[]'::jsonb,
+       enabled=EXCLUDED.enabled,
+       updated_at=CASE
+         WHEN snap_subscriptions.enabled=false AND EXCLUDED.enabled=true THEN now()
+         ELSE snap_subscriptions.updated_at
+       END
      RETURNING token_address,enabled,updated_at`,
     [address, token, input.enabled],
   );
@@ -264,6 +328,7 @@ function serializeEventCommunication(row) {
     body: row.body,
     actionUrl: row.action_url,
     publishedAt: row.published_at,
+    deliveredAt: row.created_at,
     expiresAt: row.expires_at,
     signature: row.creator_signature,
     issuedBy: row.communication_creator_address ? 'PLATFORM_OR_CREATOR' : 'LEGACY_CREATOR',
@@ -286,6 +351,7 @@ function serializeTokenCommunication(row) {
     body: row.body,
     actionUrl: row.action_url,
     publishedAt: row.published_at,
+    deliveredAt: row.created_at,
     expiresAt: row.expires_at,
     signature: row.creator_signature,
   };
@@ -293,6 +359,7 @@ function serializeTokenCommunication(row) {
 
 export async function inbox(wallet) {
   const address = normalizeAddress(wallet);
+  const state = await ensureNotificationState(address);
   const [eventRows, tokenRows] = await Promise.all([
     query(
       `SELECT c.*,
@@ -302,27 +369,47 @@ export async function inbox(wallet) {
               e.creator_address AS event_creator_address,
               e.authenticity_status AS event_authenticity_status
        FROM communications c JOIN events e ON e.id=c.event_id
-       JOIN snapshot_entries se ON se.event_id=e.id AND se.wallet_address=$1
+       LEFT JOIN snapshot_entries se ON se.event_id=e.id AND se.wallet_address=$1
        LEFT JOIN votes v ON v.event_id=e.id AND v.voter_address=$1 AND v.status<>'FAILED'
        LEFT JOIN snap_subscriptions s ON s.wallet_address=$1 AND s.token_address=e.token_address AND s.enabled=true
        WHERE c.scope='EVENT' AND c.revoked_at IS NULL AND c.published_at<=now() AND c.expires_at>now()
+         AND c.created_at >= $2
          AND e.snap_delivery_mode<>'DISABLED'
-         AND (e.snap_delivery_mode='ELIGIBLE' OR s.wallet_address IS NOT NULL)
-         AND (c.audience='ALL_ELIGIBLE' OR (c.audience='NOT_VOTED' AND v.id IS NULL) OR (c.audience='SUBSCRIBERS' AND s.wallet_address IS NOT NULL))
-       ORDER BY c.published_at DESC LIMIT 100`,
-      [address],
+         AND (
+           e.creator_address=$1
+           OR (
+             se.wallet_address IS NOT NULL
+             AND (e.snap_delivery_mode='ELIGIBLE' OR s.wallet_address IS NOT NULL)
+             AND (
+               c.audience='ALL_ELIGIBLE'
+               OR (c.audience='NOT_VOTED' AND v.id IS NULL)
+               OR (
+                 c.audience='SUBSCRIBERS'
+                 AND s.wallet_address IS NOT NULL
+                 AND c.created_at >= s.updated_at
+               )
+             )
+           )
+         )
+       ORDER BY c.created_at DESC LIMIT 100`,
+      [address, state.startedAt],
     ),
     query(
-      `SELECT c.*,s.wallet_address AS subscribed_wallet
+      `SELECT c.*,s.wallet_address AS subscribed_wallet,s.updated_at AS subscribed_at
        FROM communications c
        LEFT JOIN snap_subscriptions s ON s.wallet_address=$1 AND s.token_address=c.token_address AND s.enabled=true
        WHERE c.scope='TOKEN' AND c.revoked_at IS NULL AND c.published_at<=now() AND c.expires_at>now()
+         AND c.created_at >= $2
          AND (
            c.audience='CURRENT_HOLDERS'
-           OR (c.audience='SUBSCRIBERS' AND s.wallet_address IS NOT NULL)
+           OR (
+             c.audience='SUBSCRIBERS'
+             AND s.wallet_address IS NOT NULL
+             AND c.created_at >= s.updated_at
+           )
          )
-       ORDER BY c.published_at DESC LIMIT 100`,
-      [address],
+       ORDER BY c.created_at DESC LIMIT 100`,
+      [address, state.startedAt],
     ),
   ]);
 
@@ -345,11 +432,20 @@ export async function inbox(wallet) {
     if (NON_HOLDER_SUBSCRIBER_CATEGORIES.has(row.category)) return true;
     return isCurrentHolder(row.token_address);
   }));
+  const lastReadAt = state.lastReadAt ? new Date(state.lastReadAt).getTime() : null;
   const messages = [
     ...eventRows.rows.map(serializeEventCommunication),
     ...tokenRows.rows.filter((_row, index) => tokenVisibility[index]).map(serializeTokenCommunication),
   ];
   return messages
-    .sort((left, right) => new Date(right.publishedAt).getTime() - new Date(left.publishedAt).getTime())
-    .slice(0, 100);
+    .sort((left, right) => (
+      new Date(right.deliveredAt ?? right.publishedAt).getTime()
+      - new Date(left.deliveredAt ?? left.publishedAt).getTime()
+    ))
+    .slice(0, 100)
+    .map((message) => ({
+      ...message,
+      read: lastReadAt !== null
+        && new Date(message.deliveredAt ?? message.publishedAt).getTime() <= lastReadAt,
+    }));
 }

@@ -56,6 +56,7 @@ test('organiser writes require no wallet signature and use public wallet-scoped 
   assertPublicWriteRoute('delete', '/v1/events/:id/documents/:documentId');
   assertPublicWriteRoute('put', '/v1/communications/subscriptions');
   assertPublicWriteRoute('put', '/v1/communications/push-subscription');
+  assertPublicWriteRoute('put', '/v1/communications/inbox/read');
   assertPublicWriteRoute('delete', '/v1/communications/push-subscription');
   assertPublicWriteRoute('post', '/v1/communications/token/platform');
   assertPublicWriteRoute('post', '/v1/events/:id/communications/platform');

@@ -86,7 +86,8 @@ test('browser push reuses inbox audience rules and keeps one subscription resour
   assert.match(server, /app\.put\('\/v1\/communications\/push-subscription', publicWriteLimiter/u);
   assert.match(server, /app\.delete\('\/v1\/communications\/push-subscription', publicWriteLimiter/u);
   assert.equal((server.match(/\/v1\/communications\/push-subscription/gu) ?? []).length, 2);
-  assert.match(delivery, /import \{ inbox \} from '\.\/communications\.js'/u);
+  assert.match(delivery, /import \{ ensureNotificationState, inbox \} from '\.\/communications\.js'/u);
+  assert.match(delivery, /await ensureNotificationState\(walletAddress\)/u);
   assert.match(delivery, /walletCanReadMessage/u);
   assert.match(migration, /endpoint text PRIMARY KEY/u);
   assert.match(migration, /wallet_address varchar\(42\) NOT NULL/u);

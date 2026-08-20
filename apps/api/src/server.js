@@ -7,6 +7,7 @@ import {
   draftCommunication,
   draftTokenCommunication,
   inbox,
+  markInboxRead,
   publishCommunication,
   publishPlatformCommunication,
   publishPlatformTokenCommunication,
@@ -44,10 +45,11 @@ import {
   browserPushUnsubscribeInput,
   communicationDraftInput,
   communicationPublishInput,
+  eventInput,
+  notificationReadInput,
   platformCommunicationInput,
   platformTokenCommunicationInput,
   publicSubscriptionInput,
-  eventInput,
   tokenCommunicationDraftInput,
   tokenCommunicationPublishInput,
   voteInput,
@@ -374,6 +376,12 @@ app.get('/v1/communications/inbox', async (request, response, next) => {
     if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
     response.set('Cache-Control', 'private, no-store');
     response.json(await inbox(wallet));
+  } catch (error) { next(error); }
+});
+app.put('/v1/communications/inbox/read', publicWriteLimiter, async (request, response, next) => {
+  try {
+    const input = parse(notificationReadInput, request.body);
+    response.json(await markInboxRead(input.walletAddress));
   } catch (error) { next(error); }
 });
 app.post('/v1/communications/token/draft', requireAuth, writeLimiter, async (request, response, next) => {

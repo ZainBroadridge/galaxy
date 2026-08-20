@@ -1,54 +1,35 @@
 import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from 'react';
+import { api } from './api.js';
 import { fetchCommunications } from './communications.js';
 import { useWallet } from './wallet.jsx';
 
 const NotificationsContext = createContext(null);
 const refreshIntervalMs = 15_000;
-const maxStoredReadIds = 500;
-const readStoragePrefix = 'pv-v2-read-communications:';
-
-function readStorageKey(account) {
-  return `${readStoragePrefix}${account}`;
-}
-
-function loadReadIds(account) {
-  if (!account) return new Set();
-  try {
-    const values = JSON.parse(localStorage.getItem(readStorageKey(account)) || '[]');
-    return new Set(Array.isArray(values) ? values.filter((value) => typeof value === 'string') : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function saveReadIds(account, values) {
-  if (!account) return;
-  try {
-    const ids = [...values].slice(-maxStoredReadIds);
-    localStorage.setItem(readStorageKey(account), JSON.stringify(ids));
-  } catch {
-    // Read state is a local convenience; notification delivery must not fail if storage is unavailable.
-  }
-}
 
 export function NotificationsProvider({ children }) {
   const wallet = useWallet();
   const [messages, setMessages] = useState([]);
-  const [readIds, setReadIds] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [live, setLive] = useState(false);
   const activeAccount = useRef(wallet.account);
-  const inFlight = useRef(null);
+  const messagesRef = useRef([]);
+  const refreshInFlight = useRef(null);
+  const readInFlight = useRef(null);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     activeAccount.current = wallet.account;
-    inFlight.current = null;
+    messagesRef.current = [];
+    refreshInFlight.current = null;
+    readInFlight.current = null;
     setMessages([]);
-    setReadIds(loadReadIds(wallet.account));
     setLoading(Boolean(wallet.connected));
     setError(null);
     setLastUpdatedAt(null);
@@ -58,12 +39,13 @@ export function NotificationsProvider({ children }) {
   const refresh = useCallback(async ({ silent = false } = {}) => {
     const account = wallet.account;
     if (!wallet.connected || !account) return [];
-    if (inFlight.current?.account === account) return inFlight.current.promise;
+    if (refreshInFlight.current?.account === account) return refreshInFlight.current.promise;
 
     if (!silent) setLoading(true);
     const request = fetchCommunications(account)
       .then((nextMessages) => {
         if (activeAccount.current === account) {
+          messagesRef.current = nextMessages;
           setMessages(nextMessages);
           setError(null);
           setLastUpdatedAt(new Date().toISOString());
@@ -80,10 +62,10 @@ export function NotificationsProvider({ children }) {
       })
       .finally(() => {
         if (activeAccount.current === account) setLoading(false);
-        if (inFlight.current?.promise === request) inFlight.current = null;
+        if (refreshInFlight.current?.promise === request) refreshInFlight.current = null;
       });
 
-    inFlight.current = { account, promise: request };
+    refreshInFlight.current = { account, promise: request };
     return request;
   }, [wallet.account, wallet.connected]);
 
@@ -107,25 +89,42 @@ export function NotificationsProvider({ children }) {
     };
   }, [refresh, wallet.account, wallet.connected]);
 
-  const markAllRead = useCallback(() => {
-    if (!wallet.account || !messages.length) return;
-    setReadIds((current) => {
-      const next = new Set(current);
-      let changed = false;
-      for (const message of messages) {
-        if (next.has(message.messageId)) continue;
-        next.add(message.messageId);
-        changed = true;
-      }
-      if (!changed) return current;
-      saveReadIds(wallet.account, next);
-      return next;
-    });
-  }, [messages, wallet.account]);
+  const markAllRead = useCallback(async () => {
+    const account = wallet.account;
+    if (!wallet.connected || !account) return null;
+    if (!messagesRef.current.some((message) => message.read !== true)) return null;
+    if (readInFlight.current?.account === account) return readInFlight.current.promise;
+
+    const request = api('/v1/communications/inbox/read', {
+      method: 'PUT',
+      auth: false,
+      body: { walletAddress: account },
+    })
+      .then((result) => {
+        if (activeAccount.current === account) {
+          setMessages((current) => {
+            const next = current.map((message) => ({ ...message, read: true }));
+            messagesRef.current = next;
+            return next;
+          });
+        }
+        return result;
+      })
+      .catch((value) => {
+        if (activeAccount.current === account) setError(value);
+        throw value;
+      })
+      .finally(() => {
+        if (readInFlight.current?.promise === request) readInFlight.current = null;
+      });
+
+    readInFlight.current = { account, promise: request };
+    return request;
+  }, [wallet.account, wallet.connected]);
 
   const unreadCount = useMemo(
-    () => messages.reduce((count, message) => count + (readIds.has(message.messageId) ? 0 : 1), 0),
-    [messages, readIds],
+    () => messages.reduce((count, message) => count + (message.read === true ? 0 : 1), 0),
+    [messages],
   );
 
   const value = useMemo(() => ({

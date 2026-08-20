@@ -2,7 +2,7 @@ import webPush from 'web-push';
 import { config } from './config.js';
 import { query } from './db.js';
 import { HttpError, normalizeAddress } from './errors.js';
-import { inbox } from './communications.js';
+import { ensureNotificationState, inbox } from './communications.js';
 import { logger } from './logger.js';
 
 const DELIVERY_CONCURRENCY = 6;
@@ -121,6 +121,7 @@ export function browserPushConfigured() {
 export async function saveBrowserPushSubscription(walletInput, input) {
   requireConfigured();
   const walletAddress = normalizeAddress(walletInput, 'walletAddress');
+  await ensureNotificationState(walletAddress);
   const endpoint = normalizeEndpoint(input.subscription.endpoint);
   const { p256dh, auth } = input.subscription.keys;
   await query(
