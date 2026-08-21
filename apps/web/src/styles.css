@@ -1145,10 +1145,11 @@ textarea:focus {
 @media (max-width: 980px) {
   .brand-logo { display: none; }
   .brand-icon { display: block; }
-  .topbar-inner { height: auto; min-height: var(--ui-header-height); flex-wrap: wrap; padding-block: 8px; }
+  .topbar-inner { height: auto; min-height: var(--ui-header-height); flex-wrap: wrap; padding-block: 3px; }
   .topbar-primary { width: 100%; justify-content: space-between; }
-  .topbar nav { height: 40px; overflow-x: auto; }
+  .topbar nav { height: 32px; overflow-x: auto; }
   .wallet-actions { width: 100%; justify-content: flex-end; }
+  .network-control, .wallet-control { min-height: 34px; }
   .card-grid,
   .organiser-events-grid,
   .create-support-grid { grid-template-columns: 1fr; }
