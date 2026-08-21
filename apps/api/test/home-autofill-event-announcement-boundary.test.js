@@ -38,10 +38,12 @@ test('create event restores deterministic demo autofill without touching token o
   assert.doesNotMatch(fillBody, /setDocuments/u);
 });
 
-test('voting-event announcements select a deployed event and preserve manual delivery', async () => {
-  const [page, communications] = await Promise.all([
+test('voting-event announcements select a deployed event and share one recipient policy', async () => {
+  const [page, communications, policy, server] = await Promise.all([
     read('apps/web/src/pages/WalletComms.jsx'),
     read('apps/api/src/communications.js'),
+    read('apps/api/src/communication-recipient-policy.js'),
+    read('apps/api/src/server.js'),
   ]);
 
   assert.match(page, /const eventIsReady =/u);
@@ -54,9 +56,15 @@ test('voting-event announcements select a deployed event and preserve manual del
     communications,
     /publishPlatformCommunication[\s\S]*await ensureNotificationState\(publisher\)[\s\S]*insertEventCommunication/u,
   );
+  assert.match(communications, /export async function eventBrowserPushRecipients/u);
+  assert.match(communications, /canReceiveEventCommunication\(eventRecipientContext\(row\)\)/u);
+  assert.match(communications, /is_automatic_announcement/u);
   assert.match(
-    communications,
-    /c\.message_id IS DISTINCT FROM NULLIF\(e\.announcement_message->>'messageId',''\)::uuid/u,
+    policy,
+    /isAutomaticAnnouncement && automaticDeliveryMode === AUTOMATIC_DELIVERY_DISABLED/u,
   );
-  assert.match(communications, /Manually issued event communications use their/u);
+  assert.match(
+    server,
+    /app\.post\('\/v1\/events\/:id\/communications\/platform'[\s\S]*queueBrowserPush\(message\)/u,
+  );
 });

@@ -30,6 +30,7 @@ export function buildEventAnnouncement(event) {
   if (!audience) return null;
 
   const message = {
+    scope: 'EVENT',
     chainId: Number(event.chain_id),
     eventId: event.id,
     eventTitle: event.title,
@@ -46,9 +47,9 @@ export function buildEventAnnouncement(event) {
     body: `${event.token_name} voting opens ${formatUtc(event.voting_start_at)} and closes ${formatUtc(event.voting_end_at)}.`,
     actionUrl: `${config.webAppUrl}/vote/${event.id}`,
     publishedAt: new Date(
-      event.announcement_published_at
-        ? (event.announcement_message?.publishedAt ?? event.announcement_published_at)
-        : Date.now(),
+      event.announcement_message?.publishedAt
+        ?? event.announcement_published_at
+        ?? Date.now(),
     ).toISOString(),
     expiresAt: new Date(event.voting_end_at).toISOString(),
   };
@@ -115,7 +116,30 @@ async function publishWithClient(eventId, client, publisherAddress = null) {
   const draft = buildEventAnnouncement(event);
   if (!draft) return { published: false, status: 'DISABLED', message: null };
   if (event.announcement_published_at && await hasValidStoredAnnouncement(event, draft, client)) {
-    return { published: false, status: 'PUBLISHED', message: draft.message };
+    if (publisherAddress) {
+      // An explicit organiser retry is a delivery retry, not a new signed
+      // communication. Refresh only the delivery timestamp so wallets whose
+      // Snap/browser channel was enabled after the original attempt can receive
+      // the same verified message without creating duplicate history.
+      await client.query(
+        `UPDATE communications
+            SET created_at=now(),revoked_at=NULL
+          WHERE event_id=$1 AND message_id=$2`,
+        [event.id, draft.message.messageId],
+      );
+      return {
+        published: false,
+        redelivered: true,
+        status: 'PUBLISHED',
+        message: draft.message,
+      };
+    }
+    return {
+      published: false,
+      redelivered: false,
+      status: 'PUBLISHED',
+      message: draft.message,
+    };
   }
   const signature = await relayer.signMessage(draft.signingMessage);
 
@@ -179,14 +203,19 @@ async function publishWithClient(eventId, client, publisherAddress = null) {
       WHERE id=$1`,
     [event.id, JSON.stringify(draft.message), signature],
   );
-  return { published: true, status: 'PUBLISHED', message: draft.message };
+  return { published: true, redelivered: false, status: 'PUBLISHED', message: draft.message };
 }
 
 export async function publishPendingEventAnnouncement(eventId, client = null) {
   const result = client
     ? await publishWithClient(eventId, client)
     : await transaction((transactionClient) => publishWithClient(eventId, transactionClient));
-  return { published: result.published, status: result.status, message: result.message };
+  return {
+    published: result.published,
+    redelivered: result.redelivered === true,
+    status: result.status,
+    message: result.message,
+  };
 }
 
 export async function triggerEventAnnouncement(eventId, wallet) {

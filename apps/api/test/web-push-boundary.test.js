@@ -76,7 +76,7 @@ test('Snap owns only the MetaMask inbox and in-app alert channel', async () => {
   assert.match(snapClient, /SNAP_VERSION.*'0\.4\.2'/u);
 });
 
-test('browser push reuses inbox audience rules and keeps one subscription resource route', async () => {
+test('browser push shares event policy, preserves token inbox rules, and keeps one subscription resource', async () => {
   const [server, delivery, migration] = await Promise.all([
     read('apps/api/src/server.js'),
     read('apps/api/src/web-push.js'),
@@ -86,11 +86,18 @@ test('browser push reuses inbox audience rules and keeps one subscription resour
   assert.match(server, /app\.put\('\/v1\/communications\/push-subscription', publicWriteLimiter/u);
   assert.match(server, /app\.delete\('\/v1\/communications\/push-subscription', publicWriteLimiter/u);
   assert.equal((server.match(/\/v1\/communications\/push-subscription/gu) ?? []).length, 2);
-  assert.match(delivery, /import \{ ensureNotificationState, inbox \} from '\.\/communications\.js'/u);
+  assert.match(
+    delivery,
+    /import \{[\s\S]*ensureNotificationState,[\s\S]*eventBrowserPushRecipients,[\s\S]*inbox,[\s\S]*\} from '\.\/communications\.js'/u,
+  );
   assert.match(delivery, /await ensureNotificationState\(walletAddress\)/u);
-  assert.match(delivery, /walletCanReadMessage/u);
+  assert.match(delivery, /tokenWalletCanReadMessage/u);
+  assert.match(delivery, /eventBrowserPushRecipients\(messageId\)/u);
+  assert.match(delivery, /resolveEventSubscriptions/u);
   assert.match(delivery, /created_at AS subscription_started_at/u);
   assert.match(delivery, /startedAt: subscriptionStartedAt/u);
+  assert.match(delivery, /isEventMessage/u);
+  assert.match(delivery, /QUEUE_DEDUPE_MS/u);
   assert.match(delivery, /Browser push dispatch completed/u);
   assert.match(migration, /endpoint text PRIMARY KEY/u);
   assert.match(migration, /wallet_address varchar\(42\) NOT NULL/u);

@@ -2,12 +2,20 @@ import webPush from 'web-push';
 import { config } from './config.js';
 import { query } from './db.js';
 import { HttpError, normalizeAddress } from './errors.js';
-import { ensureNotificationState, inbox } from './communications.js';
+import {
+  ensureNotificationState,
+  eventBrowserPushRecipients,
+  inbox,
+} from './communications.js';
 import { logger } from './logger.js';
 
 const DELIVERY_CONCURRENCY = 6;
 const MAX_TTL_SECONDS = 24 * 60 * 60;
 const DELIVERY_TIMEOUT_MS = 10_000;
+const EVENT_PERSISTENCE_ATTEMPTS = 4;
+const EVENT_PERSISTENCE_DELAY_MS = 125;
+const QUEUE_DEDUPE_MS = 30_000;
+const recentlyQueuedMessageIds = new Map();
 const configured = Boolean(config.webPush.publicKey && config.webPush.privateKey);
 
 if (configured) {
@@ -65,6 +73,15 @@ function deliveryOptions(message) {
   };
 }
 
+function isEventMessage(message) {
+  return message?.scope === 'EVENT'
+    || (Boolean(message?.eventId) && message?.scope !== 'TOKEN');
+}
+
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 async function mapWithConcurrency(items, limit, worker) {
   let nextIndex = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
@@ -81,11 +98,7 @@ async function removeExpiredEndpoint(endpoint) {
   await query('DELETE FROM web_push_subscriptions WHERE endpoint=$1', [endpoint]);
 }
 
-async function walletCanReadMessage(walletAddress, messageId, subscriptionStartedAt) {
-  // A push subscription is the delivery boundary. Target the newly published
-  // message directly and use the subscription creation time instead of the
-  // inbox-read-state baseline. This prevents event announcements from being
-  // skipped when notification-state rows were created or migrated later.
+async function tokenWalletCanReadMessage(walletAddress, messageId, subscriptionStartedAt) {
   const messages = await inbox(walletAddress, {
     messageId,
     startedAt: subscriptionStartedAt,
@@ -93,9 +106,38 @@ async function walletCanReadMessage(walletAddress, messageId, subscriptionStarte
   return messages.some((message) => message.messageId === messageId);
 }
 
-async function deliverToSubscription(row, message, payload, result, canRead) {
+async function resolveEventSubscriptions(messageId) {
+  for (let attempt = 0; attempt < EVENT_PERSISTENCE_ATTEMPTS; attempt += 1) {
+    const result = await eventBrowserPushRecipients(messageId);
+    if (result.persisted) {
+      return { checked: result.candidateCount, subscriptions: result.recipients };
+    }
+    if (attempt < EVENT_PERSISTENCE_ATTEMPTS - 1) {
+      await sleep(EVENT_PERSISTENCE_DELAY_MS * (attempt + 1));
+    }
+  }
+
+  logger.warn(
+    { messageId },
+    'Event browser push message was not visible after publication retries',
+  );
+  return { checked: 0, subscriptions: [] };
+}
+
+function reserveQueueSlot(messageId) {
+  const now = Date.now();
+  for (const [knownMessageId, expiresAt] of recentlyQueuedMessageIds) {
+    if (expiresAt <= now) recentlyQueuedMessageIds.delete(knownMessageId);
+  }
+  const reservedUntil = recentlyQueuedMessageIds.get(messageId) ?? 0;
+  if (reservedUntil > now) return false;
+  recentlyQueuedMessageIds.set(messageId, now + QUEUE_DEDUPE_MS);
+  return true;
+}
+
+async function deliverToSubscription(row, message, payload, result, canRead = null) {
   try {
-    if (!await canRead(row.wallet_address, row.subscription_started_at)) return;
+    if (canRead && !await canRead(row)) return;
     result.eligible += 1;
     await webPush.sendNotification(
       {
@@ -115,7 +157,13 @@ async function deliverToSubscription(row, message, payload, result, canRead) {
     }
     result.failed += 1;
     logger.warn(
-      { err: error, messageId: message.messageId, statusCode: statusCode || undefined },
+      {
+        err: error,
+        messageId: message.messageId,
+        eventId: message.eventId ?? undefined,
+        walletAddress: row.wallet_address,
+        statusCode: statusCode || undefined,
+      },
       'Browser push delivery failed',
     );
   }
@@ -162,40 +210,62 @@ export async function deliverBrowserPush(message) {
   if (!configured || !message?.messageId) {
     return { checked: 0, eligible: 0, delivered: 0, expired: 0, failed: 0 };
   }
-  const subscriptions = await query(
-    `SELECT wallet_address,endpoint,p256dh,auth,
-            created_at AS subscription_started_at
-       FROM web_push_subscriptions
-      ORDER BY updated_at DESC`,
-  );
+
+  const eventScoped = isEventMessage(message);
+  let subscriptions;
+  let checked;
+  if (eventScoped) {
+    const resolved = await resolveEventSubscriptions(message.messageId);
+    subscriptions = resolved.subscriptions;
+    checked = resolved.checked;
+  } else {
+    subscriptions = (await query(
+      `SELECT wallet_address,endpoint,p256dh,auth,
+              created_at AS subscription_started_at
+         FROM web_push_subscriptions
+        ORDER BY updated_at DESC`,
+    )).rows;
+    checked = subscriptions.length;
+  }
+
   const result = {
-    checked: subscriptions.rowCount,
+    checked,
     eligible: 0,
     delivered: 0,
     expired: 0,
     failed: 0,
   };
   const payload = notificationPayload(message);
-  const eligibility = new Map();
-  const canRead = (walletAddress, subscriptionStartedAt) => {
-    const startKey = new Date(subscriptionStartedAt).toISOString();
-    const key = `${walletAddress}:${startKey}`;
-    if (!eligibility.has(key)) {
-      eligibility.set(
-        key,
-        walletCanReadMessage(walletAddress, message.messageId, subscriptionStartedAt),
-      );
-    }
-    return eligibility.get(key);
-  };
+
+  let canRead = null;
+  if (!eventScoped) {
+    const eligibility = new Map();
+    canRead = (row) => {
+      const key = `${row.wallet_address}:${new Date(row.subscription_started_at).toISOString()}`;
+      if (!eligibility.has(key)) {
+        eligibility.set(
+          key,
+          tokenWalletCanReadMessage(
+            row.wallet_address,
+            message.messageId,
+            row.subscription_started_at,
+          ),
+        );
+      }
+      return eligibility.get(key);
+    };
+  }
+
   await mapWithConcurrency(
-    subscriptions.rows,
+    subscriptions,
     DELIVERY_CONCURRENCY,
     (row) => deliverToSubscription(row, message, payload, result, canRead),
   );
+
   logger.info({
     messageId: message.messageId,
-    scope: message.scope ?? (message.eventId ? 'EVENT' : 'TOKEN'),
+    eventId: message.eventId ?? undefined,
+    scope: eventScoped ? 'EVENT' : 'TOKEN',
     category: message.category,
     ...result,
   }, 'Browser push dispatch completed');
@@ -203,10 +273,15 @@ export async function deliverBrowserPush(message) {
 }
 
 export function queueBrowserPush(message) {
-  if (!configured || !message?.messageId) return;
+  if (!configured || !message?.messageId) return false;
+  if (!reserveQueueSlot(message.messageId)) return false;
   setImmediate(() => {
     deliverBrowserPush(message).catch((error) => {
-      logger.warn({ err: error, messageId: message.messageId }, 'Browser push dispatch failed');
+      logger.warn(
+        { err: error, messageId: message.messageId, eventId: message.eventId ?? undefined },
+        'Browser push dispatch failed',
+      );
     });
   });
+  return true;
 }

@@ -653,9 +653,11 @@ export function OrganiserEventPage() {
       await view.reload();
       setAnnouncementFeedback({
         tone: 'success',
-        message: result.status === 'PUBLISHED'
-          ? 'Event announcement published successfully. No wallet signature was required.'
-          : 'The announcement remains queued until deployment completes.',
+        message: result.redelivered
+          ? 'Event announcement delivery retried for browser and MetaMask inbox channels.'
+          : result.status === 'PUBLISHED'
+            ? 'Event announcement published successfully. No wallet signature was required.'
+            : 'The announcement remains queued until deployment completes.',
       });
     } catch (error) {
       setAnnouncementFeedback({ tone: 'error', message: error.message });
@@ -669,14 +671,15 @@ export function OrganiserEventPage() {
   const event = view.data;
   const canRetry = Boolean(event.failureReason || event.verificationStatus === 'FAILED');
   const documentSlots = Math.max(0, MAX_DOCUMENTS - (event.documents?.length ?? 0));
-  const canPublishAnnouncement = event.announcementStatus === 'QUEUED' && event.contractReady;
+  const canPublishAnnouncement = event.contractReady
+    && ['QUEUED', 'PUBLISHED'].includes(event.announcementStatus);
   const announcementHeading = event.announcementStatus === 'PUBLISHED'
     ? 'Announcement published'
     : event.contractReady
       ? 'Ready to publish'
       : 'Scheduled automatically';
   const announcementMessage = event.announcementStatus === 'PUBLISHED'
-    ? 'The platform-issued event notice is available in Notifications for the selected audience.'
+    ? 'The platform-issued event notice is available in Notifications. Retry delivery if a browser or MetaMask alert was interrupted.'
     : event.contractReady
       ? 'Automatic publication can be retried here without authentication or a wallet signature.'
       : 'The platform will publish this event notice automatically after the VoteEvent contract is deployed.';
@@ -748,7 +751,11 @@ export function OrganiserEventPage() {
           className="button secondary announcement-card-action"
           onClick={publishAnnouncement}
           disabled={announcementBusy}
-        >{announcementBusy ? 'Publishing…' : 'Publish now'}</button>}
+        >{announcementBusy
+          ? 'Publishing…'
+          : event.announcementStatus === 'PUBLISHED'
+            ? 'Retry delivery'
+            : 'Publish now'}</button>}
       </div>
       {announcementFeedback && <Notice tone={announcementFeedback.tone}>{announcementFeedback.message}</Notice>}
     </Panel>}

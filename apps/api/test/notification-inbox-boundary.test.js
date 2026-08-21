@@ -15,13 +15,15 @@ test('notification inbox state is wallet-scoped and stores no message content', 
   assert.doesNotMatch(migration, /message_id|title|body|action_url|token_symbol/u);
 });
 
-test('new wallets and new subscriptions do not receive old token history', async () => {
+test('new wallets and new subscriptions do not receive old notification history', async () => {
   const communications = await read('apps/api/src/communications.js');
 
   assert.match(communications, /export async function ensureNotificationState/u);
-  assert.match(communications, /c\.created_at >= \$2/u);
-  assert.match(communications, /c\.created_at >= s\.updated_at/u);
-  assert.match(communications, /ORDER BY c\.created_at DESC LIMIT 100/u);
+  assert.match(communications, /c\.created_at\s*>=\s*\$2/u);
+  assert.match(communications, /c\.created_at\s*>=\s*s\.updated_at/u);
+  assert.match(communications, /const resultLimit = messageId \? 1 : 100/u);
+  assert.match(communications, /ORDER BY c\.created_at DESC LIMIT \$4/u);
+  assert.match(communications, /\.slice\(0, 100\)/u);
   assert.match(communications, /deliveredAt: row\.created_at/u);
   assert.match(communications, /WHEN snap_subscriptions\.enabled=false AND EXCLUDED\.enabled=true THEN now\(\)/u);
 });

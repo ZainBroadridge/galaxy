@@ -5,25 +5,19 @@ import test from 'node:test';
 const root = new URL('../../../', import.meta.url);
 const read = (path) => readFile(new URL(path, root), 'utf8');
 
-test('browser push targets the exact event message using the subscription delivery boundary', async () => {
-  const [communications, webPush] = await Promise.all([
+test('event browser push and Snap inbox share one recipient policy', async () => {
+  const [communications, policy, webPush] = await Promise.all([
     read('apps/api/src/communications.js'),
+    read('apps/api/src/communication-recipient-policy.js'),
     read('apps/api/src/web-push.js'),
   ]);
 
-  assert.match(communications, /export async function inbox\(wallet, options = \{\}\)/u);
-  assert.match(communications, /messageId = typeof options\.messageId === 'string'/u);
-  assert.match(communications, /deliveryStartedAt/u);
-  assert.equal(
-    (communications.match(/\(\$3::uuid IS NULL OR c\.message_id=\$3::uuid\)/gu) ?? []).length,
-    2,
-  );
-  assert.match(webPush, /created_at AS subscription_started_at/u);
-  assert.match(
-    webPush,
-    /inbox\(walletAddress, \{\s*messageId,\s*startedAt: subscriptionStartedAt,\s*\}\)/u,
-  );
-  assert.match(webPush, /Browser push dispatch completed/u);
+  assert.match(communications, /canReceiveEventCommunication\(eventRecipientContext\(row\)\)/u);
+  assert.match(communications, /export async function eventBrowserPushRecipients/u);
+  assert.match(policy, /export function canReceiveEventCommunication/u);
+  assert.match(policy, /case EVENT_AUDIENCE\.SUBSCRIBERS:[\s\S]*return isSubscribed;/u);
+  assert.match(webPush, /eventBrowserPushRecipients/u);
+  assert.match(webPush, /resolveEventSubscriptions/u);
 });
 
 test('automatic and manual event announcements always enter the browser-push dispatcher', async () => {
@@ -33,12 +27,21 @@ test('automatic and manual event announcements always enter the browser-push dis
     read('apps/api/src/event-announcements.js'),
   ]);
 
-  assert.match(server, /app\.post\('\/v1\/events\/:id\/communications\/platform'[\s\S]*queueBrowserPush\(message\)/u);
-  assert.match(server, /app\.post\('\/v1\/events\/:id\/communications'[\s\S]*queueBrowserPush\(message\)/u);
-  assert.equal((server.match(/if \(result\.message\) queueBrowserPush\(result\.message\);/gu) ?? []).length, 2);
-  assert.match(deploy, /publishPendingEventAnnouncement\(eventId\)[\s\S]*if \(result\.message\) queueBrowserPush/u);
-  assert.match(announcements, /event\.announcement_published_at[\s\S]*event\.announcement_message\?\.publishedAt[\s\S]*Date\.now\(\)/u);
-  assert.match(announcements, /created_at=now\(\)/u);
+  assert.match(
+    server,
+    /app\.post\('\/v1\/events\/:id\/communications\/platform'[\s\S]*queueBrowserPush\(message\)/u,
+  );
+  assert.match(
+    server,
+    /app\.post\('\/v1\/events\/:id\/communications'[\s\S]*queueBrowserPush\(message\)/u,
+  );
+  assert.match(server, /result\.messages\.forEach\(queueBrowserPush\)/u);
+  assert.match(
+    deploy,
+    /publishPendingEventAnnouncement\(eventId\)[\s\S]*result\.published \|\| result\.redelivered[\s\S]*queueBrowserPush\(result\.message\)/u,
+  );
+  assert.match(announcements, /redelivered: true/u);
+  assert.match(announcements, /SET created_at=now\(\),revoked_at=NULL/u);
 });
 
 test('Snap RPC handler is assignable without optional undefined JSON fields', async () => {

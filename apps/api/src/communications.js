@@ -8,6 +8,7 @@ import {
   buildCommunicationSigningMessage,
   buildTokenCommunicationSigningMessage,
 } from '@pv/shared';
+import { canReceiveEventCommunication, eventRecipientContext } from './communication-recipient-policy.js';
 import { config } from './config.js';
 import { query } from './db.js';
 import { HttpError, normalizeAddress } from './errors.js';
@@ -79,6 +80,7 @@ function commonMessage(input) {
 
 function eventMessageFor(event, input, creatorAddress = event.creator_address) {
   return {
+    scope: 'EVENT',
     chainId: Number(event.chain_id),
     eventId: event.id,
     eventTitle: event.title,
@@ -362,6 +364,83 @@ function serializeTokenCommunication(row) {
   };
 }
 
+export async function eventBrowserPushRecipients(messageId) {
+  const persisted = await query(
+    `SELECT scope
+       FROM communications
+      WHERE message_id=$1
+      LIMIT 1`,
+    [messageId],
+  );
+  if (!persisted.rowCount) {
+    return {
+      persisted: false,
+      eventScoped: true,
+      candidateCount: 0,
+      recipients: [],
+    };
+  }
+  if (persisted.rows[0].scope !== 'EVENT') {
+    return {
+      persisted: true,
+      eventScoped: false,
+      candidateCount: 0,
+      recipients: [],
+    };
+  }
+
+  const candidates = await query(
+    `SELECT push.wallet_address,push.endpoint,push.p256dh,push.auth,
+            c.audience,e.snap_delivery_mode,
+            (e.creator_address=push.wallet_address) AS recipient_is_creator,
+            (se.wallet_address IS NOT NULL) AS recipient_is_eligible,
+            (v.id IS NOT NULL) AS recipient_has_voted,
+            (
+              s.wallet_address IS NOT NULL
+              AND c.created_at>=s.updated_at
+            ) AS recipient_is_subscribed,
+            (
+              c.message_id::text=coalesce(e.announcement_message->>'messageId','')
+            ) AS is_automatic_announcement
+       FROM web_push_subscriptions push
+       JOIN communications c
+         ON c.message_id=$1
+        AND c.scope='EVENT'
+       JOIN events e ON e.id=c.event_id
+       LEFT JOIN snapshot_entries se
+         ON se.event_id=e.id
+        AND se.wallet_address=push.wallet_address
+       LEFT JOIN votes v
+         ON v.event_id=e.id
+        AND v.voter_address=push.wallet_address
+        AND v.status<>'FAILED'
+       LEFT JOIN snap_subscriptions s
+         ON s.wallet_address=push.wallet_address
+        AND s.token_address=e.token_address
+        AND s.enabled=true
+      WHERE c.revoked_at IS NULL
+        AND c.published_at<=now()
+        AND c.expires_at>now()
+        AND c.created_at>=push.created_at
+        AND (
+          e.creator_address=push.wallet_address
+          OR se.wallet_address IS NOT NULL
+          OR s.wallet_address IS NOT NULL
+        )
+      ORDER BY push.updated_at DESC`,
+    [messageId],
+  );
+
+  return {
+    persisted: true,
+    eventScoped: true,
+    candidateCount: candidates.rowCount,
+    recipients: candidates.rows.filter((row) => (
+      canReceiveEventCommunication(eventRecipientContext(row))
+    )),
+  };
+}
+
 export async function inbox(wallet, options = {}) {
   const address = normalizeAddress(wallet);
   const state = await ensureNotificationState(address);
@@ -373,6 +452,7 @@ export async function inbox(wallet, options = {}) {
     ? requestedStart
     : state.startedAt;
   const resultLimit = messageId ? 1 : 100;
+
   const [eventRows, tokenRows] = await Promise.all([
     query(
       `SELECT c.*,
@@ -380,41 +460,44 @@ export async function inbox(wallet, options = {}) {
               c.authenticity_status AS communication_authenticity_status,
               e.chain_id,e.title AS event_title,e.token_symbol,e.contract_address,
               e.creator_address AS event_creator_address,
-              e.authenticity_status AS event_authenticity_status
-       FROM communications c JOIN events e ON e.id=c.event_id
-       LEFT JOIN snapshot_entries se ON se.event_id=e.id AND se.wallet_address=$1
-       LEFT JOIN votes v ON v.event_id=e.id AND v.voter_address=$1 AND v.status<>'FAILED'
-       LEFT JOIN snap_subscriptions s ON s.wallet_address=$1 AND s.token_address=e.token_address AND s.enabled=true
-       WHERE c.scope='EVENT' AND c.revoked_at IS NULL AND c.published_at<=now() AND c.expires_at>now()
+              e.authenticity_status AS event_authenticity_status,
+              e.snap_delivery_mode,
+              (e.creator_address=$1) AS recipient_is_creator,
+              (se.wallet_address IS NOT NULL) AS recipient_is_eligible,
+              (v.id IS NOT NULL) AS recipient_has_voted,
+              (
+                s.wallet_address IS NOT NULL
+                AND c.created_at>=s.updated_at
+              ) AS recipient_is_subscribed,
+              (
+                c.message_id::text=coalesce(e.announcement_message->>'messageId','')
+              ) AS is_automatic_announcement
+       FROM communications c
+       JOIN events e ON e.id=c.event_id
+       LEFT JOIN snapshot_entries se
+         ON se.event_id=e.id
+        AND se.wallet_address=$1
+       LEFT JOIN votes v
+         ON v.event_id=e.id
+        AND v.voter_address=$1
+        AND v.status<>'FAILED'
+       LEFT JOIN snap_subscriptions s
+         ON s.wallet_address=$1
+        AND s.token_address=e.token_address
+        AND s.enabled=true
+       WHERE c.scope='EVENT'
+         AND c.revoked_at IS NULL
+         AND c.published_at<=now()
+         AND c.expires_at>now()
          AND c.created_at >= $2
          AND ($3::uuid IS NULL OR c.message_id=$3::uuid)
          AND (
            e.creator_address=$1
-           OR (
-             se.wallet_address IS NOT NULL
-             AND (
-               -- snap_delivery_mode controls only the automatic deployment
-               -- announcement. Manually issued event communications use their
-               -- selected audience even when that automatic toggle is off.
-               c.message_id IS DISTINCT FROM NULLIF(e.announcement_message->>'messageId','')::uuid
-               OR (
-                 e.snap_delivery_mode<>'DISABLED'
-                 AND (e.snap_delivery_mode='ELIGIBLE' OR s.wallet_address IS NOT NULL)
-               )
-             )
-             AND (
-               c.audience='ALL_ELIGIBLE'
-               OR (c.audience='NOT_VOTED' AND v.id IS NULL)
-               OR (
-                 c.audience='SUBSCRIBERS'
-                 AND s.wallet_address IS NOT NULL
-                 AND c.created_at >= s.updated_at
-               )
-             )
-           )
+           OR se.wallet_address IS NOT NULL
+           OR s.wallet_address IS NOT NULL
          )
-       ORDER BY c.created_at DESC LIMIT $4`,
-      [address, deliveryStartedAt, messageId, resultLimit],
+       ORDER BY c.created_at DESC`,
+      [address, deliveryStartedAt, messageId],
     ),
     query(
       `SELECT c.*,s.wallet_address AS subscribed_wallet,s.updated_at AS subscribed_at
@@ -456,8 +539,11 @@ export async function inbox(wallet, options = {}) {
     return isCurrentHolder(row.token_address);
   }));
   const lastReadAt = state.lastReadAt ? new Date(state.lastReadAt).getTime() : null;
+  const eventMessages = eventRows.rows
+    .filter((row) => canReceiveEventCommunication(eventRecipientContext(row)))
+    .map(serializeEventCommunication);
   const messages = [
-    ...eventRows.rows.map(serializeEventCommunication),
+    ...eventMessages,
     ...tokenRows.rows.filter((_row, index) => tokenVisibility[index]).map(serializeTokenCommunication),
   ];
   return messages
