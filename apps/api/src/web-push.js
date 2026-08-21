@@ -8,6 +8,10 @@ import { logger } from './logger.js';
 const DELIVERY_CONCURRENCY = 6;
 const MAX_TTL_SECONDS = 24 * 60 * 60;
 const DELIVERY_TIMEOUT_MS = 10_000;
+const EVENT_LOOKUP_ATTEMPTS = 5;
+const EVENT_LOOKUP_BASE_DELAY_MS = 120;
+const QUEUE_DEDUPE_MS = 30_000;
+const recentlyQueuedMessageIds = new Map();
 const configured = Boolean(config.webPush.publicKey && config.webPush.privateKey);
 
 if (configured) {
@@ -65,6 +69,10 @@ function deliveryOptions(message) {
   };
 }
 
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 async function mapWithConcurrency(items, limit, worker) {
   let nextIndex = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
@@ -86,9 +94,139 @@ async function walletCanReadMessage(walletAddress, messageId) {
   return messages.some((message) => message.messageId === messageId);
 }
 
-async function deliverToSubscription(row, message, payload, result, canRead) {
+function isEventMessage(message) {
+  return Boolean(message?.eventId) && message?.scope !== 'TOKEN';
+}
+
+/**
+ * Resolve event recipients from the persisted communication and event snapshot.
+ *
+ * Event communications previously reused inbox(wallet) once for every push
+ * subscription. That made push delivery depend on a second, broad inbox read at
+ * exactly the moment the message was committed. Token messages were unaffected,
+ * but event and automatic-event messages could resolve zero recipients during
+ * that boundary. This query applies the same inbox audience rules directly to
+ * the one event message being dispatched.
+ */
+async function persistedEventSubscriptions(messageId) {
+  const persisted = await query(
+    `SELECT 1
+       FROM communications
+      WHERE message_id=$1 AND scope='EVENT'
+      LIMIT 1`,
+    [messageId],
+  );
+  if (!persisted.rowCount) return null;
+
+  const recipients = await query(
+    `SELECT push.wallet_address,
+            push.endpoint,
+            push.p256dh,
+            push.auth
+       FROM web_push_subscriptions push
+       JOIN wallet_notification_state state
+         ON state.wallet_address=push.wallet_address
+       JOIN communications c
+         ON c.message_id=$1
+        AND c.scope='EVENT'
+       JOIN events e
+         ON e.id=c.event_id
+       LEFT JOIN snapshot_entries se
+         ON se.event_id=e.id
+        AND se.wallet_address=push.wallet_address
+       LEFT JOIN votes v
+         ON v.event_id=e.id
+        AND v.voter_address=push.wallet_address
+        AND v.status<>'FAILED'
+       LEFT JOIN snap_subscriptions subscription
+         ON subscription.wallet_address=push.wallet_address
+        AND subscription.token_address=e.token_address
+        AND subscription.enabled=true
+      WHERE c.revoked_at IS NULL
+        AND c.published_at<=now()
+        AND c.expires_at>now()
+        AND c.created_at>=state.started_at
+        AND c.created_at>=push.created_at
+        AND (
+          e.creator_address=push.wallet_address
+          OR (
+            (
+              (c.audience='ALL_ELIGIBLE' AND se.wallet_address IS NOT NULL)
+              OR (
+                c.audience='NOT_VOTED'
+                AND se.wallet_address IS NOT NULL
+                AND v.id IS NULL
+              )
+              OR (
+                c.audience='SUBSCRIBERS'
+                AND subscription.wallet_address IS NOT NULL
+                AND c.created_at>=subscription.updated_at
+              )
+            )
+            AND (
+              -- The event toggle controls only the automatic deployment
+              -- announcement. Manually issued event notices continue to use
+              -- the audience selected by the organiser.
+              c.message_id IS DISTINCT FROM NULLIF(
+                e.announcement_message->>'messageId',
+                ''
+              )::uuid
+              OR (
+                (
+                  e.snap_delivery_mode='ELIGIBLE'
+                  AND se.wallet_address IS NOT NULL
+                )
+                OR (
+                  e.snap_delivery_mode='SUBSCRIBERS_ONLY'
+                  AND subscription.wallet_address IS NOT NULL
+                  AND c.created_at>=subscription.updated_at
+                )
+              )
+            )
+          )
+        )
+      ORDER BY push.updated_at DESC`,
+    [messageId],
+  );
+  return recipients.rows;
+}
+
+async function eventSubscriptions(messageId) {
+  let messagePersisted = false;
+  for (let attempt = 0; attempt < EVENT_LOOKUP_ATTEMPTS; attempt += 1) {
+    const rows = await persistedEventSubscriptions(messageId);
+    if (rows !== null) {
+      messagePersisted = true;
+      if (rows.length > 0 || attempt === EVENT_LOOKUP_ATTEMPTS - 1) return rows;
+    }
+    if (attempt < EVENT_LOOKUP_ATTEMPTS - 1) {
+      await sleep(EVENT_LOOKUP_BASE_DELAY_MS * (attempt + 1));
+    }
+  }
+
+  logger.warn(
+    { messageId, messagePersisted },
+    messagePersisted
+      ? 'Event browser push resolved no eligible registered endpoints'
+      : 'Event browser push message was not visible after publication retries',
+  );
+  return [];
+}
+
+function reserveQueueSlot(messageId) {
+  const now = Date.now();
+  for (const [knownMessageId, expiresAt] of recentlyQueuedMessageIds) {
+    if (expiresAt <= now) recentlyQueuedMessageIds.delete(knownMessageId);
+  }
+  const reservedUntil = recentlyQueuedMessageIds.get(messageId) ?? 0;
+  if (reservedUntil > now) return false;
+  recentlyQueuedMessageIds.set(messageId, now + QUEUE_DEDUPE_MS);
+  return true;
+}
+
+async function deliverToSubscription(row, message, payload, result, canRead = null) {
   try {
-    if (!await canRead(row.wallet_address)) return;
+    if (canRead && !await canRead(row.wallet_address)) return;
     result.eligible += 1;
     await webPush.sendNotification(
       {
@@ -108,7 +246,13 @@ async function deliverToSubscription(row, message, payload, result, canRead) {
     }
     result.failed += 1;
     logger.warn(
-      { err: error, messageId: message.messageId, statusCode: statusCode || undefined },
+      {
+        err: error,
+        messageId: message.messageId,
+        eventId: message.eventId ?? undefined,
+        walletAddress: row.wallet_address,
+        statusCode: statusCode || undefined,
+      },
       'Browser push delivery failed',
     );
   }
@@ -151,31 +295,41 @@ export async function deliverBrowserPush(message) {
   if (!configured || !message?.messageId) {
     return { checked: 0, eligible: 0, delivered: 0, expired: 0, failed: 0 };
   }
-  const subscriptions = await query(
-    `SELECT wallet_address,endpoint,p256dh,auth
-       FROM web_push_subscriptions
-      ORDER BY updated_at DESC`,
-  );
+
+  const eventScoped = isEventMessage(message);
+  const subscriptions = eventScoped
+    ? await eventSubscriptions(message.messageId)
+    : (await query(
+      `SELECT wallet_address,endpoint,p256dh,auth
+         FROM web_push_subscriptions
+        ORDER BY updated_at DESC`,
+    )).rows;
+
   const result = {
-    checked: subscriptions.rowCount,
+    checked: subscriptions.length,
     eligible: 0,
     delivered: 0,
     expired: 0,
     failed: 0,
   };
   const payload = notificationPayload(message);
-  const eligibility = new Map();
-  const canRead = (walletAddress) => {
-    if (!eligibility.has(walletAddress)) {
-      eligibility.set(
-        walletAddress,
-        walletCanReadMessage(walletAddress, message.messageId),
-      );
-    }
-    return eligibility.get(walletAddress);
-  };
+
+  let canRead = null;
+  if (!eventScoped) {
+    const eligibility = new Map();
+    canRead = (walletAddress) => {
+      if (!eligibility.has(walletAddress)) {
+        eligibility.set(
+          walletAddress,
+          walletCanReadMessage(walletAddress, message.messageId),
+        );
+      }
+      return eligibility.get(walletAddress);
+    };
+  }
+
   await mapWithConcurrency(
-    subscriptions.rows,
+    subscriptions,
     DELIVERY_CONCURRENCY,
     (row) => deliverToSubscription(row, message, payload, result, canRead),
   );
@@ -183,10 +337,27 @@ export async function deliverBrowserPush(message) {
 }
 
 export function queueBrowserPush(message) {
-  if (!configured || !message?.messageId) return;
+  if (!configured || !message?.messageId) return false;
+  if (!reserveQueueSlot(message.messageId)) return false;
   setImmediate(() => {
-    deliverBrowserPush(message).catch((error) => {
-      logger.warn({ err: error, messageId: message.messageId }, 'Browser push dispatch failed');
-    });
+    deliverBrowserPush(message)
+      .then((result) => {
+        logger.info(
+          {
+            messageId: message.messageId,
+            eventId: message.eventId ?? undefined,
+            scope: isEventMessage(message) ? 'EVENT' : 'TOKEN',
+            ...result,
+          },
+          'Browser push dispatch completed',
+        );
+      })
+      .catch((error) => {
+        logger.warn(
+          { err: error, messageId: message.messageId, eventId: message.eventId ?? undefined },
+          'Browser push dispatch failed',
+        );
+      });
   });
+  return true;
 }

@@ -11,6 +11,7 @@ import { config } from './config.js';
 import { query, transaction } from './db.js';
 import { HttpError, normalizeAddress } from './errors.js';
 import { relayer } from './rpc.js';
+import { queueBrowserPush } from './web-push.js';
 
 function formatUtc(value) {
   const iso = new Date(value).toISOString();
@@ -181,12 +182,17 @@ export async function publishPendingEventAnnouncement(eventId, client = null) {
   const result = client
     ? await publishWithClient(eventId, client)
     : await transaction((transactionClient) => publishWithClient(eventId, transactionClient));
+  // Queue only after the helper-owned transaction commits. Callers that pass an
+  // external client remain responsible for queuing after their transaction.
+  if (!client && result.published && result.message) queueBrowserPush(result.message);
   return { published: result.published, status: result.status, message: result.message };
 }
 
 export async function triggerEventAnnouncement(eventId, wallet) {
   const publisher = normalizeAddress(wallet, 'publisherAddress');
-  return transaction((client) => publishWithClient(eventId, client, publisher));
+  const result = await transaction((client) => publishWithClient(eventId, client, publisher));
+  if (result.published && result.message) queueBrowserPush(result.message);
+  return result;
 }
 
 /**

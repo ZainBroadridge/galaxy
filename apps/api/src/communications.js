@@ -382,24 +382,34 @@ export async function inbox(wallet) {
          AND (
            e.creator_address=$1
            OR (
-             se.wallet_address IS NOT NULL
+             (
+               (c.audience='ALL_ELIGIBLE' AND se.wallet_address IS NOT NULL)
+               OR (
+                 c.audience='NOT_VOTED'
+                 AND se.wallet_address IS NOT NULL
+                 AND v.id IS NULL
+               )
+               OR (
+                 c.audience='SUBSCRIBERS'
+                 AND s.wallet_address IS NOT NULL
+                 AND c.created_at >= s.updated_at
+               )
+             )
              AND (
                -- snap_delivery_mode controls only the automatic deployment
                -- announcement. Manually issued event communications use their
                -- selected audience even when that automatic toggle is off.
                c.message_id IS DISTINCT FROM NULLIF(e.announcement_message->>'messageId','')::uuid
                OR (
-                 e.snap_delivery_mode<>'DISABLED'
-                 AND (e.snap_delivery_mode='ELIGIBLE' OR s.wallet_address IS NOT NULL)
-               )
-             )
-             AND (
-               c.audience='ALL_ELIGIBLE'
-               OR (c.audience='NOT_VOTED' AND v.id IS NULL)
-               OR (
-                 c.audience='SUBSCRIBERS'
-                 AND s.wallet_address IS NOT NULL
-                 AND c.created_at >= s.updated_at
+                 (
+                   e.snap_delivery_mode='ELIGIBLE'
+                   AND se.wallet_address IS NOT NULL
+                 )
+                 OR (
+                   e.snap_delivery_mode='SUBSCRIBERS_ONLY'
+                   AND s.wallet_address IS NOT NULL
+                   AND c.created_at >= s.updated_at
+                 )
                )
              )
            )
