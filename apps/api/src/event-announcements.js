@@ -11,7 +11,6 @@ import { config } from './config.js';
 import { query, transaction } from './db.js';
 import { HttpError, normalizeAddress } from './errors.js';
 import { relayer } from './rpc.js';
-import { queueBrowserPush } from './web-push.js';
 
 function formatUtc(value) {
   const iso = new Date(value).toISOString();
@@ -46,7 +45,11 @@ export function buildEventAnnouncement(event) {
     title: `Proxy voting event: ${event.title}`.slice(0, 180),
     body: `${event.token_name} voting opens ${formatUtc(event.voting_start_at)} and closes ${formatUtc(event.voting_end_at)}.`,
     actionUrl: `${config.webAppUrl}/vote/${event.id}`,
-    publishedAt: new Date(event.announcement_message?.publishedAt ?? event.created_at).toISOString(),
+    publishedAt: new Date(
+      event.announcement_published_at
+        ? (event.announcement_message?.publishedAt ?? event.announcement_published_at)
+        : Date.now(),
+    ).toISOString(),
     expiresAt: new Date(event.voting_end_at).toISOString(),
   };
 
@@ -139,6 +142,7 @@ async function publishWithClient(eventId, client, publisherAddress = null) {
        expires_at=EXCLUDED.expires_at,
        creator_signature=EXCLUDED.creator_signature,
        signed_contract_address=EXCLUDED.signed_contract_address,
+       created_at=now(),
        revoked_at=NULL
      WHERE communications.event_id=EXCLUDED.event_id
      RETURNING id`,
@@ -182,17 +186,12 @@ export async function publishPendingEventAnnouncement(eventId, client = null) {
   const result = client
     ? await publishWithClient(eventId, client)
     : await transaction((transactionClient) => publishWithClient(eventId, transactionClient));
-  // Queue only after the helper-owned transaction commits. Callers that pass an
-  // external client remain responsible for queuing after their transaction.
-  if (!client && result.published && result.message) queueBrowserPush(result.message);
   return { published: result.published, status: result.status, message: result.message };
 }
 
 export async function triggerEventAnnouncement(eventId, wallet) {
   const publisher = normalizeAddress(wallet, 'publisherAddress');
-  const result = await transaction((client) => publishWithClient(eventId, client, publisher));
-  if (result.published && result.message) queueBrowserPush(result.message);
-  return result;
+  return transaction((client) => publishWithClient(eventId, client, publisher));
 }
 
 /**

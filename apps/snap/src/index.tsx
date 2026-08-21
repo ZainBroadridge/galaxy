@@ -503,7 +503,9 @@ export const onCronjob: OnCronjobHandler = async ({ request }) => {
   return pollCommunications(false);
 };
 
-export const onRpcRequest: OnRpcRequestHandler = async ({ origin, request }) => {
+type RpcRequestContext = Parameters<OnRpcRequestHandler>[0];
+
+const handleRpcRequest = async ({ origin, request }: RpcRequestContext) => {
   assertTrustedDapp(origin);
 
   switch (request.method) {
@@ -575,6 +577,12 @@ export const onRpcRequest: OnRpcRequestHandler = async ({ origin, request }) => 
       throw new Error(`Method not found: ${request.method}`);
   }
 };
+
+// MetaMask's handler type returns a generic Json value. Keeping the implementation
+// separately inferred avoids TypeScript manufacturing optional `undefined`
+// properties across the switch's valid response shapes. This assertion is
+// type-only and does not change the generated Snap bundle behavior.
+export const onRpcRequest = handleRpcRequest as unknown as OnRpcRequestHandler;
 
 function displayTime(value: string | null): string {
   if (!value) return 'Not yet';

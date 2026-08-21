@@ -237,7 +237,7 @@ app.post('/v1/events/:id/announcement', publicWriteLimiter, async (request, resp
   try {
     const input = parse(announcementTriggerInput, request.body);
     const result = await triggerEventAnnouncement(request.params.id, input.publisherAddress);
-    if (result.published && result.message) queueBrowserPush(result.message);
+    if (result.message) queueBrowserPush(result.message);
     response.json(result);
   } catch (error) { next(error); }
 });
@@ -246,7 +246,7 @@ app.put('/v1/events/:id/announcement', publicWriteLimiter, async (request, respo
   try {
     const input = parse(announcementTriggerInput, request.body);
     const result = await triggerEventAnnouncement(request.params.id, input.publisherAddress);
-    if (result.published && result.message) queueBrowserPush(result.message);
+    if (result.message) queueBrowserPush(result.message);
     response.json(result);
   } catch (error) { next(error); }
 });

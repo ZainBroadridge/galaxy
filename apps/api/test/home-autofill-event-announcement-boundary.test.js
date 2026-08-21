@@ -21,7 +21,7 @@ test('home uses the horizontal ProxyVote shell and a two-slide heading', async (
   assert.match(home, /Secure shareholder decisions/u);
   assert.match(home, /https:\/\/www\.shareholdereducation\.com/u);
   assert.match(styles, /@keyframes pv-headline-slide/u);
-  assert.match(styles, /left: 28px;\s*bottom: 92px;/u);
+  assert.match(styles, /right: 24px;\s*left: auto;\s*bottom: calc\(var\(--pv-footer-height\) \+ 12px\);/u);
 });
 
 test('create event restores deterministic demo autofill without touching token or PDFs', async () => {

@@ -362,9 +362,17 @@ function serializeTokenCommunication(row) {
   };
 }
 
-export async function inbox(wallet) {
+export async function inbox(wallet, options = {}) {
   const address = normalizeAddress(wallet);
   const state = await ensureNotificationState(address);
+  const messageId = typeof options.messageId === 'string'
+    ? options.messageId.toLowerCase()
+    : null;
+  const requestedStart = options.startedAt ? new Date(options.startedAt) : null;
+  const deliveryStartedAt = requestedStart && Number.isFinite(requestedStart.getTime())
+    ? requestedStart
+    : state.startedAt;
+  const resultLimit = messageId ? 1 : 100;
   const [eventRows, tokenRows] = await Promise.all([
     query(
       `SELECT c.*,
@@ -379,43 +387,34 @@ export async function inbox(wallet) {
        LEFT JOIN snap_subscriptions s ON s.wallet_address=$1 AND s.token_address=e.token_address AND s.enabled=true
        WHERE c.scope='EVENT' AND c.revoked_at IS NULL AND c.published_at<=now() AND c.expires_at>now()
          AND c.created_at >= $2
+         AND ($3::uuid IS NULL OR c.message_id=$3::uuid)
          AND (
            e.creator_address=$1
            OR (
-             (
-               (c.audience='ALL_ELIGIBLE' AND se.wallet_address IS NOT NULL)
-               OR (
-                 c.audience='NOT_VOTED'
-                 AND se.wallet_address IS NOT NULL
-                 AND v.id IS NULL
-               )
-               OR (
-                 c.audience='SUBSCRIBERS'
-                 AND s.wallet_address IS NOT NULL
-                 AND c.created_at >= s.updated_at
-               )
-             )
+             se.wallet_address IS NOT NULL
              AND (
                -- snap_delivery_mode controls only the automatic deployment
                -- announcement. Manually issued event communications use their
                -- selected audience even when that automatic toggle is off.
                c.message_id IS DISTINCT FROM NULLIF(e.announcement_message->>'messageId','')::uuid
                OR (
-                 (
-                   e.snap_delivery_mode='ELIGIBLE'
-                   AND se.wallet_address IS NOT NULL
-                 )
-                 OR (
-                   e.snap_delivery_mode='SUBSCRIBERS_ONLY'
-                   AND s.wallet_address IS NOT NULL
-                   AND c.created_at >= s.updated_at
-                 )
+                 e.snap_delivery_mode<>'DISABLED'
+                 AND (e.snap_delivery_mode='ELIGIBLE' OR s.wallet_address IS NOT NULL)
+               )
+             )
+             AND (
+               c.audience='ALL_ELIGIBLE'
+               OR (c.audience='NOT_VOTED' AND v.id IS NULL)
+               OR (
+                 c.audience='SUBSCRIBERS'
+                 AND s.wallet_address IS NOT NULL
+                 AND c.created_at >= s.updated_at
                )
              )
            )
          )
-       ORDER BY c.created_at DESC LIMIT 100`,
-      [address, state.startedAt],
+       ORDER BY c.created_at DESC LIMIT $4`,
+      [address, deliveryStartedAt, messageId, resultLimit],
     ),
     query(
       `SELECT c.*,s.wallet_address AS subscribed_wallet,s.updated_at AS subscribed_at
@@ -423,6 +422,7 @@ export async function inbox(wallet) {
        LEFT JOIN snap_subscriptions s ON s.wallet_address=$1 AND s.token_address=c.token_address AND s.enabled=true
        WHERE c.scope='TOKEN' AND c.revoked_at IS NULL AND c.published_at<=now() AND c.expires_at>now()
          AND c.created_at >= $2
+         AND ($3::uuid IS NULL OR c.message_id=$3::uuid)
          AND (
            c.audience='CURRENT_HOLDERS'
            OR (
@@ -431,8 +431,8 @@ export async function inbox(wallet) {
              AND c.created_at >= s.updated_at
            )
          )
-       ORDER BY c.created_at DESC LIMIT 100`,
-      [address, state.startedAt],
+       ORDER BY c.created_at DESC LIMIT $4`,
+      [address, deliveryStartedAt, messageId, resultLimit],
     ),
   ]);
 

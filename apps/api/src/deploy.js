@@ -34,7 +34,7 @@ function lifecycle(event) {
 async function publishAutomaticAnnouncement(eventId) {
   try {
     const result = await publishPendingEventAnnouncement(eventId);
-    if (result.published && result.message) queueBrowserPush(result.message);
+    if (result.message) queueBrowserPush(result.message);
   } catch (error) {
     logger.warn(
       { err: error, eventId },

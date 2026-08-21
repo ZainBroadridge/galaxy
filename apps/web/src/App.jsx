@@ -241,7 +241,10 @@ export default function App() {
 
     <footer className="site-footer pv-site-footer">
       <div className="site-footer-inner">
-        <img className="pv-footer-logo" src="/brd-logo.svg" alt="Broadridge" />
+        <span className="pv-footer-brand">
+          <img className="pv-footer-mark" src="/brd-icon.svg" alt="" aria-hidden="true" />
+          <span>Broadridge</span>
+        </span>
         <span className="footer-copyright">© 2026 Broadridge Financial Solutions, Inc. All rights reserved.</span>
       </div>
     </footer>
