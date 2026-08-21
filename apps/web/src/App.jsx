@@ -162,9 +162,11 @@ export default function App() {
     <header className="topbar pv-topbar">
       <div className="pv-topbar-inner">
         <Link className="pv-brand-lockup" to="/" aria-label="ProxyVote home">
-          <span className="pv-wordmark" aria-label="ProxyVote">
-            <span>Proxy</span><span>Vote</span>
-          </span>
+          <img
+            className="pv-proxyvote-logo"
+            src="/proxyvote-logo.png"
+            alt="ProxyVote"
+          />
           <span className="pv-brand-divider" aria-hidden="true" />
           <span className="pv-powered-lockup">
             <small>Powered by</small>
