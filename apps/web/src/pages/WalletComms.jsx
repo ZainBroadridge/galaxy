@@ -51,6 +51,7 @@ const initialCommunication = () => ({
   expiresAt: defaultNotificationExpiry(),
 });
 const shortAddress = (value) => value ? `${value.slice(0, 8)}…${value.slice(-6)}` : '';
+const eventIsReady = (item) => Boolean(item?.contractReady || item?.contractAddress);
 const messageIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 function messageIdFromSearch(search) {
@@ -195,10 +196,16 @@ export default function WalletComms() {
     ]);
     setSubscriptions(savedSubscriptions);
     setOrganisedEvents(events);
-    setCommunication((current) => ({
-      ...current,
-      eventId: current.eventId || events[0]?.id || '',
-    }));
+    setCommunication((current) => {
+      const currentEvent = events.find((item) => item.id === current.eventId);
+      const preferredEvent = currentEvent && eventIsReady(currentEvent)
+        ? currentEvent
+        : events.find(eventIsReady) ?? currentEvent;
+      return {
+        ...current,
+        eventId: preferredEvent?.id ?? '',
+      };
+    });
   }, [wallet.account, wallet.connected]);
 
   useEffect(() => {
@@ -341,12 +348,19 @@ export default function WalletComms() {
   }
 
   function changeScope(scope) {
-    setCommunication((current) => ({
-      ...current,
-      scope,
-      category: scope === 'TOKEN' ? 'GENERAL' : 'EVENT_ANNOUNCEMENT',
-      audience: scope === 'TOKEN' ? 'SUBSCRIBERS' : 'ALL_ELIGIBLE',
-    }));
+    setCommunication((current) => {
+      const currentEvent = organisedEvents.find((item) => item.id === current.eventId);
+      const preferredEvent = currentEvent && eventIsReady(currentEvent)
+        ? currentEvent
+        : organisedEvents.find(eventIsReady);
+      return {
+        ...current,
+        scope,
+        eventId: scope === 'EVENT' ? (preferredEvent?.id ?? '') : current.eventId,
+        category: scope === 'TOKEN' ? 'GENERAL' : 'EVENT_ANNOUNCEMENT',
+        audience: scope === 'TOKEN' ? 'SUBSCRIBERS' : 'ALL_ELIGIBLE',
+      };
+    });
   }
 
   async function publish(event) {
@@ -356,6 +370,12 @@ export default function WalletComms() {
       const selectedEvent = tokenScoped
         ? null
         : organisedEvents.find((item) => item.id === communication.eventId);
+      if (!tokenScoped && !selectedEvent) {
+        throw new Error('Select a voting event before publishing.');
+      }
+      if (!tokenScoped && !eventIsReady(selectedEvent)) {
+        throw new Error('The selected voting event is still deploying. Choose a deployed event or retry after its VoteEvent contract is ready.');
+      }
       const input = {
         publisherAddress: wallet.account,
         ...(tokenScoped ? { tokenAddress: communication.tokenAddress } : {}),
@@ -398,11 +418,15 @@ export default function WalletComms() {
     () => subscriptions.filter((item) => item.enabled),
     [subscriptions],
   );
+  const readyOrganisedEvents = useMemo(
+    () => organisedEvents.filter(eventIsReady),
+    [organisedEvents],
+  );
   const tokenScoped = communication.scope === 'TOKEN';
   const selectedEvent = tokenScoped
     ? null
     : organisedEvents.find((item) => item.id === communication.eventId);
-  const selectedEventReady = Boolean(selectedEvent?.contractReady || selectedEvent?.contractAddress);
+  const selectedEventReady = eventIsReady(selectedEvent);
   const canPublish = Boolean(
     wallet.account
       && communication.title
@@ -529,11 +553,11 @@ export default function WalletComms() {
               <h2 id="notification-center-title">Announcements</h2>
               {unreadCount > 0 && <span className="notification-total">{unreadCount} unread</span>}
             </div>
-            <p>Verified voting notices load automatically and update live.</p>
+            <p>Verified voting notices load automatically while the browser is online.</p>
           </div>
           <div className="notification-actions">
-            <span className={`live-indicator${notifications.live ? ' online' : ''}`}>
-              <span aria-hidden="true" />{notifications.live ? 'Live' : 'Refreshing'}
+            <span className={`live-indicator${notifications.online && notifications.live ? ' online' : ''}`}>
+              <span aria-hidden="true" />{!notifications.online ? 'Offline' : notifications.live ? 'Live' : 'Retrying'}
             </span>
             {lastUpdated && <span className="notification-updated">Updated {lastUpdated}</span>}
             <button className="button secondary compact" onClick={sync} disabled={!snapInstalled || busy}>
@@ -692,7 +716,7 @@ export default function WalletComms() {
               <label>Communication for<select value={communication.scope} onChange={(event) => changeScope(event.target.value)}><option value="EVENT">Voting event</option><option value="TOKEN">Token news / announcement</option></select></label>
               {tokenScoped
                 ? <label>ERC-20 token address<input value={communication.tokenAddress} onChange={(event) => setCommunication({ ...communication, tokenAddress: event.target.value })} placeholder="0x…" required /></label>
-                : <label>Event<select value={communication.eventId} onChange={(event) => setCommunication({ ...communication, eventId: event.target.value })} required><option value="">Select an event</option>{organisedEvents.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}
+                : <label>Event<select value={communication.eventId} onChange={(event) => setCommunication({ ...communication, eventId: event.target.value })} required><option value="">Select a deployed event</option>{organisedEvents.map((item) => <option key={item.id} value={item.id} disabled={!eventIsReady(item)}>{item.title}{eventIsReady(item) ? '' : ' — deployment pending'}</option>)}</select></label>}
               <label>Category<select value={communication.category} onChange={(event) => setCommunication({ ...communication, category: event.target.value })}>{communicationCategories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
             </div>
             <label>Audience<select value={communication.audience} onChange={(event) => setCommunication({ ...communication, audience: event.target.value })}>
@@ -702,7 +726,7 @@ export default function WalletComms() {
             </select></label>
             {tokenScoped && communication.audience === 'SUBSCRIBERS' && <Notice>General news and published results reach all subscribers. Other categories are delivered only to subscribers who currently hold the token.</Notice>}
             {tokenScoped && communication.audience === 'CURRENT_HOLDERS' && <Notice>Current-holder broadcasts require the supplied publisher address to match the verified token authority.</Notice>}
-            {!tokenScoped && !organisedEvents.length && <Notice>No organised event is available. Select “Token news / announcement” to publish independently using an ERC-20 address.</Notice>}
+            {!tokenScoped && !readyOrganisedEvents.length && <Notice>No deployed organised event is available yet. Event communications become available when a VoteEvent contract is ready; token announcements can still be published independently.</Notice>}
             {!tokenScoped && communication.eventId && !selectedEventReady && <Notice>The selected event is still deploying. Communications become available after its VoteEvent contract is ready.</Notice>}
           </section>
 
@@ -715,6 +739,7 @@ export default function WalletComms() {
 
           <div className="form-actions notifications-publish-actions">
             <button className="button" disabled={busy || !canPublish}>{pendingAction === 'publish' ? 'Publishing…' : 'Publish communication'}</button>
+            <span>No organiser unlock or MetaMask signature is required.</span>
           </div>
           {actionNotice('publish')}
         </form>

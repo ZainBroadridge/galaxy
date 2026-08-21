@@ -223,6 +223,10 @@ export async function publishPlatformCommunication(eventId, input) {
     throw new HttpError(409, 'Deploy the event before publishing communications.', 'EVENT_NOT_READY');
   }
   validateActionUrl(input.actionUrl);
+  // Establish the organiser's inbox baseline before inserting the message. If
+  // this is their first notification action, creating state afterwards would
+  // classify the newly published communication as historical and hide it.
+  await ensureNotificationState(publisher);
   const message = eventMessageFor(event, input, relayer.address.toLowerCase());
   const signature = await relayer.signMessage(buildCommunicationSigningMessage(message));
   await insertEventCommunication(event, message, signature);
@@ -234,6 +238,7 @@ export async function publishPlatformTokenCommunication(input) {
   const token = await inspectToken(input.tokenAddress);
   const authenticityStatus = tokenAuthenticity(token, publisher, input.audience);
   validateActionUrl(input.actionUrl);
+  await ensureNotificationState(publisher);
   const message = tokenMessageFor(
     token,
     relayer.address.toLowerCase(),
@@ -374,12 +379,20 @@ export async function inbox(wallet) {
        LEFT JOIN snap_subscriptions s ON s.wallet_address=$1 AND s.token_address=e.token_address AND s.enabled=true
        WHERE c.scope='EVENT' AND c.revoked_at IS NULL AND c.published_at<=now() AND c.expires_at>now()
          AND c.created_at >= $2
-         AND e.snap_delivery_mode<>'DISABLED'
          AND (
            e.creator_address=$1
            OR (
              se.wallet_address IS NOT NULL
-             AND (e.snap_delivery_mode='ELIGIBLE' OR s.wallet_address IS NOT NULL)
+             AND (
+               -- snap_delivery_mode controls only the automatic deployment
+               -- announcement. Manually issued event communications use their
+               -- selected audience even when that automatic toggle is off.
+               c.message_id IS DISTINCT FROM NULLIF(e.announcement_message->>'messageId','')::uuid
+               OR (
+                 e.snap_delivery_mode<>'DISABLED'
+                 AND (e.snap_delivery_mode='ELIGIBLE' OR s.wallet_address IS NOT NULL)
+               )
+             )
              AND (
                c.audience='ALL_ELIGIBLE'
                OR (c.audience='NOT_VOTED' AND v.id IS NULL)

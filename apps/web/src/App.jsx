@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useAppKit } from '@reown/appkit/react';
-import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import {
+  Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate,
+} from 'react-router-dom';
 import { reownConfigured } from './appkit.js';
 import {
   browserPushNotificationPath,
@@ -17,11 +19,6 @@ import ResultsPage, { EventResultsPage } from './pages/ResultsPage.jsx';
 import WalletComms from './pages/WalletComms.jsx';
 
 const AMOY_CHAIN_ID = '0x13882';
-const primaryNavigation = [
-  ['/voting', 'Voting Dashboard'],
-  ['/results', 'Results'],
-  ['/organiser', 'Organizer'],
-];
 
 function shortAddress(value) {
   return value ? `${value.slice(0, 6)}…${value.slice(-4)}` : 'Connect Wallet';
@@ -37,24 +34,62 @@ function injectedProvider() {
     ?? ethereum;
 }
 
-function WalletIcon() {
-  return <svg viewBox="0 0 20 20" aria-hidden="true">
-    <path d="M3.25 4.5h10.8a2 2 0 0 1 2 2v1.15h.7a1.5 1.5 0 0 1 1.5 1.5v4.1a1.5 1.5 0 0 1-1.5 1.5h-.7v.75a2 2 0 0 1-2 2H3.25a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Zm0 1.5a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5h10.8a.5.5 0 0 0 .5-.5v-.75h-2.7a3.55 3.55 0 1 1 0-7.1h2.7V6.5a.5.5 0 0 0-.5-.5H3.25Zm8.6 3.15a2.05 2.05 0 1 0 0 4.1h4.9V9.15h-4.9Zm.05 1.3a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5Z" />
+function SvgIcon({ children, className = '' }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    {children}
   </svg>;
+}
+
+function WalletIcon() {
+  return <SvgIcon className="pv-wallet-icon">
+    <path d="M3.5 6.5h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z" />
+    <path d="M1.75 9.5h17.5M15.25 13h4.25v3h-4.25a1.5 1.5 0 1 1 0-3Z" />
+  </SvgIcon>;
 }
 
 function ChevronIcon() {
-  return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 5.75 4.5 4.5 4.5-4.5" /></svg>;
-}
-
-function PlusIcon() {
-  return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg>;
+  return <SvgIcon className="pv-chevron-icon"><path d="m7 9.25 5 5 5-5" /></SvgIcon>;
 }
 
 function BellIcon() {
-  return <svg viewBox="0 0 20 20" aria-hidden="true">
-    <path d="M15 8a5 5 0 0 0-10 0c0 5.5-2.25 5.5-2.25 7h14.5c0-1.5-2.25-1.5-2.25-7ZM8.25 17h3.5" />
-  </svg>;
+  return <SvgIcon className="pv-bell-icon">
+    <path d="M18 9a6 6 0 0 0-12 0c0 7-2.75 7-2.75 9h17.5c0-2-2.75-2-2.75-9Z" />
+    <path d="M9.5 21h5" />
+  </SvgIcon>;
+}
+
+function HomeIcon() {
+  return <SvgIcon><path d="m3.5 10.25 8.5-7 8.5 7v9.5a.75.75 0 0 1-.75.75H14v-6h-4v6H4.25a.75.75 0 0 1-.75-.75v-9.5Z" /></SvgIcon>;
+}
+
+function VoteIcon() {
+  return <SvgIcon>
+    <path d="M6.5 7.5h11v13h-11zM9 13l2 2 4-5" />
+    <path d="M9 7.5V5.75a3 3 0 0 1 6 0V7.5M4 20.5h16" />
+  </SvgIcon>;
+}
+
+function ResultsIcon() {
+  return <SvgIcon>
+    <path d="M5 20V11M12 20V4M19 20V8M2.5 20.5h19" />
+  </SvgIcon>;
+}
+
+function OrganiserIcon() {
+  return <SvgIcon>
+    <rect x="3.5" y="3.5" width="6" height="6" rx=".8" />
+    <rect x="14.5" y="3.5" width="6" height="6" rx=".8" />
+    <rect x="3.5" y="14.5" width="6" height="6" rx=".8" />
+    <rect x="14.5" y="14.5" width="6" height="6" rx=".8" />
+  </SvgIcon>;
+}
+
+function PlusIcon() {
+  return <SvgIcon><path d="M12 4v16M4 12h16" /></SvgIcon>;
+}
+
+function navClass(active) {
+  return active ? 'active' : undefined;
 }
 
 export default function App() {
@@ -65,6 +100,9 @@ export default function App() {
   const { unreadCount } = useNotifications();
   const [networkBusy, setNetworkBusy] = useState(false);
   const [networkError, setNetworkError] = useState(null);
+  const homeRoute = location.pathname === '/' || location.pathname === '/home';
+  const voteRouteActive = location.pathname.startsWith('/voting')
+    || location.pathname.startsWith('/vote/');
 
   useEffect(() => {
     const openNotification = (messageId, replace = false) => {
@@ -87,15 +125,17 @@ export default function App() {
         await open({ view: 'Connect', namespace: 'eip155' });
         return;
       }
+
       try {
         await provider.request({
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: AMOY_CHAIN_ID }],
         });
       } catch (error) {
-        if (error?.code !== 4902 && !String(error?.message ?? '').toLowerCase().includes('unrecognized chain')) {
-          throw error;
-        }
+        const unknownChain = error?.code === 4902
+          || String(error?.message ?? '').toLowerCase().includes('unrecognized chain');
+        if (!unknownChain) throw error;
+
         await provider.request({
           method: 'wallet_addEthereumChain',
           params: [{
@@ -118,74 +158,70 @@ export default function App() {
     open({ view: wallet.connected ? 'Account' : 'Connect', namespace: 'eip155' });
   }
 
-  return <div className="app-shell">
-    <header className="topbar">
-      <div className="topbar-inner">
-        <div className="topbar-primary">
-          <Link to="/" className="brand" aria-label="On-Chain Proxy Voting home">
-            <img className="brand-logo" src="/brd-logo.svg" alt="Broadridge" />
-            <img className="brand-icon" src="/brd-icon.svg" alt="" aria-hidden="true" />
-            <span>On-Chain Proxy Voting</span>
+  return <div className={`app-shell pv-shell${homeRoute ? ' pv-shell-home' : ''}`}>
+    <header className="topbar pv-topbar">
+      <div className="pv-topbar-inner">
+        <Link className="pv-brand-lockup" to="/" aria-label="ProxyVote home">
+          <span className="pv-wordmark" aria-label="ProxyVote">
+            <span>Proxy</span><span>Vote</span>
+          </span>
+          <span className="pv-brand-divider" aria-hidden="true" />
+          <span className="pv-powered-lockup">
+            <small>Powered by</small>
+            <img src="/brd-logo.svg" alt="Broadridge" />
+          </span>
+        </Link>
+
+        <nav className="pv-primary-nav" aria-label="Primary navigation">
+          <Link className={navClass(homeRoute)} to="/">
+            <HomeIcon /><span>Home</span>
           </Link>
-
-          <nav aria-label="Primary navigation">
-            <NavLink className="nav-home" to="/" end>Home</NavLink>
-            {primaryNavigation.map(([to, label]) => {
-              const voteRouteActive = to === '/voting' && location.pathname.startsWith('/vote/');
-              return <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) => (isActive || voteRouteActive ? 'active' : undefined)}
-              >
-                <span>{label}</span>
-              </NavLink>;
-            })}
-          </nav>
-        </div>
-
-        <div className="wallet-actions">
-          <button
-            className="network-control"
-            type="button"
-            onClick={addOrSwitchAmoy}
-            disabled={networkBusy}
-            title="Add or switch to Polygon Amoy Testnet"
-            aria-label="Add or switch to Polygon Amoy Testnet"
-            aria-busy={networkBusy}
+          <NavLink
+            to="/voting"
+            className={({ isActive }) => navClass(isActive || voteRouteActive)}
           >
-            <span className="network-dot" aria-hidden="true" />
-            <span className="network-control-label">{networkBusy ? 'Opening wallet…' : 'Polygon Amoy Testnet'}</span>
-            <span className="network-add-icon"><PlusIcon /></span>
-          </button>
+            <VoteIcon /><span>Vote</span>
+          </NavLink>
+          <NavLink to="/results">
+            <ResultsIcon /><span>Results</span>
+          </NavLink>
+          <NavLink to="/organiser">
+            <OrganiserIcon /><span>Organiser</span>
+          </NavLink>
+        </nav>
+
+        <div className="wallet-actions pv-topbar-actions">
           <NavLink
             to="/notifications"
             className={({ isActive }) => `topbar-notifications${isActive ? ' active' : ''}`}
-            aria-label="Notifications"
+            aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
             title="Notifications"
           >
             <BellIcon />
             {unreadCount > 0 && <span
               className="notification-badge"
-              aria-label={`${unreadCount} unread notifications`}
+              aria-hidden="true"
             >{unreadCount > 99 ? '99+' : unreadCount}</span>}
           </NavLink>
           <button
             className={`wallet-control${wallet.connected ? ' connected' : ''}`}
             type="button"
             onClick={openWallet}
-            aria-label={wallet.connected ? `Open wallet ${shortAddress(wallet.account)}` : 'Connect Wallet'}
+            aria-label={wallet.connected ? `Open wallet ${shortAddress(wallet.account)}` : 'Connect wallet'}
           >
             <WalletIcon />
             <span>{shortAddress(wallet.account)}</span>
-            {wallet.connected && <ChevronIcon />}
+            <ChevronIcon />
           </button>
         </div>
       </div>
     </header>
 
-    <main className="app-content">
-      {!reownConfigured && <Notice tone="warning">Set <code>VITE_REOWN_PROJECT_ID</code> before deployment.</Notice>}
-      {networkError && <Notice tone="error">{networkError.message || 'Unable to add Polygon Amoy to this wallet.'}</Notice>}
+    <main className="app-content pv-content">
+      <div className="pv-system-notices">
+        {!reownConfigured && <Notice tone="warning">Set <code>VITE_REOWN_PROJECT_ID</code> before deployment.</Notice>}
+        {networkError && <Notice tone="error">{networkError.message || 'Unable to add Polygon Amoy to this wallet.'}</Notice>}
+      </div>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/home" element={<HomePage />} />
@@ -201,12 +237,28 @@ export default function App() {
       </Routes>
     </main>
 
-    <footer className="site-footer">
+    <footer className="site-footer pv-site-footer">
       <div className="site-footer-inner">
-        <img src="/brd-icon.svg" alt="" aria-hidden="true" />
-        <span className="footer-brand">Broadridge</span>
+        <img className="pv-footer-logo" src="/brd-logo.svg" alt="Broadridge" />
         <span className="footer-copyright">© 2026 Broadridge Financial Solutions, Inc. All rights reserved.</span>
       </div>
     </footer>
+
+    {homeRoute && <div className="pv-add-network-wrap">
+      <button
+        className={`pv-add-network${networkBusy ? ' is-busy' : ''}`}
+        type="button"
+        onClick={addOrSwitchAmoy}
+        disabled={networkBusy}
+        aria-describedby="pv-test-network-tooltip"
+        aria-label="Add Polygon Amoy test network"
+      >
+        <PlusIcon />
+      </button>
+      <div id="pv-test-network-tooltip" className="pv-network-tooltip" role="tooltip">
+        <strong>Add test network</strong>
+        <span>You are adding Polygon Amoy, a test network, to your wallet.</span>
+      </div>
+    </div>}
   </div>;
 }
