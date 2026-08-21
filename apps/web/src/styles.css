@@ -410,7 +410,7 @@ dd { margin: 0; text-align: right; font-weight: 600; }
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 
   /* Primary user-adjustable scale controls */
-  --ui-header-height: 52px;
+  --ui-header-height: 48px;
   --ui-page-inline: 24px;
   --ui-page-block: 24px;
   --ui-page-gap: 24px;
