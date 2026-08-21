@@ -2837,7 +2837,7 @@ a:hover { color: var(--blue-hover); }
 /* Home-only add-network action. */
 .pv-add-network-wrap {
   position: fixed;
-  left: 30px;
+  right: 30px;
   bottom: calc(var(--pv-footer-height) + 14px);
   z-index: 80;
 }
@@ -2890,7 +2890,7 @@ a:hover { color: var(--blue-hover); }
 
 .pv-network-tooltip {
   position: absolute;
-  left: calc(100% + 11px);
+  right: calc(100% + 11px);
   bottom: 1px;
   width: 224px;
   padding: 9px 11px;
@@ -2905,7 +2905,7 @@ a:hover { color: var(--blue-hover); }
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transform: translateX(-5px);
+  transform: translateX(5px);
   transition: opacity .15s ease, visibility .15s ease, transform .15s ease;
 }
 
