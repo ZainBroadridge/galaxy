@@ -1870,6 +1870,9 @@ textarea:focus {
   min-height: var(--ui-control-height);
   height: var(--ui-control-height);
 }
+.create-schedule-grid {
+  align-items: start;
+}
 .create-policy-grid {
   margin-top: -2px;
 }
