@@ -28,6 +28,8 @@ GET  /dashboard/organiser?wallet=0x...
 GET  /dashboard/results?wallet=0x...
 ```
 
+`POST /events` accepts a past, present, or future `recordDateAt`. Its response includes `job.availableAt`; future snapshot jobs remain durably pending until that time and may defer briefly while Polygon finality catches up.
+
 ## Automatic event announcements
 
 ```text

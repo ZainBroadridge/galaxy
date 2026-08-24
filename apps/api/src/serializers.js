@@ -3,8 +3,14 @@ import { config } from './config.js';
 import { eventAnnouncementStatus } from './event-announcements.js';
 
 export function effectiveStatus(row) {
-  if (row.status === 'FAILED' || row.deployment_block === null) return row.status;
+  if (row.status === 'FAILED') return row.status;
   const now = Date.now();
+  if (row.deployment_block === null) {
+    if (row.status === 'SNAPSHOT_PENDING' && now < new Date(row.record_date_at).getTime()) {
+      return 'SCHEDULED';
+    }
+    return row.status;
+  }
   if (now < new Date(row.voting_start_at).getTime()) return 'SCHEDULED';
   if (now <= new Date(row.voting_end_at).getTime()) return 'OPEN';
   return 'CLOSED';
@@ -70,6 +76,7 @@ export function serializeJob(row) {
     result: row.result,
     error: row.error,
     attempts: Number(row.attempts),
+    availableAt: row.available_at,
     updatedAt: row.updated_at,
   };
 }

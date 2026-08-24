@@ -235,10 +235,11 @@ Local smoke test:
 2. Connect MetaMask through Reown on Polygon Amoy.
 3. Open Wallet Comms and install the local Snap.
 4. Inspect a modest standard ERC-20 on Amoy.
-5. Create an event using a record date in the past or present.
-6. Keep voting start sufficiently ahead of current time for snapshot and deployment.
-7. Confirm one contract is deployed and the PolygonScan links appear.
-8. Vote from an eligible wallet and confirm the wallet stays connected and the receipt persists.
+5. Create one event with a past/present record date and one with a future record date.
+6. Confirm the future event is saved immediately and shows the scheduled snapshot time without starting RPC work early.
+7. Keep voting start sufficiently ahead of the record date for snapshot and deployment.
+8. After the record date reaches Polygon finality, confirm one contract is deployed and the PolygonScan links appear.
+9. Vote from an eligible wallet and confirm the wallet stays connected and the receipt persists.
 
 ## 9. Upload to GitHub
 
@@ -425,12 +426,12 @@ Run this sequence after the final deployments:
 5. Confirm the organiser dashboard loads for the connected address without a wallet signature.
 6. Inspect a standard, modest-history Amoy ERC-20.
 7. Create an event with:
-   - record date in the past/present;
-   - voting start sufficiently ahead;
+   - record date in the past, present, or future;
+   - voting start sufficiently ahead of the record date for snapshot and deployment;
    - natural-number token-to-vote ratio;
    - one or more proposals;
    - desired discovery and Snap settings.
-8. Confirm progress advances through snapshot, deployment, and verification.
+8. For a future record date, confirm the event remains scheduled until the date is confirmation-safe, then advances through snapshot, deployment, and verification.
 9. Confirm the deployment transaction and contract links appear.
 10. Confirm the PolygonScan contract source shows as verified.
 11. Connect an eligible holder.

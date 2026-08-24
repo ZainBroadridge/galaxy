@@ -38,7 +38,6 @@ export const eventInput = z.object({
   const record = Date.parse(value.recordDateAt);
   const start = Date.parse(value.votingStartAt);
   const end = Date.parse(value.votingEndAt);
-  if (record > now) context.addIssue({ code: 'custom', path: ['recordDateAt'], message: 'Record date cannot be in the future.' });
   if (record > start) context.addIssue({ code: 'custom', path: ['recordDateAt'], message: 'Record date must be at or before voting start.' });
   if (start >= end) context.addIssue({ code: 'custom', path: ['votingEndAt'], message: 'Voting end must be after voting start.' });
   if (end <= now + 10 * 60_000) context.addIssue({ code: 'custom', path: ['votingEndAt'], message: 'Voting must remain available for at least ten minutes.' });

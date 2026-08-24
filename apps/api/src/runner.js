@@ -10,6 +10,8 @@ let running = false;
 let timer = null;
 let logger = console;
 
+const MAX_TIMER_DELAY_MS = 24 * 60 * 60 * 1000;
+
 const handlers = {
   BUILD_SNAPSHOT: buildSnapshot,
   DEPLOY_EVENT: deployEvent,
@@ -28,21 +30,9 @@ async function nextDelay() {
     [config.jobLockMinutes],
   );
   const delay = Number(result.rows[0]?.delay);
-  return Number.isFinite(delay) ? Math.max(250, Math.min(30_000, delay)) : null;
-}
-
-function errorContext(job, error) {
-  return {
-    jobId: job.id,
-    type: job.type,
-    eventId: job.event_id,
-    attempt: Number(job.attempts),
-    maxAttempts: Number(job.max_attempts),
-    rpcMethod: error?.rpcMethod,
-    rpcCode: error?.rpcCode,
-    httpStatus: error?.httpStatus,
-    error: error?.message,
-  };
+  return Number.isFinite(delay)
+    ? Math.max(250, Math.min(MAX_TIMER_DELAY_MS, delay))
+    : null;
 }
 
 async function loop() {
@@ -61,9 +51,15 @@ async function loop() {
         await completeJob(job.id, result);
       } catch (error) {
         const outcome = await failJob(job, error);
-        const context = { ...errorContext(job, error), retryDelaySeconds: outcome.delay };
-        if (outcome.final) logger.error?.(context, 'Job failed permanently');
-        else logger.warn?.(context, 'Job retry scheduled');
+        const context = {
+          jobId: job.id,
+          type: job.type,
+          eventId: job.event_id,
+          error: error.message,
+          availableAt: outcome.availableAt,
+        };
+        if (outcome.deferred) logger.info?.(context, 'Durable job deferred');
+        else logger.warn?.(context, 'Job failed or will retry');
       }
     }
   } finally {

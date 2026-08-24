@@ -11,6 +11,7 @@ import { listEventDocuments } from './documents.js';
 import { buildEventAnnouncement } from './event-announcements.js';
 import { HttpError, normalizeAddress } from './errors.js';
 import { enqueueJob } from './jobs.js';
+import { planSnapshotJob } from './record-date.js';
 import { provider } from './rpc.js';
 import { kickJobRunner } from './runner.js';
 import { serializeEvent, serializeJob, serializeVote } from './serializers.js';
@@ -76,11 +77,13 @@ export async function createEvent(wallet, input) {
       );
       [event] = updated.rows;
     }
+    const snapshotPlan = planSnapshotJob(event.record_date_at);
     const job = await enqueueJob({
       eventId: event.id,
       type: 'BUILD_SNAPSHOT',
       dedupeKey: `snapshot:${event.id}`,
-      message: 'Snapshot queued',
+      message: snapshotPlan.message,
+      availableAt: snapshotPlan.availableAt,
       client,
     });
     return { event, job, announcementDraft };
@@ -281,10 +284,13 @@ export async function retryEvent(id, wallet) {
   let type;
   let dedupeKey;
   let message;
+  let availableAt = null;
   if (!event.snapshot_root) {
+    const snapshotPlan = planSnapshotJob(event.record_date_at, { retry: true });
     type = 'BUILD_SNAPSHOT';
     dedupeKey = `snapshot:${id}`;
-    message = 'Snapshot retry queued';
+    message = snapshotPlan.message;
+    availableAt = snapshotPlan.availableAt;
     await query("UPDATE events SET status='SNAPSHOT_PENDING',failure_reason=NULL WHERE id=$1", [id]);
   } else if (!event.deployment_block) {
     type = 'DEPLOY_EVENT';
@@ -308,6 +314,7 @@ export async function retryEvent(id, wallet) {
     type,
     dedupeKey,
     message,
+    availableAt,
     client,
   }));
   kickJobRunner();

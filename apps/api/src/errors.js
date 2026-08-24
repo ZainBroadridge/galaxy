@@ -23,6 +23,17 @@ export function permanentError(message) {
   return error;
 }
 
+export function deferredError(message, retryAt) {
+  const availableAt = new Date(retryAt);
+  if (!Number.isFinite(availableAt.getTime())) {
+    throw new TypeError('retryAt must be a valid date.');
+  }
+  const error = new Error(message);
+  error.deferred = true;
+  error.retryAt = availableAt.toISOString();
+  return error;
+}
+
 export function errorText(error) {
   return String(
     error?.info?.error?.message

@@ -3,11 +3,39 @@ import { query, transaction } from './db.js';
 import { publishEventUpdate } from './event-stream.js';
 import { errorText } from './errors.js';
 
-export async function enqueueJob({ eventId, voterAddress = null, type, dedupeKey, message, client = { query } }) {
+function scheduledAt(value) {
+  if (value === null || value === undefined) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) throw new TypeError('availableAt must be a valid date.');
+  return date.toISOString();
+}
+
+export async function enqueueJob({
+  eventId,
+  voterAddress = null,
+  type,
+  dedupeKey,
+  message,
+  availableAt = null,
+  client = { query },
+}) {
+  const schedule = scheduledAt(availableAt);
   const existing = await client.query('SELECT * FROM jobs WHERE dedupe_key=$1 FOR UPDATE', [dedupeKey]);
   if (existing.rowCount) {
     const row = existing.rows[0];
-    if (row.status !== 'FAILED') return row;
+    if (row.status !== 'FAILED') {
+      if (row.status === 'PENDING' && schedule) {
+        const rescheduled = await client.query(
+          `UPDATE jobs
+              SET available_at=greatest(available_at,$2::timestamptz),message=$3
+            WHERE id=$1
+            RETURNING *`,
+          [row.id, schedule, message],
+        );
+        return rescheduled.rows[0];
+      }
+      return row;
+    }
 
     await client.query(
       "DELETE FROM relayer_transactions WHERE job_id=$1 AND status='REVERTED'",
@@ -16,20 +44,20 @@ export async function enqueueJob({ eventId, voterAddress = null, type, dedupeKey
     const reset = await client.query(
       `UPDATE jobs
           SET event_id=$2,voter_address=$3,type=$4,status='PENDING',progress=0,
-              message=$5,result=NULL,error=NULL,attempts=0,available_at=now(),
-              locked_at=NULL,locked_by=NULL
+              message=$5,result=NULL,error=NULL,attempts=0,
+              available_at=coalesce($6::timestamptz,now()),locked_at=NULL,locked_by=NULL
         WHERE id=$1
         RETURNING *`,
-      [row.id, eventId, voterAddress, type, message],
+      [row.id, eventId, voterAddress, type, message, schedule],
     );
     return reset.rows[0];
   }
 
   const inserted = await client.query(
-    `INSERT INTO jobs(event_id,voter_address,type,dedupe_key,message)
-     VALUES ($1,$2,$3,$4,$5)
+    `INSERT INTO jobs(event_id,voter_address,type,dedupe_key,message,available_at)
+     VALUES ($1,$2,$3,$4,$5,coalesce($6::timestamptz,now()))
      RETURNING *`,
-    [eventId, voterAddress, type, dedupeKey, message],
+    [eventId, voterAddress, type, dedupeKey, message, schedule],
   );
   return inserted.rows[0];
 }
@@ -99,6 +127,29 @@ function providerOutage(error) {
 
 export async function failJob(job, error) {
   const message = errorText(error).slice(0, 4000);
+  const deferredAt = error?.deferred ? scheduledAt(error.retryAt) : null;
+
+  if (deferredAt) {
+    await transaction(async (client) => {
+      await client.query(
+        `UPDATE jobs
+            SET status='PENDING',progress=0,available_at=$2::timestamptz,
+                message=$3,error=NULL,attempts=greatest(attempts-1,0),
+                locked_at=NULL,locked_by=NULL
+          WHERE id=$1`,
+        [job.id, deferredAt, message],
+      );
+      if (job.type === 'BUILD_SNAPSHOT') {
+        await client.query(
+          "UPDATE events SET status='SNAPSHOT_PENDING',failure_reason=NULL WHERE id=$1 AND snapshot_root IS NULL",
+          [job.event_id],
+        );
+      }
+    });
+    publishEventUpdate(job.event_id);
+    return { final: false, deferred: true, availableAt: deferredAt };
+  }
+
   const final = Boolean(error?.permanent) || Number(job.attempts) >= Number(job.max_attempts);
 
   if (!final) {

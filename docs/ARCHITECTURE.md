@@ -44,18 +44,20 @@ The snapshot path uses Alchemy's indexed transfer history and does not depend on
 
 For each event:
 
-1. Resolve the Polygon block at or before the selected record date and a recent confirmation-safe validation block.
-2. Obtain the token deployment block when explorer metadata is available and reject a record date before deployment.
-3. Page `alchemy_getAssetTransfers` from deployment through the validation block.
-4. Replay standard ERC-20 transfers, mints, and burns in raw integer units.
-5. Preserve the event-derived ledger immediately after the record-date block.
-6. Reject negative balances, negative supply, malformed transfers, duplicate ambiguity, and accounting inconsistencies.
-7. Reconcile the event-derived current supply with `totalSupply()` at the recent validation block.
-8. Reconcile every discovered current wallet balance with `balanceOf()` at the same recent block using bounded concurrency.
-9. Calculate `votingPower = recordDateRawBalance / voteUnit`.
-10. Exclude holders with zero whole voting units.
-11. Build one Merkle root and store only eligible holder proofs in Neon.
-12. Queue the one-contract deployment.
+1. If the record date is in the future, persist the event immediately and set the existing `BUILD_SNAPSHOT` job's `available_at` to that date.
+2. Wait until a confirmation-safe Polygon block reaches the selected record date; finality lag defers the same job rather than creating a second workflow or exhausting retry attempts.
+3. Resolve the Polygon block at or before the selected record date and a recent confirmation-safe validation block.
+4. Obtain the token deployment block when explorer metadata is available and reject a record date before deployment.
+5. Page `alchemy_getAssetTransfers` from deployment through the validation block.
+6. Replay standard ERC-20 transfers, mints, and burns in raw integer units.
+7. Preserve the event-derived ledger immediately after the record-date block.
+8. Reject negative balances, negative supply, malformed transfers, duplicate ambiguity, and accounting inconsistencies.
+9. Reconcile the event-derived current supply with `totalSupply()` at the recent validation block.
+10. Reconcile every discovered current wallet balance with `balanceOf()` at the same recent block using bounded concurrency.
+11. Calculate `votingPower = recordDateRawBalance / voteUnit`.
+12. Exclude holders with zero whole voting units.
+13. Build one Merkle root and store only eligible holder proofs in Neon.
+14. Queue the one-contract deployment.
 
 The recent-state reconciliation is a compatibility gate for event-complete ERC-20 implementations. Rebasing, reflection, hidden balance mutation, and incomplete mint/burn histories are rejected. The POC rebuilds each snapshot rather than reusing unversioned legacy snapshot data.
 

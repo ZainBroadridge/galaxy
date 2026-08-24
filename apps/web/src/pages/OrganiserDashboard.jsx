@@ -306,11 +306,15 @@ export default function OrganiserDashboard() {
         }
       }
 
+      const availableAt = Date.parse(created.job?.availableAt ?? '');
+      const snapshotScheduled = created.job?.status === 'PENDING'
+        && Number.isFinite(availableAt)
+        && availableAt > Date.now();
+      const notice = snapshotScheduled
+        ? `Event created successfully. Snapshot processing is scheduled for ${new Date(availableAt).toLocaleString()}.`
+        : 'Event created successfully. Snapshot processing has started.';
       navigate(`/organiser/${created.event.id}`, {
-        state: {
-          notice: 'Event created successfully. Snapshot processing has started.',
-          warning: warnings.join(' '),
-        },
+        state: { notice, warning: warnings.join(' ') },
       });
     } catch (value) {
       setError(value);
@@ -360,6 +364,7 @@ export default function OrganiserDashboard() {
       ? 'Subscribers only'
       : 'Eligible holders'
     : 'Off';
+  const recordDateIsFuture = Date.parse(form.recordDateAt) > Date.now();
 
   function setAnnouncementEnabled(enabled) {
     setForm((current) => ({
@@ -449,7 +454,14 @@ export default function OrganiserDashboard() {
           </header>
 
           <div className="field-grid three">
-            <label>Record date<input type="datetime-local" max={localDate(new Date())} value={form.recordDateAt} onChange={(event) => setForm({ ...form, recordDateAt: event.target.value })} required /></label>
+            <label>Record date<input
+              type="datetime-local"
+              value={form.recordDateAt}
+              onChange={(event) => setForm({ ...form, recordDateAt: event.target.value })}
+              required
+            /><small>{recordDateIsFuture
+              ? 'The snapshot and deployment start automatically after this time reaches Polygon finality.'
+              : 'Balances are captured at the latest confirmed block at or before this time.'}</small></label>
             <label>Voting starts<input type="datetime-local" value={form.votingStartAt} onChange={(event) => setForm({ ...form, votingStartAt: event.target.value })} required /></label>
             <label>Voting ends<input type="datetime-local" value={form.votingEndAt} onChange={(event) => setForm({ ...form, votingEndAt: event.target.value })} required /></label>
           </div>
@@ -527,7 +539,9 @@ export default function OrganiserDashboard() {
         <footer className="create-event-submit-row">
           <div>
             <strong>Ready to create the event?</strong>
-            <span>Snapshot processing and deployment continue in the background.</span>
+            <span>{recordDateIsFuture
+              ? 'The event is saved now; snapshot processing starts automatically after the record date.'
+              : 'Snapshot processing and deployment continue in the background.'}</span>
           </div>
           <button className="button" disabled={Boolean(busyStage)}>
             {busyStage || 'Create Event'}
@@ -555,11 +569,18 @@ export function OrganiserEventPage() {
   const [documentFeedback, setDocumentFeedback] = useState(null);
   const [announcementBusy, setAnnouncementBusy] = useState(false);
   const [announcementFeedback, setAnnouncementFeedback] = useState(null);
-  const jobActive = ['PENDING', 'RUNNING'].includes(view.data?.job?.status);
+  const jobAvailableAt = Date.parse(view.data?.job?.availableAt ?? '');
+  const jobWaitingForRecordDate = view.data?.job?.status === 'PENDING'
+    && Number.isFinite(jobAvailableAt)
+    && jobAvailableAt > Date.now();
+  const jobActive = ['PENDING', 'RUNNING'].includes(view.data?.job?.status)
+    && !jobWaitingForRecordDate;
   useEventLiveRefresh(
     view.refresh,
     eventId,
     Boolean(jobActive || view.data?.verificationStatus === 'PENDING'),
+    15_000,
+    jobWaitingForRecordDate ? view.data.job.availableAt : null,
   );
 
   async function retry() {
@@ -697,6 +718,10 @@ export function OrganiserEventPage() {
         <Status value={event.status} />
         <span>{event.job?.message}</span>
       </div>
+      {jobWaitingForRecordDate && <Notice>
+        The record-date snapshot is scheduled for {new Date(jobAvailableAt).toLocaleString()}.
+        It will start automatically once that time is confirmation-safe on Polygon.
+      </Notice>}
       {jobActive && <div className="job-progress">
         <div><span>{event.job?.message}</span><strong>{event.job?.progress ?? 0}%</strong></div>
         <progress value={event.job?.progress ?? 0} max="100" />

@@ -9,8 +9,9 @@ import {
   createLedger,
   ledgerBalances,
 } from './erc20-ledger.js';
-import { permanentError } from './errors.js';
+import { deferredError, permanentError } from './errors.js';
 import { enqueueJob, updateJob } from './jobs.js';
+import { nextFinalityCheckAt } from './record-date.js';
 import { erc20Interface, rpc, rpcBlock } from './rpc.js';
 import { tokenDeployment } from './tokens.js';
 
@@ -22,14 +23,20 @@ async function resolveSnapshotBlocks(recordDateAt) {
   const validationNumber = Math.max(0, latest - config.confirmations);
   const validationBlock = await rpcBlock(validationNumber);
   const requested = Math.floor(new Date(recordDateAt).getTime() / 1000);
-  const target = Math.min(requested, validationBlock.timestamp);
+  const retryAt = nextFinalityCheckAt(recordDateAt, validationBlock.timestamp);
+  if (retryAt) {
+    throw deferredError(
+      `Waiting for Polygon finality at record date ${new Date(recordDateAt).toISOString()}.`,
+      retryAt,
+    );
+  }
 
   let low = 0;
   let high = validationNumber;
   while (low < high) {
     const middle = Math.ceil((low + high) / 2);
     const block = await rpcBlock(middle);
-    if (block.timestamp <= target) low = middle;
+    if (block.timestamp <= requested) low = middle;
     else high = middle - 1;
   }
 
@@ -302,19 +309,16 @@ export async function buildSnapshot(job) {
   if (event.contract_address) {
     return { contractAddress: event.contract_address, alreadyComplete: true };
   }
-  if (new Date(event.record_date_at).getTime() > Date.now() + 15_000) {
-    throw permanentError('Record date is in the future.');
-  }
   if (new Date(event.voting_end_at).getTime() <= Date.now()) {
     throw permanentError('Voting ended before deployment.');
   }
 
+  await updateJob(job.id, 3, 'Resolving record-date and validation blocks');
+  const { recordBlock, validationBlock } = await resolveSnapshotBlocks(event.record_date_at);
   await query(
     "UPDATE events SET status='SNAPSHOT_RUNNING',failure_reason=NULL WHERE id=$1",
     [event.id],
   );
-  await updateJob(job.id, 3, 'Resolving record-date and validation blocks');
-  const { recordBlock, validationBlock } = await resolveSnapshotBlocks(event.record_date_at);
   await updateJob(
     job.id,
     8,

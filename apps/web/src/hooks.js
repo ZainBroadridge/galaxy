@@ -53,9 +53,42 @@ export function useEventPolling(refresh, active, interval = 5000) {
   }, [active, interval, refresh]);
 }
 
-export function useEventLiveRefresh(refresh, eventId, active, fallbackInterval = 15_000) {
+const MAX_BROWSER_TIMER_MS = 24 * 60 * 60 * 1000;
+
+export function useEventLiveRefresh(
+  refresh,
+  eventId,
+  active,
+  fallbackInterval = 15_000,
+  startsAt = null,
+) {
   useEffect(() => {
-    if (!active || !eventId) return undefined;
+    if (!eventId) return undefined;
+
+    if (!active) {
+      const startTime = Date.parse(startsAt ?? '');
+      if (!Number.isFinite(startTime) || startTime <= Date.now()) return undefined;
+
+      let cancelled = false;
+      let timer;
+      const schedule = () => {
+        if (cancelled) return;
+        const remaining = startTime - Date.now() + 1_000;
+        if (remaining <= 0) {
+          refresh().catch(() => {
+            if (!cancelled) timer = setTimeout(schedule, fallbackInterval);
+          });
+          return;
+        }
+        timer = setTimeout(schedule, Math.min(remaining, MAX_BROWSER_TIMER_MS));
+      };
+      schedule();
+
+      return () => {
+        cancelled = true;
+        clearTimeout(timer);
+      };
+    }
 
     let closed = false;
     let refreshing = false;
@@ -75,5 +108,5 @@ export function useEventLiveRefresh(refresh, eventId, active, fallbackInterval =
       clearInterval(fallback);
       source.close();
     };
-  }, [active, eventId, fallbackInterval, refresh]);
+  }, [active, eventId, fallbackInterval, refresh, startsAt]);
 }
