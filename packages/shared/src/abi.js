@@ -11,8 +11,20 @@ export const VOTE_EVENT_ABI = [
       { name: 'voteUnit_', type: 'uint256' },
       { name: 'metadataHash_', type: 'bytes32' },
       { name: 'proposalConfig_', type: 'uint256' },
+      { name: 'recordDateTimestamp_', type: 'uint64' },
+      {
+        name: 'proposals_',
+        type: 'tuple[]',
+        components: [
+          { name: 'proposalText', type: 'string' },
+          { name: 'options', type: 'string[4]' },
+          { name: 'formId', type: 'uint256' },
+          { name: 'recommendation', type: 'uint8' },
+        ],
+      },
     ],
   },
+  { type: 'function', name: 'NO_BOARD_RECOMMENDATION', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] },
   { type: 'function', name: 'creator', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
   { type: 'function', name: 'tokenAddress', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
   { type: 'function', name: 'snapshotBlock', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint64' }] },
@@ -39,6 +51,36 @@ export const VOTE_EVENT_ABI = [
       { name: 'signature', type: 'bytes' },
     ],
     outputs: [],
+  },
+  {
+    type: 'event',
+    name: 'AnnounceVoting',
+    anonymous: false,
+    inputs: [
+      { name: 'tokenAddress', type: 'address', indexed: true },
+      { name: 'votingStartTimestamp', type: 'uint256', indexed: false },
+      { name: 'votingEndTimestamp', type: 'uint256', indexed: false },
+      { name: 'recordDateTimestamp', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'AnnouncedProposals',
+    anonymous: false,
+    inputs: [
+      { name: 'proposalCount', type: 'uint256', indexed: false },
+      {
+        name: 'proposals',
+        type: 'tuple[]',
+        indexed: false,
+        components: [
+          { name: 'proposalText', type: 'string' },
+          { name: 'options', type: 'string[4]' },
+          { name: 'formId', type: 'uint256' },
+          { name: 'recommendation', type: 'uint8' },
+        ],
+      },
+    ],
   },
   {
     type: 'event',

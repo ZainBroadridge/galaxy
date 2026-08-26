@@ -34,6 +34,18 @@ function proposalConfig(optionCounts) {
   return packed;
 }
 
+function proposalAnnouncements(optionCounts) {
+  return optionCounts.map((count, proposalIndex) => [
+    `Proposal ${proposalIndex + 1}\n\nDescription ${proposalIndex + 1}`,
+    Array.from(
+      { length: 4 },
+      (_value, optionIndex) => (optionIndex < count ? `Option ${optionIndex + 1}` : ''),
+    ),
+    proposalIndex + 1,
+    proposalIndex === 0 ? 1 : 0,
+  ]);
+}
+
 async function moveTo(timestamp) {
   await ethers.provider.send('evm_setNextBlockTimestamp', [timestamp]);
   await ethers.provider.send('evm_mine');
@@ -53,8 +65,10 @@ describe('VoteEvent', function () {
       [voter.address, voterBalance],
       [secondVoter.address, secondBalance],
     ]);
+    const recordDate = Math.max(0, latest.timestamp - 60);
     const start = latest.timestamp + (futureStart ? 60 : 0);
     const end = start + 3600;
+    const proposals = proposalAnnouncements(optionCounts);
     const factory = await ethers.getContractFactory('VoteEvent', relayer);
     const args = [
       creator.address,
@@ -66,6 +80,8 @@ describe('VoteEvent', function () {
       voteUnit,
       ethers.keccak256(ethers.toUtf8Bytes('metadata')),
       proposalConfig(optionCounts),
+      recordDate,
+      proposals,
     ];
     const contract = await factory.deploy(...args);
     await contract.waitForDeployment();
@@ -77,12 +93,15 @@ describe('VoteEvent', function () {
       creator,
       voter,
       secondVoter,
+      tokenAddress,
       stranger,
       snapshotBalance: voterBalance,
       secondBalance,
       tree,
+      recordDate,
       start,
       end,
+      proposals,
     };
   }
 
@@ -120,6 +139,46 @@ describe('VoteEvent', function () {
       ballot.signature,
     );
   }
+
+  it('announces voting, proposals, options, and board recommendations at deployment', async function () {
+    const { contract, tokenAddress, recordDate, start, end, proposals } = await fixture();
+    const receipt = await contract.deploymentTransaction().wait();
+    const events = receipt.logs
+      .map((log) => {
+        try {
+          return contract.interface.parseLog(log);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+
+    const voting = events.find((event) => event.name === 'AnnounceVoting');
+    expect(voting.args.tokenAddress).to.equal(tokenAddress.address);
+    expect(voting.args.votingStartTimestamp).to.equal(BigInt(start));
+    expect(voting.args.votingEndTimestamp).to.equal(BigInt(end));
+    expect(voting.args.recordDateTimestamp).to.equal(BigInt(recordDate));
+
+    const announced = events.find((event) => event.name === 'AnnouncedProposals');
+    expect(announced.fragment.topicHash).to.equal(
+      '0x14d0e2230487a99288adf8ea29bed717b77fbb0f3e0728f19ba3daa2555ee6da',
+    );
+    expect(announced.args.proposalCount).to.equal(BigInt(proposals.length));
+    expect(announced.args.proposals[0].proposalText).to.equal(
+      'Proposal 1\n\nDescription 1',
+    );
+    expect([...announced.args.proposals[0].options]).to.deep.equal([
+      'Option 1',
+      'Option 2',
+      'Option 3',
+      '',
+    ]);
+    expect(announced.args.proposals[0].formId).to.equal(1n);
+    expect(announced.args.proposals[0].recommendation).to.equal(1n);
+    expect(announced.args.proposals[1].formId).to.equal(2n);
+    expect(announced.args.proposals[1].recommendation).to.equal(0n);
+    expect(await contract.NO_BOARD_RECOMMENDATION()).to.equal(0n);
+  });
 
   it('accepts one relayed weighted ballot and updates on-chain tallies', async function () {
     const { contract, relayer, voter, snapshotBalance, tree } = await fixture();
@@ -351,6 +410,27 @@ describe('VoteEvent', function () {
       1,
       ethers.keccak256(ethers.toUtf8Bytes('metadata')),
       proposalConfig([2]),
+      latest.timestamp,
+      proposalAnnouncements([2]),
+    )).to.be.revertedWithCustomError(factory, 'InvalidConfiguration');
+  });
+
+  it('rejects proposal announcements that do not match the packed ballot configuration', async function () {
+    const [relayer, creator, tokenAddress] = await ethers.getSigners();
+    const latest = await ethers.provider.getBlock('latest');
+    const factory = await ethers.getContractFactory('VoteEvent', relayer);
+    await expect(factory.deploy(
+      creator.address,
+      tokenAddress.address,
+      Math.max(0, latest.number - 1),
+      ethers.keccak256(ethers.toUtf8Bytes('root')),
+      latest.timestamp,
+      latest.timestamp + 1000,
+      1,
+      ethers.keccak256(ethers.toUtf8Bytes('metadata')),
+      proposalConfig([3]),
+      latest.timestamp,
+      proposalAnnouncements([2]),
     )).to.be.revertedWithCustomError(factory, 'InvalidConfiguration');
   });
 
@@ -368,6 +448,8 @@ describe('VoteEvent', function () {
       1,
       ethers.keccak256(ethers.toUtf8Bytes('metadata')),
       0,
+      latest.timestamp,
+      proposalAnnouncements([2]),
     )).to.be.revertedWithCustomError(factory, 'InvalidConfiguration');
   });
 });

@@ -8,16 +8,17 @@ const privateKey = process.env.RELAYER_PRIVATE_KEY;
 const rpcUrl = process.env.RPC_HTTP_URL || 'https://rpc-amoy.polygon.technology';
 
 module.exports = {
-solidity: {
-  version: "0.8.25",
-  settings: {
-    optimizer: {
-      enabled: true,
-      runs: 200,
+  solidity: {
+    version: '0.8.25',
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200,
+      },
+      viaIR: true,
+      evmVersion: 'cancun',
     },
-    evmVersion: "cancun",
   },
-},
   networks: {
     hardhat: {
       chainId: 31337,

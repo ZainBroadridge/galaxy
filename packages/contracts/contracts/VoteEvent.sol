@@ -24,6 +24,22 @@ contract VoteEvent is EIP712 {
     bytes32 private constant BALLOT_TYPEHASH =
         keccak256("Ballot(address voter,string selectedOptions)");
 
+    /// @notice Zero means that a proposal has no board recommendation.
+    /// @dev A non-zero recommendation is one-based: 1 means options[0],
+    ///      2 means options[1], and so on.
+    uint8 public constant NO_BOARD_RECOMMENDATION = 0;
+
+    /// @notice Deployment-time proposal data announced in the contract receipt.
+    /// @dev This deliberately preserves the legacy explorer-friendly tuple shape
+    ///      used by the readable AnnouncedProposals event on PolygonScan. Four
+    ///      option slots are emitted; unused slots are empty strings.
+    struct ProposalInput {
+        string proposalText;
+        string[4] options;
+        uint256 formId;
+        uint8 recommendation;
+    }
+
     address public immutable creator;
     address public immutable tokenAddress;
     uint64 public immutable snapshotBlock;
@@ -45,6 +61,17 @@ contract VoteEvent is EIP712 {
     mapping(address voter => bool voted) public hasVoted;
     mapping(uint256 proposalOptionKey => uint256 votingPower) private _tallies;
 
+    /// @notice Announces the voting window and record date when this contract is deployed.
+    event AnnounceVoting(
+        address indexed tokenAddress,
+        uint256 votingStartTimestamp,
+        uint256 votingEndTimestamp,
+        uint256 recordDateTimestamp
+    );
+
+    /// @notice Announces proposal text, options, and board recommendations at deployment.
+    event AnnouncedProposals(uint256 proposalCount, ProposalInput[] proposals);
+
     event VoteCast(address indexed voter, uint256 votingPower, bytes choices);
 
     constructor(
@@ -56,7 +83,9 @@ contract VoteEvent is EIP712 {
         uint64 votingEnd_,
         uint256 voteUnit_,
         bytes32 metadataHash_,
-        uint256 proposalConfig_
+        uint256 proposalConfig_,
+        uint64 recordDateTimestamp_,
+        ProposalInput[] memory proposals_
     ) EIP712("PV VoteEvent", "3") {
         if (
             creator_ == address(0) ||
@@ -64,10 +93,13 @@ contract VoteEvent is EIP712 {
             snapshotRoot_ == bytes32(0) ||
             metadataHash_ == bytes32(0) ||
             snapshotBlock_ >= block.number ||
+            recordDateTimestamp_ == 0 ||
+            recordDateTimestamp_ > votingStart_ ||
             votingStart_ >= votingEnd_ ||
             votingEnd_ <= block.timestamp ||
             voteUnit_ == 0 ||
-            !_validProposalConfig(proposalConfig_)
+            !_validProposalConfig(proposalConfig_) ||
+            !_validProposalAnnouncements(proposalConfig_, proposals_)
         ) revert InvalidConfiguration();
 
         creator = creator_;
@@ -79,6 +111,14 @@ contract VoteEvent is EIP712 {
         voteUnit = voteUnit_;
         metadataHash = metadataHash_;
         proposalConfig = proposalConfig_;
+
+        emit AnnouncedProposals(proposals_.length, proposals_);
+        emit AnnounceVoting(
+            tokenAddress_,
+            votingStart_,
+            votingEnd_,
+            recordDateTimestamp_
+        );
     }
 
     /// @notice Submit a holder's one final ballot. The caller may be the voter,
@@ -217,5 +257,38 @@ contract VoteEvent is EIP712 {
             }
         }
         return (config >> (8 + count * 4)) == 0;
+    }
+
+    function _validProposalAnnouncements(
+        uint256 config,
+        ProposalInput[] memory proposals
+    ) private pure returns (bool) {
+        uint256 count = uint8(config);
+        if (proposals.length != count) return false;
+
+        for (uint256 proposalIndex; proposalIndex < count; ) {
+            ProposalInput memory proposal = proposals[proposalIndex];
+            uint256 options = (config >> (8 + proposalIndex * 4)) & 0x0f;
+
+            if (
+                proposal.formId != proposalIndex + 1 ||
+                bytes(proposal.proposalText).length == 0 ||
+                proposal.recommendation > options
+            ) return false;
+
+            for (uint256 optionIndex; optionIndex < 4; ) {
+                bool hasText = bytes(proposal.options[optionIndex]).length != 0;
+                if (hasText != (optionIndex < options)) return false;
+                unchecked {
+                    ++optionIndex;
+                }
+            }
+
+            unchecked {
+                ++proposalIndex;
+            }
+        }
+
+        return true;
     }
 }

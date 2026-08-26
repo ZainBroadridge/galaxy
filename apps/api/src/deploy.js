@@ -1,5 +1,5 @@
 import { Contract, ContractFactory } from 'ethers';
-import { VOTE_EVENT_ABI } from '@pv/shared';
+import { VOTE_EVENT_ABI, unpackProposalConfig } from '@pv/shared';
 import { config } from './config.js';
 import { query, transaction } from './db.js';
 import { publishPendingEventAnnouncement } from './event-announcements.js';
@@ -10,6 +10,77 @@ import { loadArtifact } from './artifact.js';
 import { broadcastTransaction, prepareTransaction } from './relayer.js';
 import { provider } from './rpc.js';
 import { queueBrowserPush } from './web-push.js';
+
+const NO_BOARD_RECOMMENDATION = 0;
+
+function parseProposals(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // Fall through to the permanent configuration error below.
+    }
+  }
+  throw permanentError('Event proposals are missing or contain invalid JSON.');
+}
+
+export function proposalAnnouncements(event) {
+  const proposals = parseProposals(event.proposals);
+  const { proposalCount, optionCounts } = unpackProposalConfig(event.proposal_config);
+
+  if (proposals.length !== proposalCount) {
+    throw permanentError('Event proposals do not match the packed proposal configuration.');
+  }
+
+  return proposals.map((proposal, proposalIndex) => {
+    const title = String(proposal?.title ?? '').trim();
+    const description = String(proposal?.description ?? '').trim();
+    const proposalText = description ? `${title}\n\n${description}` : title;
+    const options = Array.isArray(proposal?.options)
+      ? proposal.options.map((option) => String(option?.text ?? option ?? '').trim())
+      : [];
+
+    if (!title) {
+      throw permanentError(`Proposal ${proposalIndex + 1} has no title to announce.`);
+    }
+    if (options.length !== optionCounts[proposalIndex] || options.some((option) => !option)) {
+      throw permanentError(
+        `Proposal ${proposalIndex + 1} options do not match the packed ballot configuration.`,
+      );
+    }
+
+    const hasRecommendation = proposal?.recommendation !== null
+      && proposal?.recommendation !== undefined;
+    const recommendationIndex = hasRecommendation
+      ? Number(proposal.recommendation)
+      : null;
+
+    if (
+      recommendationIndex !== null
+      && (!Number.isInteger(recommendationIndex)
+        || recommendationIndex < 0
+        || recommendationIndex >= options.length)
+    ) {
+      throw permanentError(`Proposal ${proposalIndex + 1} has an invalid board recommendation.`);
+    }
+
+    // Explorer output is intentionally human-oriented:
+    // formId is 1-based and recommendation 0 means none, while 1-4 points to
+    // the corresponding option shown in the fixed four-slot options array.
+    const recommendation = recommendationIndex === null
+      ? NO_BOARD_RECOMMENDATION
+      : recommendationIndex + 1;
+
+    return [
+      proposalText,
+      [...options, ...Array(4 - options.length).fill('')],
+      BigInt(proposalIndex + 1),
+      recommendation,
+    ];
+  });
+}
 
 export function constructorArguments(event) {
   return [
@@ -22,6 +93,8 @@ export function constructorArguments(event) {
     BigInt(event.vote_unit),
     event.metadata_hash,
     BigInt(event.proposal_config),
+    Math.floor(new Date(event.record_date_at).getTime() / 1000),
+    proposalAnnouncements(event),
   ];
 }
 

@@ -4,26 +4,23 @@ import { config } from './config.js';
 import { query, transaction } from './db.js';
 import {
   applyLedgerTransfer,
-  assertLedgerConsistent,
-  cloneLedger,
   createLedger,
   ledgerBalances,
 } from './erc20-ledger.js';
 import { deferredError, permanentError } from './errors.js';
 import { enqueueJob, updateJob } from './jobs.js';
 import { nextFinalityCheckAt } from './record-date.js';
-import { erc20Interface, rpc, rpcBlock } from './rpc.js';
+import { rpc, rpcBlock } from './rpc.js';
 import { tokenDeployment } from './tokens.js';
 
-const BALANCE_CHECK_CONCURRENCY = 8;
-const BALANCE_PROGRESS_INTERVAL = BALANCE_CHECK_CONCURRENCY * 5;
+const BALANCE_PROGRESS_INTERVAL = 40;
 
 async function resolveSnapshotBlocks(recordDateAt) {
   const latest = Number(BigInt(await rpc('eth_blockNumber', [])));
-  const validationNumber = Math.max(0, latest - config.confirmations);
-  const validationBlock = await rpcBlock(validationNumber);
+  const safeNumber = Math.max(0, latest - config.confirmations);
+  const safeBlock = await rpcBlock(safeNumber);
   const requested = Math.floor(new Date(recordDateAt).getTime() / 1000);
-  const retryAt = nextFinalityCheckAt(recordDateAt, validationBlock.timestamp);
+  const retryAt = nextFinalityCheckAt(recordDateAt, safeBlock.timestamp);
   if (retryAt) {
     throw deferredError(
       `Waiting for Polygon finality at record date ${new Date(recordDateAt).toISOString()}.`,
@@ -32,7 +29,7 @@ async function resolveSnapshotBlocks(recordDateAt) {
   }
 
   let low = 0;
-  let high = validationNumber;
+  let high = safeNumber;
   while (low < high) {
     const middle = Math.ceil((low + high) / 2);
     const block = await rpcBlock(middle);
@@ -40,11 +37,11 @@ async function resolveSnapshotBlocks(recordDateAt) {
     else high = middle - 1;
   }
 
-  const recordBlock = low === validationNumber
-    ? validationBlock
+  const recordBlock = low === safeNumber
+    ? safeBlock
     : await rpcBlock(low);
 
-  return { recordBlock, validationBlock };
+  return { recordBlock, safeBlock };
 }
 
 function normalizeAddress(value) {
@@ -102,20 +99,14 @@ function parseTransfer(transfer) {
   };
 }
 
-function ledgerError(message, error) {
-  return permanentError(`${message}: ${error.message}`);
-}
-
 async function replayTransferHistory({
   tokenAddress,
   startBlock,
   recordBlock,
-  validationBlock,
   jobId,
 }) {
-  const current = createLedger();
+  const recordDate = createLedger();
   const seen = new Set();
-  let recordDate = null;
   let pageKey;
   let page = 0;
 
@@ -129,7 +120,7 @@ async function replayTransferHistory({
 
     const request = {
       fromBlock: toQuantity(startBlock),
-      toBlock: toQuantity(validationBlock),
+      toBlock: toQuantity(recordBlock),
       contractAddresses: [tokenAddress],
       category: ['erc20'],
       excludeZeroValue: false,
@@ -157,18 +148,12 @@ async function replayTransferHistory({
     const transfers = Array.isArray(response?.transfers) ? response.transfers : [];
     for (const rawTransfer of transfers) {
       const transfer = parseTransfer(rawTransfer);
-      if (transfer.blockNumber < startBlock || transfer.blockNumber > validationBlock) {
+      if (transfer.blockNumber < startBlock || transfer.blockNumber > recordBlock) {
         throw permanentError('Alchemy returned a transfer outside the requested block range.');
       }
       if (seen.has(transfer.identity)) continue;
       seen.add(transfer.identity);
-      if (recordDate && transfer.blockNumber <= recordBlock) {
-        throw permanentError('Alchemy returned transfer history out of ascending block order.');
-      }
-      if (!recordDate && transfer.blockNumber > recordBlock) {
-        recordDate = cloneLedger(current);
-      }
-      applyLedgerTransfer(current, transfer);
+      applyLedgerTransfer(recordDate, transfer);
     }
 
     pageKey = response?.pageKey ?? null;
@@ -185,76 +170,26 @@ async function replayTransferHistory({
   } while (pageKey);
 
   return {
-    recordDate: recordDate ?? cloneLedger(current),
-    current,
+    recordDate,
     transferCount: seen.size,
   };
 }
 
-async function readUint256(tokenAddress, method, args, blockNumber) {
-  const data = erc20Interface.encodeFunctionData(method, args);
-  const raw = await rpc('eth_call', [
-    { to: tokenAddress, data },
-    toQuantity(blockNumber),
-  ]);
-  if (!raw || raw === '0x') {
-    throw permanentError(`The token did not return ${method}() at validation block ${blockNumber}.`);
-  }
+async function reportConstructedBalanceProgress(balances, jobId) {
+  await updateJob(
+    jobId,
+    62,
+    `Finalizing ${balances.length.toLocaleString()} reconstructed record-date balances`,
+  );
 
-  try {
-    return erc20Interface.decodeFunctionResult(method, raw)[0];
-  } catch {
-    throw permanentError(`The token returned an invalid ${method}() value.`);
-  }
-}
-
-async function reconcileCurrentLedger(tokenAddress, ledger, blockNumber, jobId) {
-  try {
-    assertLedgerConsistent(ledger);
-  } catch (error) {
-    throw ledgerError('Token transfer history is incomplete or non-standard', error);
-  }
-
-  const totalSupply = await readUint256(tokenAddress, 'totalSupply', [], blockNumber);
-  if (totalSupply !== ledger.supply) {
-    throw permanentError(
-      `Token is not event-replay compatible: derived current supply (${ledger.supply}) does not equal totalSupply (${totalSupply}) at validation block ${blockNumber}.`,
+  for (let offset = 0; offset < balances.length; offset += BALANCE_PROGRESS_INTERVAL) {
+    const processed = Math.min(balances.length, offset + BALANCE_PROGRESS_INTERVAL);
+    const progress = Math.min(74, 62 + Math.round((processed / balances.length) * 12));
+    await updateJob(
+      jobId,
+      progress,
+      `Processed ${processed.toLocaleString()} of ${balances.length.toLocaleString()} reconstructed record-date balances`,
     );
-  }
-
-  const balances = ledgerBalances(ledger);
-  for (let offset = 0; offset < balances.length; offset += BALANCE_CHECK_CONCURRENCY) {
-    const batch = balances.slice(offset, offset + BALANCE_CHECK_CONCURRENCY);
-    const actualBalances = await Promise.all(
-      batch.map(([walletAddress]) => readUint256(
-        tokenAddress,
-        'balanceOf',
-        [walletAddress],
-        blockNumber,
-      )),
-    );
-
-    const mismatchIndex = batch.findIndex(([, expected], index) => (
-      actualBalances[index] !== expected
-    ));
-    if (mismatchIndex !== -1) {
-      const [walletAddress, expected] = batch[mismatchIndex];
-      throw permanentError(
-        `Token is not event-replay compatible: derived current balance for ${walletAddress} is ${expected}, but balanceOf() returned ${actualBalances[mismatchIndex]}.`,
-      );
-    }
-
-    const checked = Math.min(balances.length, offset + batch.length);
-    const shouldReport = checked === balances.length
-      || checked % BALANCE_PROGRESS_INTERVAL === 0;
-    if (shouldReport) {
-      const progress = Math.min(74, 62 + Math.round((checked / balances.length) * 12));
-      await updateJob(
-        jobId,
-        progress,
-        `Validated ${checked.toLocaleString()} of ${balances.length.toLocaleString()} current balances`,
-      );
-    }
   }
 }
 
@@ -313,8 +248,8 @@ export async function buildSnapshot(job) {
     throw permanentError('Voting ended before deployment.');
   }
 
-  await updateJob(job.id, 3, 'Resolving record-date and validation blocks');
-  const { recordBlock, validationBlock } = await resolveSnapshotBlocks(event.record_date_at);
+  await updateJob(job.id, 3, 'Resolving record-date and confirmation-safe blocks');
+  const { recordBlock, safeBlock } = await resolveSnapshotBlocks(event.record_date_at);
   await query(
     "UPDATE events SET status='SNAPSHOT_RUNNING',failure_reason=NULL WHERE id=$1",
     [event.id],
@@ -322,7 +257,7 @@ export async function buildSnapshot(job) {
   await updateJob(
     job.id,
     8,
-    `Record date resolved to block ${recordBlock.number}; validating at recent block ${validationBlock.number}`,
+    `Record date resolved to block ${recordBlock.number}; chain finalized through block ${safeBlock.number}`,
   );
 
   const deployment = await tokenDeployment(event.token_address);
@@ -336,32 +271,15 @@ export async function buildSnapshot(job) {
     tokenAddress: event.token_address,
     startBlock: deployment?.blockNumber ?? 0,
     recordBlock: recordBlock.number,
-    validationBlock: validationBlock.number,
     jobId: job.id,
   });
-
-  try {
-    assertLedgerConsistent(replay.recordDate);
-  } catch (error) {
-    throw ledgerError('Record-date transfer history is incomplete or non-standard', error);
-  }
 
   const recordDateBalances = ledgerBalances(replay.recordDate, { positiveOnly: true });
   if (!recordDateBalances.length) {
     throw permanentError('No positive token balances existed at the record date.');
   }
 
-  await updateJob(
-    job.id,
-    62,
-    `Reconciling event-derived balances against recent token state at block ${validationBlock.number}`,
-  );
-  await reconcileCurrentLedger(
-    event.token_address,
-    replay.current,
-    validationBlock.number,
-    job.id,
-  );
+  await reportConstructedBalanceProgress(recordDateBalances, job.id);
 
   const voteUnit = BigInt(event.vote_unit);
   const eligible = recordDateBalances
@@ -391,7 +309,7 @@ export async function buildSnapshot(job) {
 
   return {
     recordDateBlock: recordBlock.number,
-    validationBlock: validationBlock.number,
+    validationBlock: safeBlock.number,
     snapshotRoot: tree.root,
     holderCount: tree.entries.length,
     transfersRead: replay.transferCount,

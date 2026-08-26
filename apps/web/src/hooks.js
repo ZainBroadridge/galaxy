@@ -26,11 +26,17 @@ export function useLoad(loader, dependencies = []) {
     return () => { request.current += 1; };
   }, [load]);
 
+  const reload = useCallback(() => load(false), [load]);
+  const refresh = useCallback(() => load(true), [load]);
+  const setData = useCallback((data) => {
+    setState({ loading: false, data, error: null });
+  }, []);
+
   return {
     ...state,
-    reload: () => load(false),
-    refresh: () => load(true),
-    setData: (data) => setState({ loading: false, data, error: null }),
+    reload,
+    refresh,
+    setData,
   };
 }
 
@@ -59,7 +65,7 @@ export function useEventLiveRefresh(
   refresh,
   eventId,
   active,
-  fallbackInterval = 15_000,
+  fallbackInterval = 2_000,
   startsAt = null,
 ) {
   useEffect(() => {
@@ -92,6 +98,9 @@ export function useEventLiveRefresh(
 
     let closed = false;
     let refreshing = false;
+    let fallbackTimer;
+    let source;
+
     const refreshOnce = async () => {
       if (refreshing || closed) return;
       refreshing = true;
@@ -99,14 +108,31 @@ export function useEventLiveRefresh(
       finally { refreshing = false; }
     };
 
-    const source = new EventSource(`${API_BASE_URL}/v1/events/${encodeURIComponent(eventId)}/stream`);
-    source.addEventListener('event-progress', refreshOnce);
-    const fallback = setInterval(refreshOnce, fallbackInterval);
+    const scheduleFallback = () => {
+      if (closed) return;
+      fallbackTimer = setTimeout(async () => {
+        await refreshOnce();
+        scheduleFallback();
+      }, fallbackInterval);
+    };
+
+    // Do not wait for the first SSE message or fallback interval before reading
+    // the latest durable job progress from the API.
+    void refreshOnce();
+    scheduleFallback();
+
+    try {
+      source = new EventSource(`${API_BASE_URL}/v1/events/${encodeURIComponent(eventId)}/stream`);
+      source.addEventListener('open', refreshOnce);
+      source.addEventListener('event-progress', refreshOnce);
+    } catch {
+      // Polling remains active when EventSource is unavailable or blocked.
+    }
 
     return () => {
       closed = true;
-      clearInterval(fallback);
-      source.close();
+      clearTimeout(fallbackTimer);
+      source?.close();
     };
   }, [active, eventId, fallbackInterval, refresh, startsAt]);
 }

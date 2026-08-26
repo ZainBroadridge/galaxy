@@ -579,7 +579,7 @@ export function OrganiserEventPage() {
     view.refresh,
     eventId,
     Boolean(jobActive || view.data?.verificationStatus === 'PENDING'),
-    15_000,
+    2_000,
     jobWaitingForRecordDate ? view.data.job.availableAt : null,
   );
 

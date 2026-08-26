@@ -38,7 +38,19 @@ export async function verifyContract(job) {
 
   if (!guid) {
     await updateJob(job.id, 15, 'Submitting source code to PolygonScan');
-    const types = ['address','address','uint64','bytes32','uint64','uint64','uint256','bytes32','uint256'];
+    const types = [
+      'address',
+      'address',
+      'uint64',
+      'bytes32',
+      'uint64',
+      'uint64',
+      'uint256',
+      'bytes32',
+      'uint256',
+      'uint64',
+      'tuple(string,string[4],uint256,uint8)[]',
+    ];
     const constructorArgumentsHex = AbiCoder.defaultAbiCoder().encode(types, constructorArguments(event)).slice(2);
     const submitted = await request({ action: 'verifysourcecode' }, {
       contractaddress: event.contract_address,
