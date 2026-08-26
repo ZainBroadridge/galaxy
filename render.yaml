@@ -62,7 +62,7 @@ services:
       - key: ALCHEMY_PAGE_SIZE
         value: "1000"
       - key: ALCHEMY_MAX_PAGES
-        value: "100"
+        value: "1000"
       - key: ALCHEMY_MAX_RETRIES
         value: "6"
       - key: CONFIRMATION_BLOCKS

@@ -51,7 +51,7 @@ export const config = Object.freeze({
   jobIdleDelayMs: integer('JOB_IDLE_DELAY_MS', 1500, { min: 250, max: 30_000 }),
   transactionWaitTimeoutMs: integer('TRANSACTION_WAIT_TIMEOUT_MS', 180_000, { min: 30_000, max: 600_000 }),
   alchemyPageSize: integer('ALCHEMY_PAGE_SIZE', 1000, { min: 1, max: 1000 }),
-  alchemyMaxPages: integer('ALCHEMY_MAX_PAGES', 100, { min: 1, max: 1000 }),
+  alchemyMaxPages: integer('ALCHEMY_MAX_PAGES', 1000, { min: 1, max: 1000 }),
   alchemyMaxRetries: integer('ALCHEMY_MAX_RETRIES', 6, { min: 0, max: 10 }),
   webPush: Object.freeze({
     publicKey: process.env.WEB_PUSH_PUBLIC_KEY ?? '',

@@ -158,7 +158,7 @@ async function replayTransferHistory({
 
     pageKey = response?.pageKey ?? null;
     const progress = pageKey
-      ? Math.min(54, 10 + Math.floor((page / config.alchemyMaxPages) * 44))
+      ? Math.min(54, 10 + Math.floor(44 * (page / (page + 10))))
       : 55;
     await updateJob(
       jobId,
