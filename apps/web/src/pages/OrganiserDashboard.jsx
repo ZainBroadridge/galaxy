@@ -453,7 +453,7 @@ export default function OrganiserDashboard() {
             <p>Set the record date, voting window, discovery rules, and communication audience.</p>
           </header>
 
-          <div className="field-grid three">
+          <div className="field-grid three create-schedule-grid">
             <label>Record date<input
               type="datetime-local"
               value={form.recordDateAt}
