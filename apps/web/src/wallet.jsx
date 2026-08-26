@@ -27,11 +27,15 @@ export function WalletProvider({ children }) {
         method: 'wallet_addEthereumChain',
         params: [{
           chainId: AMOY_HEX,
-          chainName: 'Polygon Amoy',
+          chainName: 'Amoy',
           nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
           rpcUrls: [import.meta.env.VITE_PUBLIC_RPC_URL || 'https://rpc-amoy.polygon.technology'],
           blockExplorerUrls: [import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://amoy.polygonscan.com'],
         }],
+      });
+      await walletProvider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x13882' }],
       });
     }
   }, [walletProvider]);

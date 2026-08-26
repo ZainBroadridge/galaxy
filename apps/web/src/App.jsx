@@ -140,11 +140,15 @@ export default function App() {
           method: 'wallet_addEthereumChain',
           params: [{
             chainId: AMOY_CHAIN_ID,
-            chainName: 'Polygon Amoy Testnet',
+            chainName: 'Amoy',
             nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
             rpcUrls: [import.meta.env.VITE_PUBLIC_RPC_URL || 'https://rpc-amoy.polygon.technology'],
             blockExplorerUrls: [import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://amoy.polygonscan.com'],
           }],
+        });
+        await provider.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x13882' }],
         });
       }
     } catch (error) {
