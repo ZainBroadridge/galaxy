@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ballotTypedData } from '@pv/shared';
 import { API_BASE_URL, api, apiBlob, saveBlob } from '../api.js';
@@ -43,6 +43,20 @@ function DashboardEmptyIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M6.75 5.5h10.5v12H6.75zM4.5 17.5h15M9.25 12l1.75 1.75L15.25 9.5" />
   </svg>;
+}
+
+function boardRecommendedChoices(proposals) {
+  if (!Array.isArray(proposals) || proposals.length === 0) return null;
+
+  const choices = proposals.map((proposal) => proposal?.recommendation);
+  const allProposalsRecommended = choices.every((recommendation, proposalIndex) => (
+    Number.isInteger(recommendation)
+    && recommendation >= 0
+    && Array.isArray(proposals[proposalIndex]?.options)
+    && recommendation < proposals[proposalIndex].options.length
+  ));
+
+  return allProposalsRecommended ? choices : null;
 }
 
 export default function VotingDashboard() {
@@ -207,6 +221,7 @@ export function VoteEventPage() {
   const [submitError, setSubmitError] = useState(null);
   const [copied, setCopied] = useState(false);
   const [walletActionError, setWalletActionError] = useState(null);
+  const submitRowRef = useRef(null);
 
   useEffect(() => {
     setChoices(event?.proposals?.map(() => null) ?? []);
@@ -220,6 +235,19 @@ export function VoteEventPage() {
     () => choices.length > 0 && choices.every(Number.isInteger),
     [choices],
   );
+  const boardChoices = useMemo(
+    () => boardRecommendedChoices(event?.proposals),
+    [event?.proposals],
+  );
+
+  function voteWithBoard() {
+    if (!boardChoices || submitting) return;
+
+    setChoices([...boardChoices]);
+    window.requestAnimationFrame(() => {
+      submitRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
 
   async function submit() {
     if (!account || submitting) return;
@@ -390,6 +418,13 @@ export function VoteEventPage() {
         <div className="ballot-meta">
           <span>Record date <strong>{formatDate(event.recordDateAt)}</strong></span>
           <span>Voting closes <strong>{formatDate(event.votingEndAt)}</strong></span>
+          {boardChoices && <button
+            type="button"
+            className="button secondary compact"
+            style={{ marginInlineStart: 'auto' }}
+            disabled={submitting}
+            onClick={voteWithBoard}
+          >Vote with Board</button>}
         </div>
         <div className="proposal-stack">
           {event.proposals.map((proposal, proposalIndex) => <fieldset
@@ -418,7 +453,7 @@ export function VoteEventPage() {
           </fieldset>)}
         </div>
         <ErrorBox error={submitError} />
-        <footer className="ballot-submit-row">
+        <footer ref={submitRowRef} className="ballot-submit-row">
           <p>MetaMask requests one final-ballot signature. The Render relayer pays POL.</p>
           <button className="button" disabled={!complete || submitting} onClick={submit}>
             {submitting ? 'Signing and submitting…' : 'Submit final vote'}
