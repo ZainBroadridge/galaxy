@@ -2787,6 +2787,152 @@ a:hover { color: var(--blue-hover); }
   text-decoration-thickness: 1.5px;
 }
 
+/* Broadridge-inspired Insights and perspectives cards. */
+.home-insights {
+  width: min(1504px, calc(100% - 112px));
+  margin: 34px auto 72px;
+}
+
+.home-insights-heading {
+  margin: 0 0 34px;
+  color: #090a0d;
+  font-size: clamp(36px, 3vw, 50px);
+  line-height: 1.06;
+  font-weight: 400;
+  letter-spacing: -.035em;
+}
+
+.home-insights-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.home-insight-card {
+  min-width: 0;
+  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 7px;
+  background: #001747;
+  color: #fff;
+  text-decoration: none;
+  box-shadow: 0 9px 24px rgba(0, 31, 90, .07);
+  isolation: isolate;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform .3s cubic-bezier(.22, .72, .28, 1),
+    box-shadow .3s ease;
+}
+
+.home-insight-card:visited,
+.home-insight-card:hover {
+  color: #fff;
+  text-decoration: none;
+}
+
+.home-insight-media {
+  height: 205px;
+  flex: 0 0 205px;
+  display: block;
+  overflow: hidden;
+  background: #dfe7f4;
+}
+
+.home-insight-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  transform: scale(1);
+  transition: transform .58s cubic-bezier(.2, .65, .3, 1);
+}
+
+.home-insight-body {
+  min-height: 315px;
+  flex: 1 1 auto;
+  padding: 28px 30px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  background: #001747;
+  color: #fff;
+  transition: background-color .3s ease;
+}
+
+.home-insight-bright .home-insight-body { background: #062c6b; }
+
+.home-insight-type {
+  min-height: 29px;
+  padding: 5px 10px 4px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 3px;
+  background: #174fc9;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: -.02em;
+  text-transform: uppercase;
+}
+
+.home-insight-title {
+  margin: 16px 0 0;
+  color: #fff;
+  font-size: clamp(22px, 1.55vw, 27px);
+  line-height: 1.32;
+  font-weight: 400;
+  letter-spacing: -.026em;
+  text-wrap: pretty;
+}
+
+.home-insight-arrow {
+  width: 34px;
+  height: 34px;
+  margin-top: auto;
+  display: inline-grid;
+  place-items: center;
+  color: #fff;
+  transform: translateX(0);
+  transition: transform .3s cubic-bezier(.22, .72, .28, 1);
+}
+
+.home-insight-arrow svg {
+  width: 30px;
+  height: 30px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.home-insight-card:focus-visible {
+  outline: 3px solid rgba(0, 70, 213, .34);
+  outline-offset: 4px;
+  transform: translateY(-5px);
+  box-shadow: 0 22px 44px rgba(0, 31, 90, .18);
+}
+
+.home-insight-card:focus-visible .home-insight-image { transform: scale(1.055); }
+.home-insight-card:focus-visible .home-insight-arrow { transform: translateX(8px); }
+.home-insight-card:focus-visible .home-insight-body { background: #063477; }
+.home-insight-bright:focus-visible .home-insight-body { background: #0a438f; }
+
+@media (hover: hover) and (pointer: fine) {
+  .home-insight-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 22px 44px rgba(0, 31, 90, .18);
+  }
+
+  .home-insight-card:hover .home-insight-image { transform: scale(1.055); }
+  .home-insight-card:hover .home-insight-arrow { transform: translateX(8px); }
+  .home-insight-card:hover .home-insight-body { background: #063477; }
+  .home-insight-bright:hover .home-insight-body { background: #0a438f; }
+}
+
 /* Minute, neutral footer pinned to the visual left/right edges. */
 .pv-site-footer {
   flex: 0 0 var(--pv-footer-height);
@@ -2974,7 +3120,18 @@ textarea:focus {
   .pv-primary-nav a,
   .pv-topbar .wallet-control,
   .pv-add-network,
-  .home-carousel-indicators button { transition: none; }
+  .home-carousel-indicators button,
+  .home-insight-card,
+  .home-insight-image,
+  .home-insight-body,
+  .home-insight-arrow { transition: none; }
+
+  .home-insight-card:hover,
+  .home-insight-card:focus-visible,
+  .home-insight-card:hover .home-insight-image,
+  .home-insight-card:focus-visible .home-insight-image,
+  .home-insight-card:hover .home-insight-arrow,
+  .home-insight-card:focus-visible .home-insight-arrow { transform: none; }
 }
 
 @media (max-width: 1180px) {
@@ -2995,6 +3152,12 @@ textarea:focus {
   .pv-topbar .pv-primary-nav svg { width: 18px; height: 18px; flex-basis: 18px; }
   .pv-topbar-actions { gap: 7px; }
   .pv-topbar .wallet-control { min-width: 170px; height: 42px; padding: 0 11px; font-size: 12.5px; }
+
+  .home-insights-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-insight-card { min-height: 500px; }
+  .home-insight-media { height: 230px; flex-basis: 230px; }
+  .home-insight-body { min-height: 270px; }
+  .home-insight-title { font-size: 27px; }
 }
 
 @media (max-width: 920px) {
@@ -3020,6 +3183,7 @@ textarea:focus {
   .home-hero { min-height: 284px; padding-top: 72px; }
   .home-heading-stage { min-height: 108px; }
   .home-overview,
+  .home-insights,
   .pv-site-footer .site-footer-inner { width: calc(100% - 40px); }
 }
 
@@ -3051,7 +3215,15 @@ textarea:focus {
   .home-rotating-heading { font-size: clamp(31px, 9vw, 40px); }
   .home-metrics { grid-template-columns: 1fr; }
   .home-metric-card { min-height: 176px; }
-  .home-overview { width: calc(100% - 28px); }
+  .home-overview,
+  .home-insights { width: calc(100% - 28px); }
+  .home-insights { margin-top: 24px; margin-bottom: 56px; }
+  .home-insights-heading { margin-bottom: 28px; font-size: 38px; }
+  .home-insights-grid { grid-template-columns: 1fr; gap: 22px; }
+  .home-insight-card { min-height: 0; }
+  .home-insight-media { height: 220px; flex-basis: 220px; }
+  .home-insight-body { min-height: 250px; }
+  .home-insight-title { font-size: 27px; }
   .pv-site-footer .site-footer-inner {
     width: 100%;
     padding: 0 12px;
@@ -3072,5 +3244,9 @@ textarea:focus {
   .home-hero { padding-left: 14px; padding-right: 14px; }
   .home-proxy-info { font-size: 11px; }
   .home-metric-card { padding: 22px; }
+  .home-insights-heading { font-size: 34px; }
+  .home-insight-media { height: 195px; flex-basis: 195px; }
+  .home-insight-body { min-height: 230px; padding: 25px 24px 22px; }
+  .home-insight-title { font-size: 24px; }
   .pv-network-tooltip { width: 190px; }
 }

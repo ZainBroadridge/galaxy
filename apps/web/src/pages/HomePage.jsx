@@ -10,6 +10,45 @@ const rotatingHeadlines = [
   ['Secure shareholder decisions', 'Verified on-chain'],
 ];
 
+const insights = [
+  {
+    type: 'Article',
+    title: 'A new way to participate in Vanguard Investor',
+    href: 'https://www.broadridge.com/insights/a-new-way-to-participate-in-vanguard-investor-choice',
+    image: '/insights/vanguard-investor.jpg',
+    imageAlt: 'Professionals collaborating in a modern office',
+    tone: 'deep',
+    newTab: false,
+  },
+  {
+    type: 'Webinar',
+    title: 'Why investment stewards can\u2019t afford to ignore data quality',
+    href: 'https://event.webcasts.com/starthere.jsp?ei=1755201&tp_key=e3616cd4d2',
+    image: '/insights/data-quality-webinar.jpg',
+    imageAlt: 'Blue glass office building',
+    tone: 'deep',
+    newTab: true,
+  },
+  {
+    type: 'Webinar',
+    title: 'Next-gen stewardship for asset managers: AI and proxy voting, greater efficiency, better outcomes',
+    href: 'https://event.on24.com/wcc/r/5268290/08EEB0E7E050D386C27410A7E28840A6',
+    image: '/insights/next-gen-stewardship.jpg',
+    imageAlt: 'Business meeting in a glass conference room',
+    tone: 'bright',
+    newTab: true,
+  },
+  {
+    type: 'Article',
+    title: 'Data accuracy: The cornerstone of investment stewardship',
+    href: 'https://www.broadridge.com/insights/data-accuracy-the-cornerstone-of-investment-stewardship',
+    image: '/insights/data-accuracy.jpg',
+    imageAlt: 'Professional working on a laptop',
+    tone: 'bright',
+    newTab: false,
+  },
+];
+
 function VotingEventsIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M6.75 5.5h10.5v12H6.75zM4.5 17.5h15M9.25 12l1.75 1.75L15.25 9.5" />
@@ -39,6 +78,39 @@ function MetricCard({ icon, title, count, action, to, primary = false }) {
     <strong className="home-metric-count">{count}</strong>
     <Link className="home-metric-link" to={to}>{action}</Link>
   </article>;
+}
+
+function InsightArrowIcon() {
+  return <svg viewBox="0 0 32 32" aria-hidden="true">
+    <path d="M5 16h20M18 8l8 8-8 8" />
+  </svg>;
+}
+
+function InsightCard({ insight }) {
+  const navigation = insight.newTab
+    ? { target: '_blank', rel: 'noopener noreferrer' }
+    : {};
+
+  return <a
+    className={`home-insight-card home-insight-${insight.tone}`}
+    href={insight.href}
+    {...navigation}
+  >
+    <div className="home-insight-media">
+      <img
+        className="home-insight-image"
+        src={insight.image}
+        alt={insight.imageAlt}
+        loading="lazy"
+        decoding="async"
+      />
+    </div>
+    <div className="home-insight-body">
+      <span className="home-insight-type">{insight.type}</span>
+      <h3 className="home-insight-title">{insight.title}</h3>
+      <span className="home-insight-arrow" aria-hidden="true"><InsightArrowIcon /></span>
+    </div>
+  </a>;
 }
 
 export default function HomePage() {
@@ -118,6 +190,15 @@ export default function HomePage() {
           action="View your events"
           to="/organiser"
         />
+      </div>
+    </section>
+
+    <section className="home-insights" aria-labelledby="home-insights-heading">
+      <h2 id="home-insights-heading" className="home-insights-heading">
+        Insights &amp; perspectives
+      </h2>
+      <div className="home-insights-grid">
+        {insights.map((insight) => <InsightCard key={insight.href} insight={insight} />)}
       </div>
     </section>
   </main>;
