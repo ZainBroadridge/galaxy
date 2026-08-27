@@ -23,14 +23,23 @@ test('event browser push resolves the one persisted event message directly', asy
   assert.match(communications, /c\.created_at>=push\.created_at/u);
 });
 
-test('event subscriber notices do not incorrectly require snapshot eligibility', async () => {
+test('event subscriber notices remain inside record-date eligibility', async () => {
   const [communications, policy] = await Promise.all([
     read('apps/api/src/communications.js'),
     read('apps/api/src/communication-recipient-policy.js'),
   ]);
 
   assert.match(communications, /recipient_is_subscribed/u);
-  assert.match(communications, /OR s\.wallet_address IS NOT NULL/u);
+  assert.match(
+    communications,
+    /JOIN snapshot_entries se[\s\S]*se\.wallet_address=push\.wallet_address/u,
+  );
+  assert.match(
+    communications,
+    /JOIN snapshot_entries se[\s\S]*se\.wallet_address=\$1/u,
+  );
+  assert.doesNotMatch(communications, /recipient_is_creator/u);
+  assert.match(policy, /if \(!isEligible\) return false;/u);
   assert.match(policy, /case EVENT_AUDIENCE\.SUBSCRIBERS:[\s\S]*return isSubscribed;/u);
 });
 

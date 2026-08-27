@@ -107,8 +107,7 @@ export async function getEventRow(id) {
   return result.rows[0];
 }
 
-export async function eventView(id, walletInput) {
-  const wallet = walletInput ? normalizeAddress(walletInput, 'wallet') : null;
+async function loadEventViewRow(id, wallet) {
   const found = await query(
     `SELECT e.*,
             to_jsonb(j) AS latest_job,
@@ -125,13 +124,14 @@ export async function eventView(id, walletInput) {
     [id, wallet],
   );
   if (!found.rowCount) throw new HttpError(404, 'Event not found.', 'EVENT_NOT_FOUND');
+  return found.rows[0];
+}
 
-  const row = found.rows[0];
+async function serializeEventView(id, wallet, row) {
   const vote = row.wallet_vote ?? null;
   let onChainVoted = false;
   if (
-    wallet
-    && row.wallet_snapshot_balance !== null
+    row.wallet_snapshot_balance !== null
     && (!vote || vote.status === 'FAILED')
     && row.contract_address
     && row.deployment_block !== null
@@ -141,26 +141,60 @@ export async function eventView(id, walletInput) {
       .catch(() => false);
   }
 
-  const eligibility = wallet
-    ? (row.wallet_snapshot_balance === null
-      ? { eligible: false, hasVoted: false }
-      : {
-          eligible: true,
-          snapshotBalance: String(row.wallet_snapshot_balance),
-          votingPower: String(row.wallet_voting_power),
-          hasVoted: Boolean((vote && vote.status !== 'FAILED') || onChainVoted),
-          onChainOnly: Boolean(onChainVoted && (!vote || vote.status === 'FAILED')),
-        })
-    : undefined;
+  const eligibility = row.wallet_snapshot_balance === null
+    ? { eligible: false, hasVoted: false }
+    : {
+        eligible: true,
+        snapshotBalance: String(row.wallet_snapshot_balance),
+        votingPower: String(row.wallet_voting_power),
+        hasVoted: Boolean((vote && vote.status !== 'FAILED') || onChainVoted),
+        onChainOnly: Boolean(onChainVoted && (!vote || vote.status === 'FAILED')),
+      };
   const documents = await listEventDocuments(id);
 
   return serializeEvent(row, {
     job: serializeJob(row.latest_job),
     documents,
-    ...(eligibility ? { eligibility } : {}),
+    eligibility,
     vote: serializeVote(vote && vote.status !== 'FAILED' ? vote : null, row),
     lastVoteFailure: vote?.status === 'FAILED' ? vote.failure_reason : null,
   });
+}
+
+export async function eventView(id, walletInput) {
+  if (!walletInput) {
+    throw new HttpError(
+      401,
+      'Connect an eligible wallet to view this voting event.',
+      'WALLET_REQUIRED',
+    );
+  }
+  const wallet = normalizeAddress(walletInput, 'wallet');
+  const row = await loadEventViewRow(id, wallet);
+  if (row.wallet_snapshot_balance === null) {
+    throw new HttpError(
+      403,
+      'This wallet has no voting power in the record-date snapshot.',
+      'NOT_ELIGIBLE',
+    );
+  }
+  return serializeEventView(id, wallet, row);
+}
+
+export async function organiserEventView(id, walletInput) {
+  if (!walletInput) {
+    throw new HttpError(
+      401,
+      'Connect the event creator wallet to manage this event.',
+      'WALLET_REQUIRED',
+    );
+  }
+  const wallet = normalizeAddress(walletInput, 'wallet');
+  const row = await loadEventViewRow(id, wallet);
+  if (row.creator_address !== wallet) {
+    throw new HttpError(403, 'Only the event creator can manage this event.', 'FORBIDDEN');
+  }
+  return serializeEventView(id, wallet, row);
 }
 
 export async function votingDashboard(walletInput) {

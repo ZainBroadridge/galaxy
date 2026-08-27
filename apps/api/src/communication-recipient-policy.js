@@ -9,12 +9,15 @@ const AUTOMATIC_DELIVERY_DISABLED = 'DISABLED';
 /**
  * Decide whether one wallet may receive one persisted event communication.
  *
+ * Record-date eligibility is the mandatory outer boundary for every event
+ * audience. Subscriptions may narrow that eligible set, but they never add a
+ * non-holder, and creating the event never grants voter-recipient access.
+ *
  * This is intentionally the only event-audience policy used by both the
  * dApp/Snap inbox and browser Web Push. Keeping the rule pure prevents the two
  * delivery channels from drifting apart again.
  */
 export function canReceiveEventCommunication({
-  isCreator = false,
   isEligible = false,
   hasVoted = false,
   isSubscribed = false,
@@ -22,16 +25,16 @@ export function canReceiveEventCommunication({
   automaticDeliveryMode = null,
   audience,
 }) {
-  if (isCreator) return true;
+  if (!isEligible) return false;
   if (isAutomaticAnnouncement && automaticDeliveryMode === AUTOMATIC_DELIVERY_DISABLED) {
     return false;
   }
 
   switch (audience) {
     case EVENT_AUDIENCE.ALL_ELIGIBLE:
-      return isEligible;
+      return true;
     case EVENT_AUDIENCE.NOT_VOTED:
-      return isEligible && !hasVoted;
+      return !hasVoted;
     case EVENT_AUDIENCE.SUBSCRIBERS:
       return isSubscribed;
     default:
@@ -42,7 +45,6 @@ export function canReceiveEventCommunication({
 /** Convert PostgreSQL aliases into the explicit policy input above. */
 export function eventRecipientContext(row) {
   return {
-    isCreator: row.recipient_is_creator === true,
     isEligible: row.recipient_is_eligible === true,
     hasVoted: row.recipient_has_voted === true,
     isSubscribed: row.recipient_is_subscribed === true,

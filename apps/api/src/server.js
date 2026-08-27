@@ -30,6 +30,7 @@ import {
   eventResults,
   eventView,
   organiserDashboard,
+  organiserEventView,
   resultsDashboard,
   retryEvent,
   votingDashboard,
@@ -221,6 +222,9 @@ app.post('/v1/events', publicWriteLimiter, async (request, response, next) => {
 });
 app.get('/v1/events/:id/view', async (request, response, next) => {
   try { response.json(await eventView(request.params.id, request.query.wallet)); } catch (error) { next(error); }
+});
+app.get('/v1/events/:id/organiser-view', async (request, response, next) => {
+  try { response.json(await organiserEventView(request.params.id, request.query.wallet)); } catch (error) { next(error); }
 });
 app.get('/v1/events/:id/stream', openEventStream);
 app.post('/v1/events/:id/retry', publicWriteLimiter, async (request, response, next) => {

@@ -10,7 +10,6 @@ const root = new URL('../../../', import.meta.url);
 const read = (path) => readFile(new URL(path, root), 'utf8');
 
 const base = {
-  isCreator: false,
   isEligible: false,
   hasVoted: false,
   isSubscribed: false,
@@ -18,19 +17,24 @@ const base = {
   automaticDeliveryMode: 'ELIGIBLE',
 };
 
-test('one event recipient policy serves eligible, not-voted, and subscriber audiences', () => {
+test('one event recipient policy keeps every audience inside snapshot eligibility', () => {
   assert.equal(canReceiveEventCommunication({ ...base, audience: 'ALL_ELIGIBLE', isEligible: true }), true);
   assert.equal(canReceiveEventCommunication({ ...base, audience: 'ALL_ELIGIBLE' }), false);
 
   assert.equal(canReceiveEventCommunication({ ...base, audience: 'NOT_VOTED', isEligible: true }), true);
   assert.equal(canReceiveEventCommunication({ ...base, audience: 'NOT_VOTED', isEligible: true, hasVoted: true }), false);
 
-  assert.equal(canReceiveEventCommunication({ ...base, audience: 'SUBSCRIBERS', isSubscribed: true }), true);
-  assert.equal(canReceiveEventCommunication({ ...base, audience: 'SUBSCRIBERS', isSubscribed: true, isEligible: false }), true);
+  assert.equal(canReceiveEventCommunication({
+    ...base,
+    audience: 'SUBSCRIBERS',
+    isEligible: true,
+    isSubscribed: true,
+  }), true);
+  assert.equal(canReceiveEventCommunication({ ...base, audience: 'SUBSCRIBERS', isSubscribed: true }), false);
   assert.equal(canReceiveEventCommunication({ ...base, audience: 'SUBSCRIBERS' }), false);
 });
 
-test('automatic announcements use their signed audience while respecting the disabled toggle', () => {
+test('automatic announcements use their signed audience while respecting eligibility and disabled mode', () => {
   assert.equal(canReceiveEventCommunication({
     ...base,
     audience: 'ALL_ELIGIBLE',
@@ -41,6 +45,7 @@ test('automatic announcements use their signed audience while respecting the dis
   assert.equal(canReceiveEventCommunication({
     ...base,
     audience: 'SUBSCRIBERS',
+    isEligible: true,
     isSubscribed: true,
     isAutomaticAnnouncement: true,
     automaticDeliveryMode: 'SUBSCRIBERS_ONLY',
@@ -50,14 +55,21 @@ test('automatic announcements use their signed audience while respecting the dis
     audience: 'SUBSCRIBERS',
     isSubscribed: true,
     isAutomaticAnnouncement: true,
+    automaticDeliveryMode: 'SUBSCRIBERS_ONLY',
+  }), false);
+  assert.equal(canReceiveEventCommunication({
+    ...base,
+    audience: 'SUBSCRIBERS',
+    isEligible: true,
+    isSubscribed: true,
+    isAutomaticAnnouncement: true,
     automaticDeliveryMode: 'DISABLED',
   }), false);
 });
 
-test('event creator retains access and PostgreSQL recipient aliases map explicitly', () => {
-  assert.equal(canReceiveEventCommunication({ ...base, audience: 'UNKNOWN', isCreator: true }), true);
+test('creator status does not bypass eligibility and PostgreSQL aliases map explicitly', () => {
+  assert.equal(canReceiveEventCommunication({ ...base, audience: 'UNKNOWN', isCreator: true }), false);
   assert.deepEqual(eventRecipientContext({
-    recipient_is_creator: false,
     recipient_is_eligible: true,
     recipient_has_voted: false,
     recipient_is_subscribed: true,
@@ -65,7 +77,6 @@ test('event creator retains access and PostgreSQL recipient aliases map explicit
     snap_delivery_mode: 'SUBSCRIBERS_ONLY',
     audience: 'SUBSCRIBERS',
   }), {
-    isCreator: false,
     isEligible: true,
     hasVoted: false,
     isSubscribed: true,
@@ -97,6 +108,7 @@ test('Snap inbox and browser push consume the same persisted event policy', asyn
   assert.match(communications, /export async function eventBrowserPushRecipients/u);
   assert.match(communications, /c\.message_id::text=coalesce\(e\.announcement_message->>'messageId',''\)/u);
   assert.match(communications, /scope: 'EVENT'/u);
+  assert.doesNotMatch(communications, /recipient_is_creator/u);
   assert.match(webPush, /eventBrowserPushRecipients/u);
   assert.match(webPush, /resolveEventSubscriptions/u);
   assert.match(webPush, /QUEUE_DEDUPE_MS/u);

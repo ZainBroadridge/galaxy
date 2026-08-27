@@ -392,7 +392,6 @@ export async function eventBrowserPushRecipients(messageId) {
   const candidates = await query(
     `SELECT push.wallet_address,push.endpoint,push.p256dh,push.auth,
             c.audience,e.snap_delivery_mode,
-            (e.creator_address=push.wallet_address) AS recipient_is_creator,
             (se.wallet_address IS NOT NULL) AS recipient_is_eligible,
             (v.id IS NOT NULL) AS recipient_has_voted,
             (
@@ -407,7 +406,7 @@ export async function eventBrowserPushRecipients(messageId) {
          ON c.message_id=$1
         AND c.scope='EVENT'
        JOIN events e ON e.id=c.event_id
-       LEFT JOIN snapshot_entries se
+       JOIN snapshot_entries se
          ON se.event_id=e.id
         AND se.wallet_address=push.wallet_address
        LEFT JOIN votes v
@@ -422,11 +421,6 @@ export async function eventBrowserPushRecipients(messageId) {
         AND c.published_at<=now()
         AND c.expires_at>now()
         AND c.created_at>=push.created_at
-        AND (
-          e.creator_address=push.wallet_address
-          OR se.wallet_address IS NOT NULL
-          OR s.wallet_address IS NOT NULL
-        )
       ORDER BY push.updated_at DESC`,
     [messageId],
   );
@@ -462,7 +456,6 @@ export async function inbox(wallet, options = {}) {
               e.creator_address AS event_creator_address,
               e.authenticity_status AS event_authenticity_status,
               e.snap_delivery_mode,
-              (e.creator_address=$1) AS recipient_is_creator,
               (se.wallet_address IS NOT NULL) AS recipient_is_eligible,
               (v.id IS NOT NULL) AS recipient_has_voted,
               (
@@ -474,7 +467,7 @@ export async function inbox(wallet, options = {}) {
               ) AS is_automatic_announcement
        FROM communications c
        JOIN events e ON e.id=c.event_id
-       LEFT JOIN snapshot_entries se
+       JOIN snapshot_entries se
          ON se.event_id=e.id
         AND se.wallet_address=$1
        LEFT JOIN votes v
@@ -491,11 +484,6 @@ export async function inbox(wallet, options = {}) {
          AND c.expires_at>now()
          AND c.created_at >= $2
          AND ($3::uuid IS NULL OR c.message_id=$3::uuid)
-         AND (
-           e.creator_address=$1
-           OR se.wallet_address IS NOT NULL
-           OR s.wallet_address IS NOT NULL
-         )
        ORDER BY c.created_at DESC`,
       [address, deliveryStartedAt, messageId],
     ),

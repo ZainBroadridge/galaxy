@@ -6,7 +6,6 @@ import {
 } from '../src/communication-recipient-policy.js';
 
 const base = {
-  isCreator: false,
   isEligible: false,
   hasVoted: false,
   isSubscribed: false,
@@ -15,8 +14,8 @@ const base = {
   audience: 'ALL_ELIGIBLE',
 };
 
-test('event recipient policy covers creator, eligible, not-voted, and subscriber audiences', () => {
-  assert.equal(canReceiveEventCommunication({ ...base, isCreator: true }), true);
+test('record-date eligibility is required for every event audience', () => {
+  assert.equal(canReceiveEventCommunication({ ...base, isCreator: true }), false);
   assert.equal(canReceiveEventCommunication({ ...base, isEligible: true }), true);
   assert.equal(canReceiveEventCommunication(base), false);
   assert.equal(canReceiveEventCommunication({
@@ -33,8 +32,14 @@ test('event recipient policy covers creator, eligible, not-voted, and subscriber
   assert.equal(canReceiveEventCommunication({
     ...base,
     audience: 'SUBSCRIBERS',
+    isEligible: true,
     isSubscribed: true,
   }), true);
+  assert.equal(canReceiveEventCommunication({
+    ...base,
+    audience: 'SUBSCRIBERS',
+    isSubscribed: true,
+  }), false);
 });
 
 test('automatic disabled mode and PostgreSQL aliases are handled explicitly', () => {
@@ -45,7 +50,6 @@ test('automatic disabled mode and PostgreSQL aliases are handled explicitly', ()
     isEligible: true,
   }), false);
   assert.deepEqual(eventRecipientContext({
-    recipient_is_creator: false,
     recipient_is_eligible: true,
     recipient_has_voted: false,
     recipient_is_subscribed: true,
@@ -53,7 +57,6 @@ test('automatic disabled mode and PostgreSQL aliases are handled explicitly', ()
     snap_delivery_mode: 'SUBSCRIBERS_ONLY',
     audience: 'SUBSCRIBERS',
   }), {
-    isCreator: false,
     isEligible: true,
     hasVoted: false,
     isSubscribed: true,

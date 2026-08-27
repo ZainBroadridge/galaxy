@@ -431,7 +431,7 @@ export default function OrganiserDashboard() {
               value={form.tokenToVoteRatio}
               onChange={(event) => setForm({ ...form, tokenToVoteRatio: event.target.value })}
               required
-            /></label>
+            /><small>Voting power = whole tokens ÷ X</small></label>
           </div>
 
           {(token || inspectError) && <div className="create-token-feedback">
@@ -557,7 +557,7 @@ export function OrganiserEventPage() {
   const location = useLocation();
   const wallet = useWallet();
   const view = useLoad(
-    () => api(`/v1/events/${eventId}/view${wallet.account ? `?wallet=${wallet.account}` : ''}`, { auth: false }),
+    () => api(`/v1/events/${eventId}/organiser-view${wallet.account ? `?wallet=${wallet.account}` : ''}`, { auth: false }),
     [eventId, wallet.account],
   );
   const [retryError, setRetryError] = useState(null);

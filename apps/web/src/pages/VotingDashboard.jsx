@@ -196,7 +196,9 @@ export function VoteEventPage() {
   const wallet = useWallet();
   const { account, connected, openWallet, signBallot } = wallet;
   const view = useLoad(
-    () => api(`/v1/events/${eventId}/view${account ? `?wallet=${account}` : ''}`, { auth: false }),
+    () => (account
+      ? api(`/v1/events/${eventId}/view?wallet=${encodeURIComponent(account)}`, { auth: false })
+      : Promise.resolve(null)),
     [eventId, account],
   );
   const event = view.data;
@@ -289,7 +291,21 @@ export function VoteEventPage() {
     }
   }
 
+  if (!connected || !account) return <Page title="Voting Dashboard">
+    <section className="wallet-gate-card">
+      <span className="wallet-gate-icon"><WalletIcon /></span>
+      <h2>Connect an eligible wallet</h2>
+      <p>Only wallets with voting power in this event's record-date snapshot can view the ballot.</p>
+      <button className="button" onClick={openWallet}>Connect wallet</button>
+    </section>
+  </Page>;
   if (view.loading) return <Page title="Voting Dashboard"><Spinner /></Page>;
+  if (view.error?.code === 'NOT_ELIGIBLE') return <Page
+    title="Voting Dashboard"
+    actions={<Link className="button secondary" to="/voting">Back to dashboard</Link>}
+  >
+    <Notice>This wallet has no voting power in the record-date snapshot and cannot view this ballot.</Notice>
+  </Page>;
   if (view.error) return <Page title="Voting Dashboard"><ErrorBox error={view.error} /></Page>;
 
   const voted = Boolean(event.vote || event.eligibility?.hasVoted || event.eligibility?.onChainOnly);
