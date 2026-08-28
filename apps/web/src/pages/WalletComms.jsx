@@ -1,7 +1,7 @@
 import {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { api } from '../api.js';
 import {
   browserPushState,
@@ -57,6 +57,16 @@ const messageIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-
 function messageIdFromSearch(search) {
   const value = new URLSearchParams(search).get('messageId');
   return value && messageIdPattern.test(value) ? value.toLowerCase() : null;
+}
+
+function EventNotificationAction({ message }) {
+  if (message.scope !== 'EVENT') return null;
+  if (message.eventId) {
+    return <Link className="notification-action" to={`/vote/${message.eventId}`}>Open event</Link>;
+  }
+  return message.actionUrl
+    ? <a className="notification-action" href={message.actionUrl}>Open event</a>
+    : null;
 }
 
 function readableSnapIssue(value) {
@@ -489,7 +499,7 @@ export default function WalletComms() {
           ? 'BLOCKED'
           : browserPush.issue?.code === 'PUSH_SERVICE_UNAVAILABLE'
             ? 'UNAVAILABLE'
-            : browserPush.enabledForWallet ? 'ACTIVE' : 'NOT_ENABLED';
+            : browserPush.enabled ? 'ACTIVE' : 'NOT_ENABLED';
   const browserPushUnavailable = !browserPush?.configured
     || !browserPush?.supported
     || browserPush?.permission === 'denied';
@@ -591,7 +601,7 @@ export default function WalletComms() {
                     </div>
                     <h3>{message.title}</h3>
                     <p>{message.body}</p>
-                    {message.scope === 'EVENT' && message.actionUrl && <a className="notification-action" href={message.actionUrl}>Open event</a>}
+                    <EventNotificationAction message={message} />
                   </div>
                 </article>;
               })
@@ -652,6 +662,9 @@ export default function WalletComms() {
             {!browserPush?.configured && browserPush && <Notice tone="info">Set the Web Push public key in Vercel to enable clickable browser alerts.</Notice>}
             {browserPush?.browser === 'brave' && !browserPush?.enabledForWallet && <Notice tone="info">Brave requires <code>Use Google services for push messaging</code> in <code>brave://settings/privacy</code>. If that setting is locked, your browser administrator must enable it.</Notice>}
             {browserPush?.issue?.message && <Notice tone="warning">{browserPush.issue.message}</Notice>}
+            {browserPush?.enabled && !browserPush?.enabledForWallet && browserPush.boundWalletAddress && <Notice tone="info">
+              Browser alerts remain enabled for {shortAddress(browserPush.boundWalletAddress)}. Enable them for the connected wallet only when you intend to move this browser subscription.
+            </Notice>}
             <div className="inline-actions">
               {browserPush?.enabledForWallet
                 ? <button type="button" className="button secondary" onClick={disableBrowserNotifications} disabled={busy}>

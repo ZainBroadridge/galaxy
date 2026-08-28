@@ -106,13 +106,13 @@ function EventDocuments({ event }) {
         </div>
         <div className="row wrap">
           <a
-            className="button tertiary compact"
+            className="button tertiary compact vote-detail-link"
             href={`${API_BASE_URL}/v1/events/${event.id}/documents/${document.id}`}
             target="_blank"
             rel="noreferrer"
           >Open</a>
           <a
-            className="button tertiary compact"
+            className="button tertiary compact vote-detail-link"
             href={`${API_BASE_URL}/v1/events/${event.id}/documents/${document.id}?download=1`}
           >Download</a>
         </div>
@@ -162,10 +162,10 @@ function Receipt({ event, vote }) {
     <dl className="details receipt-details">
       <div><dt>Voting power</dt><dd><strong className="voting-power-emphasis">{vote.votingPower}</strong></dd></div>
       <div><dt>Transaction</dt><dd>{vote.transactionHash
-        ? <a href={vote.transactionExplorerUrl} target="_blank" rel="noreferrer"><ShortAddress value={vote.transactionHash} /></a>
+        ? <a className="vote-detail-link" href={vote.transactionExplorerUrl} target="_blank" rel="noreferrer"><ShortAddress value={vote.transactionHash} /></a>
         : <span className="inline-working"><span className="inline-spinner" />Waiting for relayer</span>}</dd></div>
       <div><dt>VoteEvent</dt><dd>{verifiedContractUrl
-        ? <a href={verifiedContractUrl} target="_blank" rel="noreferrer"><ShortAddress value={event.contractAddress} /></a>
+        ? <a className="vote-detail-link" href={verifiedContractUrl} target="_blank" rel="noreferrer"><ShortAddress value={event.contractAddress} /></a>
         : 'Verification pending'}</dd></div>
       <div><dt>Source</dt><dd>{event.verificationStatus === 'VERIFIED'
         ? 'Verified on PolygonScan'

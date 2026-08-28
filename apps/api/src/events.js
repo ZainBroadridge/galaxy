@@ -216,7 +216,14 @@ export async function votingDashboard(walletInput) {
           e.discovery_mode='PUBLIC_ELIGIBLE'
           OR (e.discovery_mode='SUBSCRIBERS_ONLY' AND s.wallet_address IS NOT NULL)
         )
-      ORDER BY e.voting_end_at,e.created_at DESC`,
+      ORDER BY
+        CASE WHEN v.status IS NOT NULL AND v.status<>'FAILED' THEN 1 ELSE 0 END,
+        CASE WHEN e.voting_start_at<=now() THEN 0 ELSE 1 END,
+        CASE
+          WHEN e.voting_start_at<=now() THEN e.voting_end_at
+          ELSE e.voting_start_at
+        END,
+        e.created_at DESC`,
     [wallet],
   );
   return rows.rows.map((row) => serializeEvent(row, {

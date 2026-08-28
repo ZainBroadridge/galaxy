@@ -258,7 +258,7 @@ dd { margin: 0; text-align: right; font-weight: 600; }
 .vote-state-open { border-color: #9dc6a5; background: #fbfffb; }
 .vote-state-closed { border-color: #cbd1d8; background: #fafafa; }
 .event-preparation-panel { max-width: 820px; margin-inline: auto; }
-.ballot-documents, .receipt-panel { max-width: 820px; margin-inline: auto; }
+.ballot-documents, .receipt-panel { margin-inline: auto; }
 .receipt { border-top: 3px solid var(--success); }
 .receipt-toolbar { margin-bottom: 8px; }
 .receipt-details { margin-top: 8px; }
@@ -1039,8 +1039,8 @@ textarea:focus {
 .token-wallet-row strong { font-size: 14px; line-height: 20px; }
 .vote-state-banner { margin-bottom: 16px; padding: 12px 16px; border-radius: 8px; }
 .vote-state-banner strong { font-size: 14px; line-height: 20px; }
-.event-preparation-panel,
-.ballot-documents { max-width: var(--ui-vote-summary-width); }
+.event-preparation-panel { max-width: var(--ui-vote-summary-width); }
+.ballot-documents,
 .receipt-panel { max-width: var(--ui-receipt-width); }
 .ballot-shell {
   max-width: var(--ui-ballot-width);
@@ -1069,7 +1069,7 @@ textarea:focus {
 .vote-event-page > .error-box { max-width: var(--ui-vote-summary-width); margin-inline: auto; }
 .receipt-panel,
 .receipt { width: min(var(--ui-receipt-width), 100%); margin-inline: auto; }
-.ballot-documents { width: min(var(--ui-vote-summary-width), 100%); }
+.ballot-documents { width: min(var(--ui-receipt-width), 100%); }
 
 /* Results and communications at the same 14px control scale. */
 .results-table-card,
@@ -1313,8 +1313,8 @@ textarea:focus {
   width: min(var(--ui-ballot-width), 100%);
 }
 .vote-content-frame > .ballot-documents {
-  width: min(var(--ui-ballot-width), 100%);
-  max-width: var(--ui-ballot-width);
+  width: min(var(--ui-receipt-width), 100%);
+  max-width: var(--ui-receipt-width);
 }
 .vote-content-frame > .notice,
 .vote-content-frame > .error-box {
@@ -1337,6 +1337,16 @@ textarea:focus {
 }
 .receipt-details dd {
   overflow-wrap: anywhere;
+}
+.vote-detail-link {
+  color: var(--link-blue);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.vote-detail-link:hover,
+.vote-detail-link:focus-visible {
+  text-decoration-thickness: 2px;
 }
 .ballot-shell-heading,
 .ballot-meta,

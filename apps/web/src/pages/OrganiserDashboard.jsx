@@ -40,21 +40,15 @@ const initialForm = () => ({
   }],
 });
 
-const SAMPLE_DEMO_SCHEDULE = Object.freeze({
-  recordDateAt: '2026-08-14T17:00',
-  votingStartAt: '2026-08-18T09:00',
-  votingEndAt: '2026-08-21T17:00',
-});
+const DEMO_RECORD_AGE_MS = 24 * 60 * 60_000;
+const DEMO_START_DELAY_MS = 5 * 60_000;
+const DEMO_END_DELAY_MS = 60 * 60_000;
 
-function demoSchedule() {
-  const sampleEnd = new Date(SAMPLE_DEMO_SCHEDULE.votingEndAt).getTime();
-  if (sampleEnd > Date.now() + 5 * 60_000) return { ...SAMPLE_DEMO_SCHEDULE };
-
-  const now = Date.now();
+function demoSchedule(now = Date.now()) {
   return {
-    recordDateAt: localDate(new Date(now - 10 * 60_000)),
-    votingStartAt: localDate(new Date(now + 30 * 60_000)),
-    votingEndAt: localDate(new Date(now + 3 * 24 * 60 * 60_000)),
+    recordDateAt: localDate(new Date(now - DEMO_RECORD_AGE_MS)),
+    votingStartAt: localDate(new Date(now + DEMO_START_DELAY_MS)),
+    votingEndAt: localDate(new Date(now + DEMO_END_DELAY_MS)),
   };
 }
 

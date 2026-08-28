@@ -8,6 +8,7 @@ import {
   browserPushNotificationPath,
   consumeBrowserPushBootstrap,
   listenForBrowserPushOpen,
+  restoreBrowserPushBinding,
 } from './browser-push.js';
 import { Notice } from './components/UI.jsx';
 import { useNotifications } from './notifications.jsx';
@@ -103,6 +104,10 @@ export default function App() {
   const homeRoute = location.pathname === '/' || location.pathname === '/home';
   const voteRouteActive = location.pathname.startsWith('/voting')
     || location.pathname.startsWith('/vote/');
+
+  useEffect(() => {
+    void restoreBrowserPushBinding();
+  }, []);
 
   useEffect(() => {
     const openNotification = (messageId, replace = false) => {

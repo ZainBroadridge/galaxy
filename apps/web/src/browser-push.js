@@ -200,18 +200,27 @@ async function registration() {
   return navigator.serviceWorker.ready;
 }
 
+function normalizedWalletAddress(value) {
+  return typeof value === 'string' && value ? value.toLowerCase() : null;
+}
+
 function state(walletAddress, subscription = null, extra = {}) {
   const binding = readBinding();
-  const normalizedWallet = walletAddress?.toLowerCase() ?? null;
+  const normalizedWallet = normalizedWalletAddress(walletAddress);
+  const endpointMatches = Boolean(
+    subscription
+    && binding?.endpoint === subscription.endpoint,
+  );
+
   return {
     configured: Boolean(publicKey),
     supported: supported(),
     browser: typeof navigator !== 'undefined' && navigator.brave ? 'brave' : 'chromium',
     permission: supported() ? Notification.permission : 'unsupported',
     subscribed: Boolean(subscription),
+    enabled: endpointMatches,
     enabledForWallet: Boolean(
-      subscription
-      && binding?.endpoint === subscription.endpoint
+      endpointMatches
       && binding.walletAddress === normalizedWallet,
     ),
     boundWalletAddress: binding?.walletAddress ?? null,
@@ -220,8 +229,140 @@ function state(walletAddress, subscription = null, extra = {}) {
   };
 }
 
+async function removeServerBindingEndpoint(endpoint, walletAddress) {
+  if (!endpoint || !walletAddress) return;
+  await api('/v1/communications/push-subscription', {
+    method: 'DELETE',
+    auth: false,
+    body: { walletAddress, endpoint },
+  }).catch(() => null);
+}
+
+function serializedSubscription(subscription) {
+  const serialized = subscription?.toJSON?.();
+  if (!subscription?.endpoint || !serialized?.keys?.p256dh || !serialized.keys.auth) {
+    throw browserPushError(
+      'INCOMPLETE_PUSH_SUBSCRIPTION',
+      'The browser returned an incomplete push subscription.',
+    );
+  }
+
+  return {
+    endpoint: subscription.endpoint,
+    keys: serialized.keys,
+  };
+}
+
+async function persistSubscription(subscription, walletAddress) {
+  const normalizedWallet = normalizedWalletAddress(walletAddress);
+  if (!normalizedWallet) {
+    throw new Error('A wallet address is required to persist browser notifications.');
+  }
+
+  const serialized = serializedSubscription(subscription);
+  await api('/v1/communications/push-subscription', {
+    method: 'PUT',
+    auth: false,
+    body: {
+      walletAddress: normalizedWallet,
+      subscription: serialized,
+    },
+  });
+  saveBinding({ endpoint: serialized.endpoint, walletAddress: normalizedWallet });
+}
+
+async function subscribe(currentRegistration, key) {
+  try {
+    return await currentRegistration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: key,
+    });
+  } catch (value) {
+    const error = await subscriptionError(value);
+    saveIssue({ code: error.code, message: error.message });
+    throw error;
+  }
+}
+
+async function compatibleSubscription(
+  currentRegistration,
+  key,
+  binding,
+  { createIfMissing = false } = {},
+) {
+  let subscription = await currentRegistration.pushManager.getSubscription();
+
+  if (subscription && !sameApplicationServerKey(subscription, key)) {
+    await removeServerBindingEndpoint(
+      subscription.endpoint,
+      binding?.walletAddress,
+    );
+    await subscription.unsubscribe().catch(() => null);
+    subscription = null;
+  }
+
+  if (!subscription && createIfMissing) {
+    subscription = await subscribe(currentRegistration, key);
+  }
+  return subscription;
+}
+
+/**
+ * Rebind the browser-level PushSubscription to its persisted wallet without
+ * requiring the wallet to be connected. This is safe to run at application
+ * startup because it never prompts for notification permission.
+ */
+export async function restoreBrowserPushBinding(walletAddress = null) {
+  if (!supported() || !publicKey) return state(walletAddress);
+
+  const binding = readBinding();
+  if (!binding || Notification.permission !== 'granted') {
+    return state(walletAddress);
+  }
+
+  let subscription = null;
+  try {
+    const key = applicationServerKey(publicKey);
+    const currentRegistration = await registration();
+    subscription = await compatibleSubscription(
+      currentRegistration,
+      key,
+      binding,
+      { createIfMissing: true },
+    );
+
+    if (!subscription) return state(walletAddress, null, { serviceWorkerReady: true });
+
+    if (binding.endpoint !== subscription.endpoint) {
+      await removeServerBindingEndpoint(binding.endpoint, binding.walletAddress);
+    }
+    await persistSubscription(subscription, binding.walletAddress);
+    saveIssue(null);
+    return state(walletAddress, subscription, {
+      serviceWorkerReady: true,
+      restored: true,
+    });
+  } catch (value) {
+    const issue = {
+      code: value?.code || 'PUSH_RESTORE_FAILED',
+      message: errorText(value),
+    };
+    saveIssue(issue);
+    return state(walletAddress, subscription, {
+      serviceWorkerReady: Boolean(subscription),
+      issue,
+    });
+  }
+}
+
 export async function browserPushState(walletAddress) {
   if (!supported() || !publicKey) return state(walletAddress);
+
+  const binding = readBinding();
+  if (binding && Notification.permission === 'granted') {
+    return restoreBrowserPushBinding(walletAddress);
+  }
+
   try {
     const currentRegistration = await registration();
     const subscription = await currentRegistration.pushManager.getSubscription() ?? null;
@@ -237,17 +378,9 @@ export async function browserPushState(walletAddress) {
   }
 }
 
-async function removeServerBinding(subscription, walletAddress) {
-  if (!subscription?.endpoint || !walletAddress) return;
-  await api('/v1/communications/push-subscription', {
-    method: 'DELETE',
-    auth: false,
-    body: { walletAddress, endpoint: subscription.endpoint },
-  }).catch(() => null);
-}
-
 export async function enableBrowserPush(walletAddress) {
-  if (!walletAddress) throw new Error('Connect a wallet before enabling browser notifications.');
+  const normalizedWallet = normalizedWalletAddress(walletAddress);
+  if (!normalizedWallet) throw new Error('Connect a wallet before enabling browser notifications.');
   if (!publicKey) throw new Error('Browser notifications are not configured for this deployment.');
   if (!supported()) throw new Error('This browser does not support Web Push notifications.');
 
@@ -260,53 +393,44 @@ export async function enableBrowserPush(walletAddress) {
 
   const key = applicationServerKey(publicKey);
   const currentRegistration = await registration();
-  let subscription = await currentRegistration.pushManager.getSubscription();
-
-  if (subscription && !sameApplicationServerKey(subscription, key)) {
-    const binding = readBinding();
-    await removeServerBinding(subscription, binding?.walletAddress);
-    await subscription.unsubscribe().catch(() => null);
-    saveBinding(null);
-    subscription = null;
-  }
+  const previousBinding = readBinding();
+  const subscription = await compatibleSubscription(
+    currentRegistration,
+    key,
+    previousBinding,
+    { createIfMissing: true },
+  );
 
   if (!subscription) {
-    try {
-      subscription = await currentRegistration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: key,
-      });
-    } catch (value) {
-      const error = await subscriptionError(value);
-      saveIssue({ code: error.code, message: error.message });
-      throw error;
-    }
-  }
-
-  const serialized = subscription.toJSON();
-  if (!serialized.keys?.p256dh || !serialized.keys?.auth) {
-    const error = browserPushError(
-      'INCOMPLETE_PUSH_SUBSCRIPTION',
-      'The browser returned an incomplete push subscription.',
+    throw browserPushError(
+      'PUSH_SUBSCRIPTION_FAILED',
+      'The browser did not create a push subscription.',
     );
-    saveIssue({ code: error.code, message: error.message });
-    throw error;
   }
 
-  await api('/v1/communications/push-subscription', {
-    method: 'PUT',
-    auth: false,
-    body: {
-      walletAddress,
-      subscription: {
-        endpoint: subscription.endpoint,
-        keys: serialized.keys,
-      },
-    },
-  });
-  saveBinding({ endpoint: subscription.endpoint, walletAddress: walletAddress.toLowerCase() });
+  if (previousBinding && (
+    previousBinding.walletAddress !== normalizedWallet
+    || previousBinding.endpoint !== subscription.endpoint
+  )) {
+    await removeServerBindingEndpoint(
+      previousBinding.endpoint,
+      previousBinding.walletAddress,
+    );
+  }
+
+  try {
+    await persistSubscription(subscription, normalizedWallet);
+  } catch (value) {
+    const issue = {
+      code: value?.code || 'PUSH_BINDING_FAILED',
+      message: errorText(value),
+    };
+    saveIssue(issue);
+    throw value;
+  }
+
   saveIssue(null);
-  return state(walletAddress, subscription, { serviceWorkerReady: true });
+  return state(normalizedWallet, subscription, { serviceWorkerReady: true });
 }
 
 export async function showBrowserPushClickTest(messageId) {
@@ -333,12 +457,11 @@ export async function disableBrowserPush(walletAddress) {
   const currentRegistration = await navigator.serviceWorker.getRegistration(serviceWorkerScope);
   const subscription = await currentRegistration?.pushManager.getSubscription() ?? null;
   const binding = readBinding();
-  const boundWallet = binding?.walletAddress ?? walletAddress?.toLowerCase();
+  const boundWallet = binding?.walletAddress ?? normalizedWalletAddress(walletAddress);
+  const endpoint = subscription?.endpoint ?? binding?.endpoint;
 
-  if (subscription && boundWallet) {
-    await removeServerBinding(subscription, boundWallet);
-    await subscription.unsubscribe();
-  }
+  await removeServerBindingEndpoint(endpoint, boundWallet);
+  if (subscription) await subscription.unsubscribe().catch(() => null);
   saveBinding(null);
   saveIssue(null);
   return state(walletAddress);
