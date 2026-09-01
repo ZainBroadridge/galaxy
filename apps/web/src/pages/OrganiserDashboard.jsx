@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { API_BASE_URL, api, uploadEventPdf } from '../api.js';
 import {
@@ -13,6 +13,10 @@ import {
   Status,
 } from '../components/UI.jsx';
 import { useEventLiveRefresh, useLoad } from '../hooks.js';
+import {
+  TOKEN_INSPECTION_DEBOUNCE_MS,
+  validateTokenAddressInput,
+} from '../token-address.js';
 import { useWallet } from '../wallet.jsx';
 
 const MAX_DOCUMENTS = 3;
@@ -238,6 +242,10 @@ export default function OrganiserDashboard() {
   const [documents, setDocuments] = useState([]);
   const [token, setToken] = useState(null);
   const [inspectError, setInspectError] = useState(null);
+  const [inspectNotice, setInspectNotice] = useState(null);
+  const [inspectBusy, setInspectBusy] = useState(false);
+  const inspectRequestRef = useRef(0);
+  const automaticInspectTimerRef = useRef(null);
   const [busyStage, setBusyStage] = useState('');
   const [error, setError] = useState(null);
   const [announcementAudience, setAnnouncementAudience] = useState('ELIGIBLE');
@@ -247,18 +255,78 @@ export default function OrganiserDashboard() {
     setAnnouncementAudience('ELIGIBLE');
     setError(null);
     setInspectError(null);
+    setInspectNotice(null);
   }
 
-  async function inspect() {
-    setInspectError(null);
+  const inspectTokenAddress = useCallback(async (rawValue) => {
+    const validation = validateTokenAddressInput(rawValue);
+    const requestId = inspectRequestRef.current + 1;
+    inspectRequestRef.current = requestId;
+
+    if (!validation.valid) {
+      setInspectBusy(false);
+      setToken(null);
+      setInspectNotice(null);
+      setInspectError(new Error(validation.message));
+      return null;
+    }
+
+    setInspectBusy(true);
     setToken(null);
+    setInspectError(null);
+    setInspectNotice(validation.normalizedWhitespace
+      ? 'Leading or trailing spaces were ignored before inspecting the token address.'
+      : null);
+
     try {
-      setToken(await api('/v1/tokens/inspect', {
+      const inspected = await api('/v1/tokens/inspect', {
         method: 'POST',
         auth: false,
-        body: { tokenAddress: form.tokenAddress },
-      }));
-    } catch (value) { setInspectError(value); }
+        body: { tokenAddress: validation.tokenAddress },
+      });
+      if (inspectRequestRef.current === requestId) setToken(inspected);
+      return inspected;
+    } catch (value) {
+      if (inspectRequestRef.current === requestId) setInspectError(value);
+      return null;
+    } finally {
+      if (inspectRequestRef.current === requestId) setInspectBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (automaticInspectTimerRef.current !== null) {
+      window.clearTimeout(automaticInspectTimerRef.current);
+      automaticInspectTimerRef.current = null;
+    }
+
+    inspectRequestRef.current += 1;
+    setInspectBusy(false);
+    setToken(null);
+    setInspectError(null);
+    setInspectNotice(null);
+
+    if (!creating || !form.tokenAddress.trim()) return undefined;
+
+    automaticInspectTimerRef.current = window.setTimeout(() => {
+      automaticInspectTimerRef.current = null;
+      void inspectTokenAddress(form.tokenAddress);
+    }, TOKEN_INSPECTION_DEBOUNCE_MS);
+
+    return () => {
+      if (automaticInspectTimerRef.current !== null) {
+        window.clearTimeout(automaticInspectTimerRef.current);
+        automaticInspectTimerRef.current = null;
+      }
+    };
+  }, [creating, form.tokenAddress, inspectTokenAddress]);
+
+  function inspect() {
+    if (automaticInspectTimerRef.current !== null) {
+      window.clearTimeout(automaticInspectTimerRef.current);
+      automaticInspectTimerRef.current = null;
+    }
+    void inspectTokenAddress(form.tokenAddress);
   }
 
   function chooseDocuments(event) {
@@ -278,12 +346,16 @@ export default function OrganiserDashboard() {
     setBusyStage('Creating event…');
     setError(null);
     try {
+      const tokenAddress = validateTokenAddressInput(form.tokenAddress);
+      if (!tokenAddress.valid) throw new Error(tokenAddress.message);
+
       const created = await api('/v1/events', {
         method: 'POST',
         auth: false,
         body: {
           creatorAddress: wallet.account,
           ...form,
+          tokenAddress: tokenAddress.tokenAddress,
           recordDateAt: iso(form.recordDateAt),
           votingStartAt: iso(form.votingStartAt),
           votingEndAt: iso(form.votingEndAt),
@@ -398,19 +470,20 @@ export default function OrganiserDashboard() {
             <label className="create-token-address-field">ERC-20 token address<div className="create-token-input">
               <input
                 value={form.tokenAddress}
-                onChange={(event) => {
-                  setForm({ ...form, tokenAddress: event.target.value });
-                  setToken(null);
-                  setInspectError(null);
-                }}
+                onChange={(event) => setForm({ ...form, tokenAddress: event.target.value })}
                 placeholder="0x…"
+                autoCapitalize="none"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck="false"
                 required
               />
               <button
                 type="button"
                 className="create-token-inspect-button"
                 onClick={inspect}
-                disabled={!form.tokenAddress.trim()}
+                disabled={!form.tokenAddress.trim() || inspectBusy}
+                aria-busy={inspectBusy}
                 aria-label="Inspect ERC-20 token"
                 title="Inspect ERC-20 token"
               >
@@ -428,7 +501,9 @@ export default function OrganiserDashboard() {
             /><small>Voting power = whole tokens ÷ X</small></label>
           </div>
 
-          {(token || inspectError) && <div className="create-token-feedback">
+          {(token || inspectError || inspectNotice || inspectBusy) && <div className="create-token-feedback">
+            {inspectBusy && <Notice>Inspecting token on Polygon Amoy…</Notice>}
+            {inspectNotice && <Notice>{inspectNotice}</Notice>}
             {token && <Notice tone="success">
               {token.name} ({token.symbol}), {token.decimals} decimals. Standard ERC-20 interface confirmed.
             </Notice>}

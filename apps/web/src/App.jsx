@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { useAppKit } from '@reown/appkit/react';
+import { useEffect } from 'react';
 import {
   Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate,
 } from 'react-router-dom';
@@ -19,20 +18,9 @@ import OrganiserDashboard, { OrganiserEventPage } from './pages/OrganiserDashboa
 import ResultsPage, { EventResultsPage } from './pages/ResultsPage.jsx';
 import WalletComms from './pages/WalletComms.jsx';
 
-const AMOY_CHAIN_ID = '0x13882';
 
 function shortAddress(value) {
   return value ? `${value.slice(0, 6)}…${value.slice(-4)}` : 'Connect Wallet';
-}
-
-function injectedProvider() {
-  if (typeof window === 'undefined') return null;
-  const ethereum = window.ethereum;
-  if (!ethereum) return null;
-  const providers = Array.isArray(ethereum.providers) ? ethereum.providers : [ethereum];
-  return providers.find((provider) => provider?.isMetaMask && !provider?.isBraveWallet)
-    ?? providers.find((provider) => provider?.isMetaMask)
-    ?? ethereum;
 }
 
 function SvgIcon({ children, className = '' }) {
@@ -97,10 +85,7 @@ export default function App() {
   const wallet = useWallet();
   const location = useLocation();
   const navigate = useNavigate();
-  const { open } = useAppKit();
   const { unreadCount } = useNotifications();
-  const [networkBusy, setNetworkBusy] = useState(false);
-  const [networkError, setNetworkError] = useState(null);
   const homeRoute = location.pathname === '/' || location.pathname === '/home';
   const voteRouteActive = location.pathname.startsWith('/voting')
     || location.pathname.startsWith('/vote/');
@@ -121,50 +106,13 @@ export default function App() {
   }, [navigate]);
 
   async function addOrSwitchAmoy() {
-    if (networkBusy) return;
-    setNetworkBusy(true);
-    setNetworkError(null);
     try {
-      const provider = wallet.walletProvider ?? injectedProvider();
-      if (!provider?.request) {
-        await open({ view: 'Connect', namespace: 'eip155' });
-        return;
-      }
-
-      try {
-        await provider.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: AMOY_CHAIN_ID }],
-        });
-      } catch (error) {
-        const unknownChain = error?.code === 4902
-          || String(error?.message ?? '').toLowerCase().includes('unrecognized chain');
-        if (!unknownChain) throw error;
-
-        await provider.request({
-          method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: AMOY_CHAIN_ID,
-            chainName: 'Polygon Amoy Testnet',
-            nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
-            rpcUrls: [import.meta.env.VITE_PUBLIC_RPC_URL || 'https://rpc-amoy.polygon.technology'],
-            blockExplorerUrls: [import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://amoy.polygonscan.com'],
-          }],
-        });
-        await provider.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x13882' }],
-        });
-      }
+      await wallet.ensureAmoy();
     } catch (error) {
-      if (error?.code !== 4001) setNetworkError(error);
-    } finally {
-      setNetworkBusy(false);
+      if (error?.code === 'WALLET_PROVIDER_UNAVAILABLE') {
+        await wallet.openWallet();
+      }
     }
-  }
-
-  function openWallet() {
-    open({ view: wallet.connected ? 'Account' : 'Connect', namespace: 'eip155' });
   }
 
   return <div className={`app-shell pv-shell${homeRoute ? ' pv-shell-home' : ''}`}>
@@ -217,7 +165,7 @@ export default function App() {
           <button
             className={`wallet-control${wallet.connected ? ' connected' : ''}`}
             type="button"
-            onClick={openWallet}
+            onClick={wallet.openWallet}
             aria-label={wallet.connected ? `Open wallet ${shortAddress(wallet.account)}` : 'Connect wallet'}
           >
             <WalletIcon />
@@ -231,7 +179,7 @@ export default function App() {
     <main className="app-content pv-content">
       <div className="pv-system-notices">
         {!reownConfigured && <Notice tone="warning">Set <code>VITE_REOWN_PROJECT_ID</code> before deployment.</Notice>}
-        {networkError && <Notice tone="error">{networkError.message || 'Unable to add Polygon Amoy to this wallet.'}</Notice>}
+        {wallet.networkError && <Notice tone="error">{wallet.networkError.message}</Notice>}
       </div>
       <Routes>
         <Route path="/" element={<HomePage />} />
@@ -260,18 +208,19 @@ export default function App() {
 
     {homeRoute && <div className="pv-add-network-wrap">
       <button
-        className={`pv-add-network${networkBusy ? ' is-busy' : ''}`}
+        className={`pv-add-network${wallet.networkBusy ? ' is-busy' : ''}`}
         type="button"
         onClick={addOrSwitchAmoy}
-        disabled={networkBusy}
+        disabled={wallet.networkBusy}
         aria-describedby="pv-test-network-tooltip"
-        aria-label="Add Polygon Amoy test network"
+        aria-label="Add or switch to Polygon Amoy test network"
+        title="Add or switch to Polygon Amoy"
       >
         <PlusIcon />
       </button>
       <div id="pv-test-network-tooltip" className="pv-network-tooltip" role="tooltip">
-        <strong>Add test network</strong>
-        <span>You are adding Polygon Amoy, a test network, to your wallet.</span>
+        <strong>Add or switch network</strong>
+        <span>Configure Polygon Amoy in your wallet using chain ID 80002.</span>
       </div>
     </div>}
   </div>;

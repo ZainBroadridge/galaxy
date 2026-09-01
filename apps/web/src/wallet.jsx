@@ -9,9 +9,15 @@ import {
 } from 'react';
 import { useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react';
 import { BrowserProvider } from 'ethers';
+import {
+  canDeferNetworkSetupUntilConnected,
+  ensureAmoyNetwork,
+  friendlyAmoyError,
+  injectedEvmProvider,
+  walletProviderUnavailableError,
+} from './amoy-network.js';
 
 const WalletContext = createContext(null);
-const AMOY_HEX = '0x13882';
 const TRANSIENT_DISCONNECT_GRACE_MS = 3_000;
 
 function normalizedAccount(value) {
@@ -95,35 +101,58 @@ export function WalletProvider({ children }) {
     walletProvider: providerState.walletProvider,
   });
   const { account, connected, walletProvider } = connection;
+  const [networkBusy, setNetworkBusy] = useState(false);
+  const [networkError, setNetworkError] = useState(null);
+  const networkOperationRef = useRef(null);
+  const automaticNetworkRef = useRef({ account: null, provider: null });
 
-  const ensureAmoy = useCallback(async () => {
-    if (!walletProvider?.request) throw new Error('Connect an EVM wallet first.');
-    const current = await walletProvider.request({ method: 'eth_chainId' });
-    if (String(current).toLowerCase() === AMOY_HEX) return;
+  const configureAmoy = useCallback(async (
+    providerOverride = null,
+    { allowUntilConnected = false } = {},
+  ) => {
+    const provider = providerOverride ?? walletProvider ?? injectedEvmProvider();
+    if (!provider?.request) throw walletProviderUnavailableError();
+    if (networkOperationRef.current) return networkOperationRef.current;
 
+    setNetworkBusy(true);
+    setNetworkError(null);
+
+    const operation = (async () => {
+      try {
+        return await ensureAmoyNetwork(provider);
+      } catch (error) {
+        if (allowUntilConnected && canDeferNetworkSetupUntilConnected(error)) {
+          return { deferred: true };
+        }
+        const friendly = friendlyAmoyError(error);
+        setNetworkError(friendly);
+        throw friendly;
+      }
+    })();
+
+    networkOperationRef.current = operation;
     try {
-      await walletProvider.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: AMOY_HEX }],
-      });
-    } catch (error) {
-      if (error.code !== 4902) throw error;
-      await walletProvider.request({
-        method: 'wallet_addEthereumChain',
-        params: [{
-          chainId: AMOY_HEX,
-          chainName: 'Amoy',
-          nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
-          rpcUrls: [import.meta.env.VITE_PUBLIC_RPC_URL || 'https://rpc-amoy.polygon.technology'],
-          blockExplorerUrls: [import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://amoy.polygonscan.com'],
-        }],
-      });
-      await walletProvider.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: AMOY_HEX }],
-      });
+      return await operation;
+    } finally {
+      if (networkOperationRef.current === operation) networkOperationRef.current = null;
+      setNetworkBusy(false);
     }
   }, [walletProvider]);
+
+  // A new AppKit connection can expose its provider a moment after the account.
+  // Configure Amoy once both are stable, without prompting repeatedly if the
+  // user deliberately declines the network request.
+  useEffect(() => {
+    if (!connected || !account || !walletProvider?.request) {
+      if (!connected) automaticNetworkRef.current = { account: null, provider: null };
+      return;
+    }
+
+    const previous = automaticNetworkRef.current;
+    if (previous.account === account && previous.provider === walletProvider) return;
+    automaticNetworkRef.current = { account, provider: walletProvider };
+    void configureAmoy(walletProvider).catch(() => {});
+  }, [account, configureAmoy, connected, walletProvider]);
 
   // This is deliberately the only wallet-signing capability exposed by the
   // application. It is called only when the voter submits the final ballot.
@@ -132,7 +161,7 @@ export function WalletProvider({ children }) {
       throw new Error('Connect your wallet before signing the ballot.');
     }
 
-    await ensureAmoy();
+    await configureAmoy(walletProvider);
     const signer = await new BrowserProvider(walletProvider, 'any').getSigner(account);
     const signerAddress = (await signer.getAddress()).toLowerCase();
     if (signerAddress !== account) {
@@ -140,12 +169,46 @@ export function WalletProvider({ children }) {
     }
 
     return signer.signTypedData(typedData.domain, typedData.types, typedData.message);
-  }, [account, connected, ensureAmoy, walletProvider]);
+  }, [account, configureAmoy, connected, walletProvider]);
 
-  const openWallet = useCallback(() => open({
-    view: connected ? 'Account' : 'Connect',
-    namespace: 'eip155',
-  }), [connected, open]);
+  const openWallet = useCallback(async () => {
+    if (connected) {
+      try {
+        await open({ view: 'Account', namespace: 'eip155' });
+      } catch (error) {
+        const friendly = new Error(
+          String(error?.message ?? '').trim() || 'Unable to open the wallet account window.',
+        );
+        friendly.code = 'WALLET_CONNECTION_FAILED';
+        setNetworkError(friendly);
+      }
+      return;
+    }
+
+    // MetaMask can add/switch a chain before account permission is granted.
+    // Doing this first prevents AppKit from declining a new connection merely
+    // because Polygon Amoy is not yet present in the wallet.
+    const injected = injectedEvmProvider();
+    if (injected?.request) {
+      try {
+        await configureAmoy(injected, { allowUntilConnected: true });
+      } catch {
+        return;
+      }
+    }
+
+    try {
+      await open({ view: 'Connect', namespace: 'eip155' });
+    } catch (error) {
+      const friendly = new Error(
+        String(error?.message ?? '').trim() || 'Unable to open the wallet connection window.',
+      );
+      friendly.code = 'WALLET_CONNECTION_FAILED';
+      setNetworkError(friendly);
+    }
+  }, [configureAmoy, connected, open]);
+
+  const ensureAmoy = useCallback(async () => configureAmoy(), [configureAmoy]);
 
   const value = useMemo(() => ({
     account,
@@ -153,11 +216,17 @@ export function WalletProvider({ children }) {
     reconnecting: connection.reconnecting,
     openWallet,
     signBallot,
+    ensureAmoy,
+    networkBusy,
+    networkError,
     walletProvider,
   }), [
     account,
     connected,
     connection.reconnecting,
+    ensureAmoy,
+    networkBusy,
+    networkError,
     openWallet,
     signBallot,
     walletProvider,
