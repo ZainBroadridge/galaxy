@@ -109,5 +109,6 @@ test('create event retains manual inspection and adds debounced automatic inspec
   assert.match(organiser, /onClick=\{inspect\}/u);
   assert.match(organiser, /body: \{ tokenAddress: validation\.tokenAddress \}/u);
   assert.match(organiser, /tokenAddress: tokenAddress\.tokenAddress/u);
-  assert.match(organiser, /Leading or trailing spaces were ignored/u);
+  assert.doesNotMatch(organiser, /Leading or trailing spaces were ignored/u);
+  assert.doesNotMatch(organiser, /inspectNotice|setInspectNotice/u);
 });

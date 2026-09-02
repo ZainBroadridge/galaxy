@@ -242,7 +242,6 @@ export default function OrganiserDashboard() {
   const [documents, setDocuments] = useState([]);
   const [token, setToken] = useState(null);
   const [inspectError, setInspectError] = useState(null);
-  const [inspectNotice, setInspectNotice] = useState(null);
   const [inspectBusy, setInspectBusy] = useState(false);
   const inspectRequestRef = useRef(0);
   const automaticInspectTimerRef = useRef(null);
@@ -255,7 +254,6 @@ export default function OrganiserDashboard() {
     setAnnouncementAudience('ELIGIBLE');
     setError(null);
     setInspectError(null);
-    setInspectNotice(null);
   }
 
   const inspectTokenAddress = useCallback(async (rawValue) => {
@@ -266,7 +264,6 @@ export default function OrganiserDashboard() {
     if (!validation.valid) {
       setInspectBusy(false);
       setToken(null);
-      setInspectNotice(null);
       setInspectError(new Error(validation.message));
       return null;
     }
@@ -274,9 +271,6 @@ export default function OrganiserDashboard() {
     setInspectBusy(true);
     setToken(null);
     setInspectError(null);
-    setInspectNotice(validation.normalizedWhitespace
-      ? 'Leading or trailing spaces were ignored before inspecting the token address.'
-      : null);
 
     try {
       const inspected = await api('/v1/tokens/inspect', {
@@ -304,7 +298,6 @@ export default function OrganiserDashboard() {
     setInspectBusy(false);
     setToken(null);
     setInspectError(null);
-    setInspectNotice(null);
 
     if (!creating || !form.tokenAddress.trim()) return undefined;
 
@@ -501,9 +494,8 @@ export default function OrganiserDashboard() {
             /><small>Voting power = whole tokens ÷ X</small></label>
           </div>
 
-          {(token || inspectError || inspectNotice || inspectBusy) && <div className="create-token-feedback">
+          {(token || inspectError || inspectBusy) && <div className="create-token-feedback">
             {inspectBusy && <Notice>Inspecting token on Polygon Amoy…</Notice>}
-            {inspectNotice && <Notice>{inspectNotice}</Notice>}
             {token && <Notice tone="success">
               {token.name} ({token.symbol}), {token.decimals} decimals. Standard ERC-20 interface confirmed.
             </Notice>}
