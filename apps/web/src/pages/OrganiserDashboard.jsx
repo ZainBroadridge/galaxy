@@ -491,7 +491,7 @@ export default function OrganiserDashboard() {
               value={form.tokenToVoteRatio}
               onChange={(event) => setForm({ ...form, tokenToVoteRatio: event.target.value })}
               required
-            /><small>Voting power = whole tokens ÷ X</small></label>
+            /></label>
           </div>
 
           {(token || inspectError || inspectBusy) && <div className="create-token-feedback">
