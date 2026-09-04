@@ -2997,15 +2997,32 @@ a:hover { color: var(--blue-hover); }
 }
 
 /* Home-only add-network action. */
-.pv-add-network-wrap {
+  .pv-add-network-wrap {
   position: fixed;
   right: 24px;
   left: auto;
   bottom: calc(var(--pv-footer-height) + 12px);
   z-index: 80;
-}
-
-.pv-add-network {
+  }
+  
+  .pv-add-network-wrap::before,
+  .pv-add-network-wrap::after {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border: 1px solid rgba(19, 67, 199, .34);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: pv-network-radiate 2.8s ease-out infinite;
+  }
+  
+  .pv-add-network-wrap::after {
+  animation-delay: 1.4s;
+  }
+  
+  .pv-add-network {
+  position: relative;
+  z-index: 1;
   width: 50px;
   height: 50px;
   padding: 0;
@@ -3049,9 +3066,13 @@ a:hover { color: var(--blue-hover); }
   stroke-linecap: round;
 }
 
-@keyframes pv-network-spin { to { transform: rotate(1turn); } }
-
-.pv-network-tooltip {
+  @keyframes pv-network-spin { to { transform: rotate(1turn); } }
+  @keyframes pv-network-radiate {
+  0% { opacity: .7; transform: scale(.78); }
+  70%, 100% { opacity: 0; transform: scale(1.55); }
+  }
+  
+  .pv-network-tooltip {
   position: absolute;
   right: calc(100% + 11px);
   left: auto;
@@ -3123,8 +3144,10 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(0, 70, 213, .1);
 }
 
-@media (prefers-reduced-motion: reduce) {
+  @media (prefers-reduced-motion: reduce) {
   .home-rotating-heading,
+  .pv-add-network-wrap::before,
+  .pv-add-network-wrap::after,
   .pv-add-network.is-busy svg { animation: none; }
 
   .pv-primary-nav a,
