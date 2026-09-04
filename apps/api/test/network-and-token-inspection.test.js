@@ -85,7 +85,7 @@ test('token address validation trims edge whitespace and explains malformed inpu
   assert.match(incomplete.message, /42 characters/u);
 });
 
-test('wallet connection configures Amoy before and after a new AppKit connection', async () => {
+test('wallet connection configures Amoy without a duplicate add-network control', async () => {
   const [wallet, app] = await Promise.all([
     read('apps/web/src/wallet.jsx'),
     read('apps/web/src/App.jsx'),
@@ -97,7 +97,8 @@ test('wallet connection configures Amoy before and after a new AppKit connection
   assert.match(wallet, /void configureAmoy\(walletProvider\)\.catch/u);
   assert.match(wallet, /networkBusy/u);
   assert.match(wallet, /networkError/u);
-  assert.match(app, /await wallet\.ensureAmoy\(\)/u);
+  assert.match(app, /onClick=\{wallet\.openWallet\}/u);
+  assert.doesNotMatch(app, /pv-add-network|PlusIcon|addOrSwitchAmoy/u);
   assert.doesNotMatch(app, /wallet_addEthereumChain/u);
 });
 

@@ -73,10 +73,6 @@ function OrganiserIcon() {
   </SvgIcon>;
 }
 
-function PlusIcon() {
-  return <SvgIcon><path d="M12 4v16M4 12h16" /></SvgIcon>;
-}
-
 function navClass(active) {
   return active ? 'active' : undefined;
 }
@@ -104,16 +100,6 @@ export default function App() {
 
     return listenForBrowserPushOpen((messageId) => openNotification(messageId));
   }, [navigate]);
-
-  async function addOrSwitchAmoy() {
-    try {
-      await wallet.ensureAmoy();
-    } catch (error) {
-      if (error?.code === 'WALLET_PROVIDER_UNAVAILABLE') {
-        await wallet.openWallet();
-      }
-    }
-  }
 
   return <div className={`app-shell pv-shell${homeRoute ? ' pv-shell-home' : ''}`}>
     <header className="topbar pv-topbar">
@@ -205,23 +191,5 @@ export default function App() {
         <span className="footer-copyright">© 2026 Broadridge Financial Solutions, Inc. All rights reserved.</span>
       </div>
     </footer>
-
-    {homeRoute && <div className="pv-add-network-wrap">
-      <button
-        className={`pv-add-network${wallet.networkBusy ? ' is-busy' : ''}`}
-        type="button"
-        onClick={addOrSwitchAmoy}
-        disabled={wallet.networkBusy}
-        aria-describedby="pv-test-network-tooltip"
-        aria-label="Add or switch to Polygon Amoy test network"
-        title="Add or switch to Polygon Amoy"
-      >
-        <PlusIcon />
-      </button>
-      <div id="pv-test-network-tooltip" className="pv-network-tooltip" role="tooltip">
-        <strong>Add or switch network</strong>
-        <span>Configure Polygon Amoy in your wallet using chain ID 80002.</span>
-      </div>
-    </div>}
   </div>;
 }

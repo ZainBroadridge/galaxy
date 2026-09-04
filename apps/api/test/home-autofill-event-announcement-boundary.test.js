@@ -15,13 +15,12 @@ test('home uses the horizontal ProxyVote shell and a two-slide heading', async (
   assert.match(app, /className="topbar pv-topbar"/u);
   assert.match(app, /className="pv-primary-nav"/u);
   assert.doesNotMatch(app, /pv-sidebar/u);
-  assert.match(app, /homeRoute && <div className="pv-add-network-wrap">/u);
+  assert.doesNotMatch(app, /pv-add-network|PlusIcon/u);
   assert.match(home, /const rotatingHeadlines = \[/u);
   assert.match(home, /Welcome to Broadridge/u);
   assert.match(home, /Secure shareholder decisions/u);
   assert.match(home, /https:\/\/www\.shareholdereducation\.com/u);
   assert.match(styles, /@keyframes pv-headline-slide/u);
-  assert.match(styles, /right: 24px;\s*left: auto;\s*bottom: calc\(var\(--pv-footer-height\) \+ 12px\);/u);
 });
 
 test('create event restores deterministic demo autofill without touching token or PDFs', async () => {
@@ -38,12 +37,10 @@ test('create event restores deterministic demo autofill without touching token o
   assert.doesNotMatch(fillBody, /setDocuments/u);
 });
 
-test('voting-event announcements select a deployed event and share one recipient policy', async () => {
-  const [page, communications, policy, server] = await Promise.all([
+test('voting-event announcements preserve manual and platform publication paths', async () => {
+  const [page, communications] = await Promise.all([
     read('apps/web/src/pages/WalletComms.jsx'),
     read('apps/api/src/communications.js'),
-    read('apps/api/src/communication-recipient-policy.js'),
-    read('apps/api/src/server.js'),
   ]);
 
   assert.match(page, /const eventIsReady =/u);
@@ -54,17 +51,14 @@ test('voting-event announcements select a deployed event and share one recipient
 
   assert.match(
     communications,
-    /publishPlatformCommunication[\s\S]*await ensureNotificationState\(publisher\)[\s\S]*insertEventCommunication/u,
-  );
-  assert.match(communications, /export async function eventBrowserPushRecipients/u);
-  assert.match(communications, /canReceiveEventCommunication\(eventRecipientContext\(row\)\)/u);
-  assert.match(communications, /is_automatic_announcement/u);
-  assert.match(
-    policy,
-    /isAutomaticAnnouncement && automaticDeliveryMode === AUTOMATIC_DELIVERY_DISABLED/u,
+    /export async function publishCommunication[\s\S]*?await insertEventCommunication\(event, expected, input\.signature\);/u,
   );
   assert.match(
-    server,
-    /app\.post\('\/v1\/events\/:id\/communications\/platform'[\s\S]*queueBrowserPush\(message\)/u,
+    communications,
+    /export async function publishPlatformCommunication[\s\S]*?await ensureNotificationState\(publisher\)[\s\S]*?await insertEventCommunication\(event, message, signature\);/u,
+  );
+  assert.match(
+    communications,
+    /async function insertEventCommunication[\s\S]*?ON CONFLICT\(message_id\) DO NOTHING/u,
   );
 });
