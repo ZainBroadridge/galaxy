@@ -4,6 +4,11 @@ import { ballotTypedData } from '@pv/shared';
 import { API_BASE_URL, api } from '../api.js';
 import { useEventLiveRefresh, useEventPolling, useLoad } from '../hooks.js';
 import { useWallet } from '../wallet.jsx';
+import BackLink from '../components/BackLink.jsx';
+import ResourceSkeleton from '../components/ResourceSkeleton.jsx';
+import { useInvestorData, useInvestorResource } from './InvestorData.jsx';
+import { useDeadlineClock } from '../data/useDeadlineClock.js';
+import { meetingLifecycle } from './meeting-utils.js';
 import { useInvestorSession } from './InvestorSession.jsx';
 import { ArrowIcon, DocumentIcon, ErrorMessage, InvestorFrame, MeetingIdentity, StandingDisclosure } from './InvestorFrame.jsx';
 import { boardRecommendedChoices, completeChoices, displayDate, displayHolding } from './meeting-utils.js';
@@ -11,17 +16,16 @@ import { boardRecommendedChoices, completeChoices, displayDate, displayHolding }
 export function EventDocuments({ event }) {
   if (!event.documents?.length) return null;
   return <section className="investor-documents" aria-labelledby="review-documents-heading">
-    <h2 id="review-documents-heading">Documents to Review Before You Vote: <Link className="investor-help-link" to="/education" aria-label="Learn about proxy voting documents">?</Link></h2>
+    <h2 id="review-documents-heading"><span>Documents to Review Before You Vote:</span> <Link className="investor-help-link" to="/education" aria-label="Learn about proxy voting documents"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 9a3 3 0 0 1 6 0c0 2-3 2-3 5" /><circle cx="12" cy="18" r="1" /></svg></Link></h2>
     <div className="investor-document-grid" data-count={event.documents.length}>{event.documents.map((document) => <a key={document.id}
       href={`${API_BASE_URL}/v1/events/${event.id}/documents/${document.id}`} target="_blank" rel="noopener noreferrer">
-      <DocumentIcon /><span>{document.fileName}<small>PDF &middot; {document.pageCount} page{document.pageCount === 1 ? '' : 's'}</small></span><ArrowIcon />
+      <DocumentIcon /><span>{document.fileName}<small>PDF - {document.pageCount} page{document.pageCount === 1 ? '' : 's'}</small></span><ArrowIcon />
     </a>)}</div>
   </section>;
 }
 
 export function useInvestorEvent(eventId) {
-  const { session } = useInvestorSession();
-  const view = useLoad(() => api(`/v1/investor/events/${eventId}`, { issuerAuth: false }), [eventId, session.walletAddress]);
+  const view = useInvestorResource(`event:${eventId}`);
   const active = ['QUEUED', 'SUBMITTED'].includes(view.data?.vote?.status) || ['PENDING', 'RUNNING'].includes(view.data?.job?.status);
   useEventLiveRefresh(view.refresh, eventId, active);
   useEventPolling(view.refresh, !active, 10_000);
@@ -34,18 +38,19 @@ export default function BallotPage() {
   const wallet = useWallet();
   const { session } = useInvestorSession();
   const view = useInvestorEvent(eventId);
+  const { acceptedVote } = useInvestorData();
   const event = view.data;
   const holdings = useLoad(() => api(`/v1/investor/events/${eventId}/holding`, { issuerAuth: false }), [eventId, session.walletAddress]);
   const [choices, setChoices] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
-  const [now, setNow] = useState(Date.now);
+  const now = useDeadlineClock(event?.votingStartAt, event?.votingEndAt);
+  const lifecycle = meetingLifecycle(event, now);
   const submitRowRef = useRef(null);
   const inFlight = useRef(false);
   const activeWallet = useRef(wallet.account);
   activeWallet.current = wallet.account;
   useEffect(() => { setChoices(event?.proposals?.map(() => null) ?? []); }, [event?.metadataHash, eventId, session.walletAddress]);
-  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   useEffect(() => {
     if (event?.vote && event.vote.status !== 'FAILED') navigate(`/vote/${eventId}/confirmation`, { replace: true });
   }, [event?.vote?.status, eventId, navigate]);
@@ -70,7 +75,12 @@ export default function BallotPage() {
     inFlight.current = true; setSubmitting(true); setError(null);
     const voter = session.walletAddress;
     try {
-      if (!wallet.connected || wallet.account !== voter) throw new Error('Connect the signed-in investor wallet before submitting this ballot.');
+      if (!wallet.connected) {
+        // Reconnect through the existing Submit action; never sign while disconnected.
+        await wallet.openWallet();
+        return;
+      }
+      if (wallet.account !== voter) throw new Error('Connect the signed-in investor wallet before submitting this ballot.');
       const ballot = await api(`/v1/investor/events/${eventId}/ballot`, { issuerAuth: false });
       if (ballot.alreadyVoted) { navigate(`/vote/${eventId}/confirmation`, { replace: true }); return; }
       if (ballot.metadataHash !== event.metadataHash || ballot.contractAddress !== event.contractAddress) {
@@ -80,21 +90,22 @@ export default function BallotPage() {
         voter, choices, proposals: ballot.proposals, ballotVersion: ballot.ballotVersion });
       const signature = await wallet.signBallot(typed);
       if (activeWallet.current !== voter) throw new Error('Your wallet account changed while signing. Sign in again before voting.');
-      await api(`/v1/investor/events/${eventId}/votes`, { method: 'POST', issuerAuth: false,
+      const vote = await api(`/v1/investor/events/${eventId}/votes`, { method: 'POST', issuerAuth: false,
         body: { voterAddress: voter, choices, signature } });
+      acceptedVote(eventId, vote);
       navigate(`/vote/${eventId}/confirmation`, { replace: true });
     } catch (value) { setError(value); }
     finally { inFlight.current = false; setSubmitting(false); }
   }
 
   return <InvestorFrame event={event} hideNavigation><div className="investor-page-width investor-ballot-page">
-    <Link className="investor-back" to="/meetings?tab=active">Back to my meetings</Link>
+    <BackLink to="/meetings?tab=active">Back to my meetings</BackLink>
     <ErrorMessage error={view.error} />
-    {view.loading && <p role="status">Loading your meeting...</p>}
+    {view.loading && <ResourceSkeleton label="Loading meeting" rows={2} />}
     {event && <>
       <MeetingIdentity event={event} />
-      <div className="investor-ballot-status"><h2>Meeting Agenda</h2><strong>{event.status === 'CLOSED' ? 'Voting closed' : event.status === 'SCHEDULED' ? 'Voting scheduled' : 'Not Voted'}</strong>
-        <p>{event.status === 'SCHEDULED' ? `Voting opens ${displayDate(event.votingStartAt)}` : `Vote by ${displayDate(event.votingEndAt)}`}</p></div>
+      <div className="investor-ballot-status"><strong>{lifecycle === 'CLOSED' ? 'Voting closed' : lifecycle === 'SCHEDULED' ? 'Voting scheduled' : 'Not Voted'}</strong>
+        <p>{lifecycle === 'SCHEDULED' ? `Voting opens ${displayDate(event.votingStartAt)}` : `Vote by ${displayDate(event.votingEndAt)}`}</p></div>
       <EventDocuments event={event} />
       {event.eligibility.onChainOnly && <p className="investor-info-note">This wallet has already voted on-chain. The service has not indexed a local receipt for that transaction yet. Voting again is disabled.</p>}
       {!event.metadataIntegrity && <ErrorMessage error={new Error('The proposal details failed their integrity check. Voting is disabled.')} />}
@@ -109,18 +120,17 @@ export default function BallotPage() {
             <span>Tokens held at record date: <strong>{displayHolding(event.eligibility.snapshotBalance, event.tokenDecimals)} {event.tokenSymbol}</strong></span>
             <span>Current tokens held: <strong>{holdings.loading ? 'Loading...' : holdings.error ? 'Unavailable' : `${displayHolding(holdings.data?.rawBalance, event.tokenDecimals)} ${event.tokenSymbol}`}</strong>
               {holdings.error && <button type="button" className="investor-text-button" onClick={() => void holdings.reload().catch(() => {})}>Retry</button>}</span>
-            <small>Current holdings do not change record-date eligibility.{holdings.data && ` Current balance at block ${holdings.data.blockNumber}.`}</small>
           </div>
           {event.proposals.map((proposal, proposalIndex) => <fieldset className="investor-proposal" key={`${event.metadataHash}-${proposalIndex}`} disabled={submitting || !canVote}>
             <legend className="investor-sr-only">{proposalIndex + 1}. {proposal.title}</legend>
-            <div className="investor-proposal-copy"><h3>{proposalIndex + 1}. {proposal.title}</h3>
+            <div className="investor-proposal-row"><div className="investor-proposal-copy"><h3>{proposalIndex + 1}. {proposal.title}</h3>
               <p>Board Recommendation: <strong>{Number.isInteger(proposal.recommendation) ? proposal.options[proposal.recommendation]?.text ?? 'None' : 'None'}</strong></p>
               {proposal.description && <details><summary>More Details</summary><p>{proposal.description}</p></details>}</div>
-            <div className="investor-options">{proposal.options.map((option, optionIndex) => <label key={optionIndex}>
+            <div className="investor-options" data-count={proposal.options.length}>{proposal.options.map((option, optionIndex) => <label key={optionIndex}>
               <input type="radio" name={`proposal-${proposalIndex}`} value={optionIndex} checked={choices[proposalIndex] === optionIndex}
                 onChange={() => setChoices((current) => current.map((value, index) => index === proposalIndex ? optionIndex : value))} />
               <span>{option.text}</span>
-            </label>)}</div>
+            </label>)}</div></div>
           </fieldset>)}
         </section>
         <div className="investor-submit-row" ref={submitRowRef} tabIndex={-1}>
@@ -131,7 +141,6 @@ export default function BallotPage() {
               {submitting ? 'Review and sign in your wallet...' : 'Submit Vote'}<ArrowIcon /></button></div>
         </div>
         <ErrorMessage error={error} />
-        {!wallet.connected && canVote && <button className="inv-button secondary" type="button" onClick={wallet.openWallet}>Reconnect your investor wallet</button>}
         <p className="investor-vote-note">Select one option for every proposal. Nothing is submitted by Reset All or Vote with Board.
           Your final signature authorizes this ballot; your wallet address and choices will be public on-chain.</p>
       </form><StandingDisclosure />

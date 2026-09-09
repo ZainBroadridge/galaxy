@@ -75,7 +75,7 @@ test('document counts, compact board control and broadcast spinner are explicit 
 });
 test('issuer autocomplete, accessible exit, required fields and demo action have bounded scope', async () => {
   const [autocomplete, layout, organiser, gate, home] = await Promise.all([
-    read('apps/web/src/issuer/IssuerAutocomplete.jsx'), read('apps/web/src/issuer/IssuerLayout.jsx'),
+    read('apps/web/src/components/FuzzyCombobox.jsx'), read('apps/web/src/issuer/IssuerLayout.jsx'),
     read('apps/web/src/pages/OrganiserDashboard.jsx'), read('apps/web/src/issuer/IssuerSession.jsx'), read('apps/web/src/pages/HomePage.jsx'),
   ]);
   assert.match(autocomplete, /role="combobox"/u); assert.match(autocomplete, /aria-activedescendant/u);

@@ -1,3 +1,4 @@
+import BackLink from '../components/BackLink.jsx';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
@@ -132,6 +133,7 @@ export default function HomePage() {
   const [headlineTop, headlineBottom] = rotatingHeadlines[headlineIndex];
 
   return <main className="home-page pv-home-page">
+    <div className="issuer-home-back"><BackLink to="/?welcome=1">Back to investor welcome</BackLink></div>
     <section className="home-hero" aria-labelledby="home-hero-heading">
       <div className="home-hero-inner">
         <div className="home-heading-stage" aria-live="polite" aria-atomic="true">

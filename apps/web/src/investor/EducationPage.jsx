@@ -1,4 +1,6 @@
 import { useEffect } from 'react';
+import BackLink from '../components/BackLink.jsx';
+import { useInvestorSession } from './InvestorSession.jsx';
 import { useLocation } from 'react-router-dom';
 import { InvestorFrame } from './InvestorFrame.jsx';
 import { EDUCATION_INTRO, EDUCATION_SECTIONS, SHAREHOLDER_EDUCATION_URL } from './education-content.js';
@@ -8,6 +10,7 @@ function EducationLink({ link }) {
 }
 export default function EducationPage() {
   const { hash } = useLocation();
+  const { session } = useInvestorSession();
   useEffect(() => {
     if (!hash) return;
     const target = document.getElementById(hash.slice(1));
@@ -15,6 +18,7 @@ export default function EducationPage() {
     target?.scrollIntoView({ block: 'start' });
   }, [hash]);
   return <InvestorFrame><article className="investor-education investor-page-width">
+    <BackLink to={session ? "/meetings?tab=active" : "/"}>{session ? "Back to my meetings" : "Back to sign-in"}</BackLink>
     <h1>Investor Education</h1><p className="investor-education-intro">{EDUCATION_INTRO}</p>
     <aside className="investor-info-note">This is a Polygon Amoy demonstration. The background material below comes from the supplied product prototype;
       an issuer name, logo or platform tag shown in a demo does not establish a live partnership or legal voting right. Review the issuer's actual documents.</aside>

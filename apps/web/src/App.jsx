@@ -10,6 +10,7 @@ import NotificationsPage from './investor/NotificationsPage.jsx';
 import { RequireInvestor } from './investor/InvestorSession.jsx';
 import { IssuerLogin, RequireIssuer } from './issuer/IssuerSession.jsx';
 import IssuerLayout from './issuer/IssuerLayout.jsx';
+import SiteFooter from './components/SiteFooter.jsx';
 import HomePage from './pages/HomePage.jsx';
 import OrganiserDashboard, { OrganiserEventPage } from './pages/OrganiserDashboard.jsx';
 import ResultsPage, { EventResultsPage } from './pages/ResultsPage.jsx';
@@ -27,7 +28,7 @@ export default function App() {
   }, [navigate]);
   useEffect(() => { if (!location.hash) window.scrollTo({ top: 0, behavior: 'auto' }); }, [location.pathname]);
 
-  return <Routes>
+  return <div className="portal-root"><Routes>
     <Route path="/" element={<LandingPage />} />
     <Route path="/login" element={<LandingPage />} />
     <Route path="/education" element={<EducationPage />} />
@@ -52,5 +53,5 @@ export default function App() {
       </Route>
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />
-  </Routes>;
+  </Routes><SiteFooter /></div>;
 }

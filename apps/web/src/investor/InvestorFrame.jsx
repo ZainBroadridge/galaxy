@@ -26,17 +26,6 @@ export function DocumentIcon() {
 export function ErrorMessage({ error }) {
   return error ? <p className="investor-error" role="alert">{error.message || String(error)}</p> : null;
 }
-export function InvestorFooter() {
-  return <footer className="investor-footer">
-    <div><p>&copy; 2026 Broadridge Financial Solutions, Inc. ProxyVote and Broadridge are registered trademarks of Broadridge Financial Solutions, Inc.</p>
-      <p>Testnet prototype. All other trademarks belong to their respective owners.</p></div>
-    <nav aria-label="Legal information">
-      <a href="https://www.broadridge.com/legal/accessibility" target="_blank" rel="noopener noreferrer">Accessibility Statement</a>
-      <a href="https://www.broadridge.com/legal/privacy-statement-english" target="_blank" rel="noopener noreferrer">Privacy Statement</a>
-      <a href="https://www.broadridge.com/legal/terms-of-use" target="_blank" rel="noopener noreferrer">Terms of Use &amp; Linking Policy</a>
-    </nav>
-  </footer>;
-}
 function PlatformLogo({ presentation }) {
   const [failed, setFailed] = useState(null);
   const src = presentation.platformLogo;
@@ -73,7 +62,6 @@ export function InvestorFrame({ children, event, hideNavigation = false }) {
       {!session && <Link to="/">Sign in</Link>}
     </nav>}
     <main id="investor-main" className="investor-main">{children}</main>
-    <InvestorFooter />
   </div>;
 }
 

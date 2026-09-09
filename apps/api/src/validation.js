@@ -6,6 +6,7 @@ import {
   COMMUNICATION_CATEGORY,
   DISCOVERY_MODE,
   MAX_OPTIONS,
+  MAX_OPTION_LABEL_LENGTH,
   MAX_PROPOSALS,
   MIN_OPTIONS,
   SNAP_DELIVERY_MODE,
@@ -17,7 +18,7 @@ const signature = z.string().regex(/^0x[0-9a-fA-F]+$/);
 const proposal = z.object({
   title: z.string().trim().min(1).max(220),
   description: z.string().trim().max(5000).default(''),
-  options: z.array(z.string().trim().min(1).max(180)).min(MIN_OPTIONS).max(MAX_OPTIONS),
+  options: z.array(z.string().trim().min(1).max(MAX_OPTION_LABEL_LENGTH, 'Option labels must be 80 characters or fewer.')).min(MIN_OPTIONS).max(MAX_OPTIONS),
   recommendation: z.number().int().min(0).max(MAX_OPTIONS - 1).nullable().default(null),
 });
 

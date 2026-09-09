@@ -1,7 +1,5 @@
-export function ProxyVoteMark({ stacked = false }) {
-  return stacked
-    ? <img className="proxyvote-artwork" src="/proxyvote-logo.png" alt="ProxyVote" />
-    : <span className="proxyvote-wordmark" role="img" aria-label="ProxyVote"><span aria-hidden="true">Proxy</span><span aria-hidden="true">Vote</span></span>;
+export function ProxyVoteMark() {
+  return <img className="proxyvote-artwork" src="/proxyvote-mark.svg" alt="ProxyVote" width="158" height="58" />;
 }
 
 export default function BrandLockup({ children, inverse = false, className = '' }) {

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import BackLink from '../components/BackLink.jsx';
+import ResourceSkeleton from '../components/ResourceSkeleton.jsx';
 import { apiBlob, saveBlob } from '../api.js';
 import { EventDocuments, useInvestorEvent } from './BallotPage.jsx';
 import { ArrowIcon, ErrorMessage, InvestorFrame, MeetingIdentity, LoadingIndicator, PrintIcon } from './InvestorFrame.jsx';
@@ -23,7 +25,8 @@ export default function ConfirmationPage() {
     finally { setBusy(false); }
   }
   return <InvestorFrame event={event} hideNavigation><div className="investor-confirmation investor-page-width">
-    <ErrorMessage error={view.error} />{view.loading && <p role="status">Confirming your vote...</p>}
+    <BackLink to="/meetings?tab=active">Back to my meetings</BackLink>
+    <ErrorMessage error={view.error} />{view.loading && <ResourceSkeleton label="Loading vote status" rows={2} />}
     {event && <><MeetingIdentity event={event} />
       {!successful ? <section className="investor-confirmation-message">
         <h2>{vote?.status === 'FAILED' ? 'Your vote was not recorded' : 'No submitted vote'}</h2>
@@ -52,7 +55,6 @@ export default function ConfirmationPage() {
         <div className="investor-confirmation-actions"><Link className="inv-button" to="/meetings?tab=active">Return to My Meetings<ArrowIcon /></Link>
           <button type="button" className="inv-button secondary" onClick={downloadReceipt} disabled={busy} title="Generate a branded PDF receipt to save or print">
             <PrintIcon />{busy ? 'Generating receipt...' : 'Print / download receipt'}</button></div>
-        <p className="investor-muted investor-receipt-help">The print control generates your issuer-branded PDF receipt. Open the PDF to print it.</p>
         <ErrorMessage error={error} /><EventDocuments event={event} />
       </>}
     </>}

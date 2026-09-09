@@ -53,18 +53,15 @@ test('Snap RPC handler is assignable without optional undefined JSON fields', as
   assert.doesNotMatch(snap, /export const onRpcRequest: OnRpcRequestHandler = async/u);
 });
 
-test('issuer footer retains its minute grey presentation without a network plus control', async () => {
-  const [app, styles] = await Promise.all([
-    read('apps/web/src/issuer/IssuerLayout.jsx'),
-    read('apps/web/src/styles.css'),
+test('one shared footer retains the issuer minute grey presentation on all routes', async () => {
+  const [app, footer, styles, issuer] = await Promise.all([
+    read('apps/web/src/App.jsx'), read('apps/web/src/components/SiteFooter.jsx'),
+    read('apps/web/src/components/portal.css'), read('apps/web/src/issuer/IssuerLayout.jsx'),
   ]);
-
-  assert.match(app, /className="pv-footer-brand"/u);
-  assert.match(app, /className="pv-footer-mark"/u);
-  assert.match(styles, /--pv-footer-height: 34px/u);
-  assert.match(styles, /\.pv-site-footer \{[\s\S]*background: #f4f4f5/u);
-  assert.match(styles, /\.pv-footer-brand \{[\s\S]*font-size: 10px/u);
-  assert.match(styles, /\.pv-site-footer \.footer-copyright \{[\s\S]*font-size: 10px/u);
-  assert.doesNotMatch(app, /pv-add-network-wrap|PlusIcon/u);
-
+  assert.match(app, /<SiteFooter \/>/u);
+  assert.match(footer, /className="portal-footer-brand"/u);
+  assert.match(footer, /All rights reserved/u);
+  assert.match(styles, /background: #f4f4f5/u);
+  assert.match(styles, /font: 400 10px/u);
+  assert.doesNotMatch(issuer, /pv-add-network|<footer/u);
 });

@@ -9,7 +9,7 @@ export default function LandingPage() {
   const wallet = useWallet();
   const investor = useInvestorSession();
   const [parameters] = useSearchParams();
-  if (investor.session) return <Navigate to={safeInvestorReturn(parameters.get('returnTo'))} replace />;
+  if (investor.session && parameters.get('welcome') !== '1') return <Navigate to={safeInvestorReturn(parameters.get('returnTo'))} replace />;
   const busy = investor.signing || investor.checking || wallet.networkBusy;
   return <div className="investor-app investor-landing">
     <header className="investor-landing-header"><BrandBand inverse />
@@ -28,10 +28,10 @@ export default function LandingPage() {
             <li><span className="investor-step-number">2</span><span className="investor-step-copy"><strong>Confirm your connection</strong><span>Approve the request in your wallet to securely continue.</span></span></li>
             <li><span className="investor-step-number">3</span><span className="investor-step-copy"><strong>Start voting</strong><span>View your eligible voting opportunities and submit your votes.</span></span></li>
           </ol>
-          <button className="investor-auth-button" type="button" onClick={() => void investor.begin()} disabled={busy}
+          {investor.session ? <Link className="investor-auth-button" to="/meetings?tab=active">Continue to My Meetings<ArrowIcon /></Link> : <button className="investor-auth-button" type="button" onClick={() => void investor.begin()} disabled={busy}
             aria-busy={busy}>
             <WalletIcon />Authenticate with your wallet
-          </button>
+          </button>}
           <p className="investor-connection-assurance">Your connection is secure. We&apos;ll never ask for your private keys or seed phrase.</p>
           {busy && <p className="investor-login-wait" role="status">{investor.checking ? 'Restoring your session...' : investor.signing ? 'Review and sign the message in MetaMask...' : 'Configure Polygon Amoy in your wallet...'}</p>}
           {investor.waitingForWallet && !investor.signing && <p className="investor-login-wait" role="status">

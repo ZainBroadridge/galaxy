@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { issuerPreset, TOKEN_PLATFORMS } from '@pv/shared';
+import { issuerPreset } from '@pv/shared';
 import RequiredMark from '../components/RequiredMark.jsx';
+import PlatformAutocomplete from './PlatformAutocomplete.jsx';
 import IssuerAutocomplete from './IssuerAutocomplete.jsx';
 
 export default function IssuerBrandingFields({ form, setForm, file, setFile, disabled }) {
@@ -48,9 +49,8 @@ export default function IssuerBrandingFields({ form, setForm, file, setFile, dis
     <div className="field-grid">
       <IssuerAutocomplete value={form.issuerName} disabled={disabled} onChange={changeIssuer}
         onBlur={() => { if (selectedIssuer) setForm((current) => ({ ...current, issuerName: selectedIssuer.name })); }} />
-      <label>Tokenization platform<input list="token-platforms" value={form.platform} maxLength={80} disabled={disabled}
-        onChange={(event) => setForm((current) => ({ ...current, platform: event.target.value }))} placeholder="Ondo, Dinari, or leave blank" />
-        <datalist id="token-platforms">{TOKEN_PLATFORMS.map((item) => <option key={item} value={item} />)}</datalist></label>
+      <PlatformAutocomplete value={form.platform} disabled={disabled}
+        onChange={(platform) => setForm((current) => ({ ...current, platform }))} />
       <label><span className="field-label">Listed security{selectedIssuer && <RequiredMark />}</span>{selectedIssuer ? <select value={form.securityTicker || ''} onChange={(event) => chooseSecurity(event.target.value)} required disabled={disabled}>
         <option value="">Select the security / share class</option>
         {selectedIssuer.securities.map((item) => <option key={item.ticker} value={item.ticker}>{item.name}</option>)}

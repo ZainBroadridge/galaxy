@@ -55,3 +55,11 @@ export function displayHolding(raw, decimals) {
   const fraction = text.slice(-Number(decimals)).replace(/0+$/, '');
   return fraction ? `${whole}.${fraction}` : whole;
 }
+
+/** Local lifecycle labels are derived from immutable dates, not a stale API badge. */
+export function meetingLifecycle(event, now = Date.now()) {
+  if (!event) return null;
+  if (now > Date.parse(event.votingEndAt)) return 'CLOSED';
+  if (now < Date.parse(event.votingStartAt)) return 'SCHEDULED';
+  return 'OPEN';
+}

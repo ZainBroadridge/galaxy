@@ -1,0 +1,18 @@
+.portal-root { display: flex; flex-direction: column; min-height: 100vh; min-height: 100svh; }
+.portal-root > .investor-app, .portal-root > .app-shell, .portal-root > .issuer-login-page,
+.portal-root > .investor-loading { flex: 1 0 auto; min-height: 0; }
+.portal-root .pv-content { min-height: 0; }
+.portal-footer { margin-top: auto; background: #f4f4f5; color: #747b84; border: 0; width: 100%; flex: 0 0 auto; }
+.portal-footer-inner { min-height: 34px; padding: 8px 18px; display: flex; align-items: center; justify-content: space-between; gap: 8px 20px; font: 400 10px/1.5 'Segoe UI', Arial, sans-serif; }
+.portal-footer-brand { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.portal-footer-brand img { width: 14px; height: 14px; filter: grayscale(1); opacity: .65; }
+a.portal-back { display: inline-flex; align-items: center; gap: 6px; width: fit-content; color: #2a6ba2; font-size: 14px; line-height: 22px; text-decoration: underline; text-underline-offset: 3px; margin-bottom: 16px; }
+.portal-back svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.portal-back:focus-visible { outline: 2px solid #2a6ba2; outline-offset: 4px; }
+.portal-skeleton { padding: 12px 0; }
+.portal-skeleton-row { display: grid; gap: 12px; padding: 28px 0; border-bottom: 1px solid #eee; }
+.portal-skeleton-row span { display: block; background: #f1f2f3; height: 16px; width: 65%; border-radius: 3px; }
+.portal-skeleton-row span + span { width: 38%; height: 12px; }
+@media (max-width: 600px) {
+  .portal-footer-inner { flex-wrap: wrap; justify-content: center; text-align: center; }
+}

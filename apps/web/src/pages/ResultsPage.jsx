@@ -12,6 +12,7 @@ import {
 } from '../components/UI.jsx';
 import { useLoad } from '../hooks.js';
 import { useWallet } from '../wallet.jsx';
+import BackLink from '../components/BackLink.jsx';
 import IssuerLogo from '../components/IssuerLogo.jsx';
 
 function formatDate(value) {
@@ -51,7 +52,7 @@ export default function ResultsPage() {
     className="results-index-page"
     title="Voting Results"
     intro="Per-proposal tallies read from each VoteEvent contract for events you created or participated in."
-    actions={<button className="button secondary compact" onClick={() => results.reload().catch(() => {})} disabled={!account}>Refresh</button>}
+    actions={<><BackLink to="/issuer/home">Back to home</BackLink><button className="button secondary compact" onClick={() => results.reload().catch(() => {})} disabled={!account}>Refresh</button></>}
   >
     <ErrorBox error={results.error} />
     {!account
@@ -128,7 +129,7 @@ function ProposalResults({ proposal, proposalIndex }) {
           if (proposal.recommendation === optionIndex) labels.push('Board rec.');
           if (leadingIndex === optionIndex && value > 0n) labels.push('Leading');
           return <tr key={option.index ?? optionIndex}>
-            <td>{option.text}{labels.length ? <small> · {labels.join(' · ')}</small> : null}</td>
+            <td>{option.text}{labels.length ? <small> - {labels.join(' - ')}</small> : null}</td>
             <td>{formatVotes(value)}</td>
             <td>{percent.toFixed(2)}%</td>
           </tr>;
@@ -176,9 +177,9 @@ export function EventResultsPage() {
       <Panel><Empty>Connect the creator or participating wallet to view these results.</Empty></Panel>
     </Page>;
   }
-  if (result.loading) return <Page title="Results"><Spinner label="Reading contract tallies" /></Page>;
-  if (result.error) return <Page title="Results"><ErrorBox error={result.error} /></Page>;
-  if (!result.data) return <Page title="Results"><Panel><Empty>No results are available.</Empty></Panel></Page>;
+  if (result.loading) return <Page title="Results" actions={<BackLink to="/results">Back to results</BackLink>}><Spinner label="Reading contract tallies" /></Page>;
+  if (result.error) return <Page title="Results" actions={<BackLink to="/results">Back to results</BackLink>}><ErrorBox error={result.error} /></Page>;
+  if (!result.data) return <Page title="Results" actions={<BackLink to="/results">Back to results</BackLink>}><Panel><Empty>No results are available.</Empty></Panel></Page>;
 
   const { event } = result.data;
   const explorerBase = import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://amoy.polygonscan.com';

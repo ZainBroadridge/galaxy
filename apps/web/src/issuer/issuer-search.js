@@ -31,15 +31,24 @@ function matchScore(query, term) {
   return errors <= tolerance ? 30 + errors : Infinity;
 }
 
+/** Stable ordering for exact, prefix, substring and typo-tolerant matches. */
+function rank(catalog, value, termsFor, limit) {
+  const query = normalize(value).slice(0, 160);
+  return catalog.map((item, index) => ({ item, index,
+    score: query ? Math.min(...termsFor(item).map((term) => matchScore(query, normalize(term)))) : 0,
+  })).filter((match) => Number.isFinite(match.score))
+    .sort((left, right) => left.score - right.score || left.index - right.index)
+    .slice(0, Math.max(0, limit)).map((match) => match.item);
+}
+
 /** Search is a presentation aid, never proof of an issuer's identity. */
 export function searchIssuers(catalog, value, limit = 6) {
-  const query = normalize(value).slice(0, 160);
-  // Keep the historical catalog intact for existing events and PDF branding.
-  return catalog.filter((issuer) => issuer.id !== 'disney').map((issuer, index) => {
-    const terms = [issuer.id, issuer.name, ...(issuer.aliases ?? []),
-      ...(issuer.securities ?? []).map((security) => security.ticker)].map(normalize);
-    return { issuer, index, score: query ? Math.min(...terms.map((term) => matchScore(query, term))) : 0 };
-  }).filter((item) => Number.isFinite(item.score))
-    .sort((left, right) => left.score - right.score || left.index - right.index)
-    .slice(0, Math.max(0, limit)).map((item) => item.issuer);
+  // Preserve historical Disney branding; omit it only from new-event suggestions.
+  return rank(catalog.filter((issuer) => issuer.id !== 'disney'), value, (issuer) => [
+    issuer.id, issuer.name, ...(issuer.aliases ?? []), ...(issuer.securities ?? []).map((security) => security.ticker),
+  ], limit);
+}
+
+export function searchPlatforms(platforms, value, limit = 6) {
+  return rank(platforms, value, (platform) => [platform], limit);
 }

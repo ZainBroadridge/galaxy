@@ -17,6 +17,7 @@ const HEADER_HEIGHT = 104;
 const CONTENT_BOTTOM = 48;
 const CONTENT_TOP = PAGE_HEIGHT - HEADER_HEIGHT - 28;
 const CONTENT_HEIGHT = CONTENT_TOP - CONTENT_BOTTOM;
+const LINK_COLOR = rgb(42 / 255, 107 / 255, 162 / 255);
 const TEXT = rgb(0.12, 0.12, 0.12);
 const MUTED = rgb(0.42, 0.42, 0.42);
 const LINE = rgb(0.88, 0.88, 0.88);
@@ -301,7 +302,7 @@ class ReportWriter {
       y,
       size,
       font,
-      color: styledAsLink ? this.ink : TEXT,
+      color: styledAsLink ? LINK_COLOR : TEXT,
     });
     if (!styledAsLink || !text) return;
 
@@ -311,7 +312,7 @@ class ReportWriter {
       start: { x, y: y - 1.35 },
       end: { x: x + width, y: y - 1.35 },
       thickness: 0.7,
-      color: this.ink,
+      color: LINK_COLOR,
     });
     if (url) this.addLinkAnnotation({ x, y: y - 2, width, height: height + 3, url });
   }

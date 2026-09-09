@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { MAX_OPTION_LABEL_LENGTH } from '@pv/shared';
+import BackLink from '../components/BackLink.jsx';
+import { useDeadlineClock } from '../data/useDeadlineClock.js';
+import { meetingLifecycle } from '../investor/meeting-utils.js';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { API_BASE_URL, api, uploadEventPdf } from '../api.js';
 import {
@@ -21,7 +25,7 @@ import { useWallet } from '../wallet.jsx';
 import IssuerBrandingFields from '../issuer/IssuerBrandingFields.jsx';
 import RequiredMark from '../components/RequiredMark.jsx';
 import { eventProgress } from '../issuer/event-progress.js';
-import { visibleCreationNotice } from '../issuer/notice-state.js';
+import { scheduleCreationLimitNotice, visibleCreationNotice } from '../issuer/notice-state.js';
 
 const MAX_DOCUMENTS = 3;
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
@@ -187,7 +191,8 @@ function ProposalEditor({ proposals, onChange }) {
       <div className="option-edit-list">
         {proposal.options.map((option, optionIndex) => <div className="row" key={optionIndex}>
           <label className="option-edit-field"><span className="field-label">Option {optionIndex + 1}<RequiredMark /></span><input
-            maxLength={180}
+            maxLength={MAX_OPTION_LABEL_LENGTH}
+            title="Option label: maximum 80 characters"
             aria-label={`Option ${optionIndex + 1}`}
             value={option}
             onChange={(event) => update(proposalIndex, {
@@ -260,6 +265,8 @@ export default function OrganiserDashboard() {
   const [busyStage, setBusyStage] = useState('');
   const [error, setError] = useState(null);
   const [announcementAudience, setAnnouncementAudience] = useState('ELIGIBLE');
+
+  useEffect(() => scheduleCreationLimitNotice(error, () => setError((current) => current === error ? null : current)), [error]);
 
   function fillDemoData() {
     setForm((current) => demoForm(current));
@@ -407,7 +414,7 @@ export default function OrganiserDashboard() {
   }
 
   if (!wallet.connected) {
-    return <Page title="Organizer">
+    return <Page title="Organizer" actions={<BackLink to="/issuer/home">Back to home</BackLink>}>
       <Panel><Empty>
         <p>Connect a wallet to create and manage voting events.</p>
         <button className="button" onClick={wallet.openWallet}>Connect wallet</button>
@@ -420,7 +427,7 @@ export default function OrganiserDashboard() {
       className="organiser-index-page"
       title="Your Voting Events"
       intro={`${events.data?.length ?? 0} event${events.data?.length === 1 ? '' : 's'} created by this wallet`}
-      actions={<button className="button" type="button" onClick={() => setCreating(true)}>Create Voting Event</button>}
+      actions={<><BackLink to="/issuer/home">Back to home</BackLink><button className="button" type="button" onClick={() => setCreating(true)}>Create Voting Event</button></>}
     >
       <ErrorBox error={error || events.error} />
       {events.loading
@@ -467,9 +474,7 @@ export default function OrganiserDashboard() {
     actions={<button className="button secondary" type="button" onClick={() => setCreating(false)}>Back to events</button>}
   >
     <ErrorBox error={error} />
-    <Panel className="create-event-panel">
       <form className="form create-event-form" onSubmit={submit}>
-        <p className="required-fields-note"><RequiredMark /> Required fields</p>
         <IssuerBrandingFields form={form} setForm={setForm} file={issuerLogoFile} setFile={setIssuerLogoFile} disabled={Boolean(busyStage)} />
         <section className="create-event-section">
           <header className="create-event-section-heading create-details-heading">
@@ -576,7 +581,7 @@ export default function OrganiserDashboard() {
           <div className="optional-upload create-documents-row">
             <div>
               <strong>Supporting material</strong>
-              <small>PDF only · up to 3 files · 10 MB per file</small>
+              <small>PDF only - up to 3 files - 10 MB per file</small>
             </div>
             <label className="button secondary file-button">
               {documents.length ? `${documents.length} PDF${documents.length === 1 ? '' : 's'} selected` : 'Select PDFs'}
@@ -630,7 +635,6 @@ export default function OrganiserDashboard() {
           </button>
         </footer>
       </form>
-    </Panel>
   </Page>;
 }
 
@@ -651,7 +655,8 @@ export function OrganiserEventPage() {
   const [documentFeedback, setDocumentFeedback] = useState(null);
   const [announcementBusy, setAnnouncementBusy] = useState(false);
   const [announcementFeedback, setAnnouncementFeedback] = useState(null);
-  const progress = eventProgress(view.data);
+  const now = useDeadlineClock(view.data?.votingStartAt, view.data?.votingEndAt);
+  const progress = eventProgress(view.data, now);
   const jobAvailableAt = progress.availableAt;
   const jobWaitingForRecordDate = progress.waitingForRecordDate;
   const jobActive = progress.active;
@@ -797,7 +802,7 @@ export function OrganiserEventPage() {
 
     <Panel title="Event status">
       <div className="status-line">
-        <Status value={event.status} />
+        <Status value={progress.ready ? 'COMPLETED' : event.status} label={progress.ready ? 'Completed' : undefined} />
         <span>{progress.message}</span>
       </div>
       {jobWaitingForRecordDate && <Notice>
@@ -827,6 +832,7 @@ export function OrganiserEventPage() {
 
     <Panel title="Deployment">
       <dl className="details">
+        {progress.ready && <div><dt>Voting status</dt><dd><Status value={meetingLifecycle(event, now)} /></dd></div>}
         <div><dt>Contract</dt><dd>{event.contractExplorerUrl
           ? <a href={event.contractExplorerUrl} target="_blank" rel="noreferrer"><ShortAddress value={event.contractAddress} /></a>
           : event.contractAddress ? 'Awaiting confirmation' : 'Pending'}</dd></div>
@@ -892,7 +898,7 @@ export function OrganiserEventPage() {
         <span className="document-upload-icon"><DocumentIcon /></span>
         <div>
           <strong>Add supporting PDFs</strong>
-          <small>{documentSlots} document slot{documentSlots === 1 ? '' : 's'} available · 10 MB maximum per PDF</small>
+          <small>{documentSlots} document slot{documentSlots === 1 ? '' : 's'} available - 10 MB maximum per PDF</small>
         </div>
         <label className="button secondary compact file-button">
           Select PDF{documentSlots > 1 ? 's' : ''}
