@@ -64,13 +64,6 @@ function OrganisedEventsIcon() {
   </svg>;
 }
 
-function InfoIcon() {
-  return <svg viewBox="0 0 20 20" aria-hidden="true">
-    <circle cx="10" cy="10" r="7.25" />
-    <path d="M10 8.6v4.25M10 6.15h.01" />
-  </svg>;
-}
-
 function MetricCard({ icon, title, count, action, to, primary = false }) {
   return <article className={`home-metric-card${primary ? ' home-metric-primary' : ''}`}>
     <span className="home-metric-icon">{icon}</span>
@@ -159,10 +152,7 @@ export default function HomePage() {
           />)}
         </div>
 
-        <a className="home-proxy-info" href="https://www.shareholdereducation.com">
-          <span>What is a proxy vote?</span>
-          <InfoIcon />
-        </a>
+
       </div>
     </section>
 

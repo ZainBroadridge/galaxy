@@ -2,6 +2,10 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { Link, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { api, readIssuerSession, saveIssuerSession, SESSION_EXPIRED_EVENT } from '../api.js';
 
+import BrandLockup, { ProxyVoteMark } from '../components/BrandLockup.jsx';
+import RequiredMark from '../components/RequiredMark.jsx';
+import ParticleBackground from './ParticleBackground.jsx';
+
 const IssuerContext = createContext(null);
 export function IssuerSessionProvider({ children }) {
   const [session, setSession] = useState(null);
@@ -53,10 +57,10 @@ export function IssuerLogin() {
     catch (value) { setError(value); }
     finally { setBusy(false); }
   }
-  return <div className="issuer-login-page"><form onSubmit={submit} className="issuer-login-card">
-    <img src="/proxyvote-logo.png" alt="ProxyVote" />
+  return <div className="issuer-login-page"><ParticleBackground /><form onSubmit={submit} className="issuer-login-card">
+    <BrandLockup><ProxyVoteMark stacked /></BrandLockup>
     <h1>Issuer interface</h1><p>Enter the demonstration password to organise and manage voting events.</p>
-    <label>Password<input type="password" value={password} autoComplete="current-password" required
+    <label><span className="field-label">Password<RequiredMark /></span><input type="password" value={password} autoComplete="current-password" required
       onChange={(event) => setPassword(event.target.value)} /></label>
     {error && <p role="alert" className="investor-error">{error.message}</p>}
     <button className="button" disabled={busy || checking}>{busy ? 'Checking...' : 'Enter issuer interface'}</button>

@@ -12,7 +12,7 @@ export function EventDocuments({ event }) {
   if (!event.documents?.length) return null;
   return <section className="investor-documents" aria-labelledby="review-documents-heading">
     <h2 id="review-documents-heading">Documents to Review Before You Vote: <Link className="investor-help-link" to="/education" aria-label="Learn about proxy voting documents">?</Link></h2>
-    <div className="investor-document-grid">{event.documents.map((document) => <a key={document.id}
+    <div className="investor-document-grid" data-count={event.documents.length}>{event.documents.map((document) => <a key={document.id}
       href={`${API_BASE_URL}/v1/events/${event.id}/documents/${document.id}`} target="_blank" rel="noopener noreferrer">
       <DocumentIcon /><span>{document.fileName}<small>PDF &middot; {document.pageCount} page{document.pageCount === 1 ? '' : 's'}</small></span><ArrowIcon />
     </a>)}</div>
@@ -103,7 +103,7 @@ export default function BallotPage() {
         <section className="investor-ballot" aria-labelledby="proposal-heading">
           <header className="investor-ballot-heading"><div><h2 id="proposal-heading">Proposal(s)</h2>
             <p>For holders as of {displayDate(event.recordDateAt)}. Confirmed votes cannot be changed.</p></div>
-            {boardChoices && canVote && <button type="button" className="inv-button light" disabled={submitting} onClick={voteWithBoard}>Vote with Board</button>}
+            {boardChoices && canVote && <button type="button" className="inv-button light investor-board-button" disabled={submitting} onClick={voteWithBoard}>Vote with Board</button>}
           </header>
           <div className="investor-holdings"><span>Voting power: <strong>{event.eligibility.votingPower}</strong></span>
             <span>Tokens held at record date: <strong>{displayHolding(event.eligibility.snapshotBalance, event.tokenDecimals)} {event.tokenSymbol}</strong></span>
@@ -112,7 +112,7 @@ export default function BallotPage() {
             <small>Current holdings do not change record-date eligibility.{holdings.data && ` Current balance at block ${holdings.data.blockNumber}.`}</small>
           </div>
           {event.proposals.map((proposal, proposalIndex) => <fieldset className="investor-proposal" key={`${event.metadataHash}-${proposalIndex}`} disabled={submitting || !canVote}>
-            <legend className="sr-only">{proposalIndex + 1}. {proposal.title}</legend>
+            <legend className="investor-sr-only">{proposalIndex + 1}. {proposal.title}</legend>
             <div className="investor-proposal-copy"><h3>{proposalIndex + 1}. {proposal.title}</h3>
               <p>Board Recommendation: <strong>{Number.isInteger(proposal.recommendation) ? proposal.options[proposal.recommendation]?.text ?? 'None' : 'None'}</strong></p>
               {proposal.description && <details><summary>More Details</summary><p>{proposal.description}</p></details>}</div>
@@ -127,7 +127,7 @@ export default function BallotPage() {
           <span className="investor-muted">{choices.filter(Number.isInteger).length} of {event.proposals.length} proposals selected</span>
           <div><button type="button" className="inv-button secondary" disabled={submitting || !canVote}
             onClick={() => { setChoices(event.proposals.map(() => null)); setError(null); }}>Reset All</button>
-            <button className="inv-button" type="submit" disabled={!complete || !canVote || submitting}>
+            <button className="inv-button investor-submit-button" type="submit" disabled={!complete || !canVote || submitting}>
               {submitting ? 'Review and sign in your wallet...' : 'Submit Vote'}<ArrowIcon /></button></div>
         </div>
         <ErrorMessage error={error} />

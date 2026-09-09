@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiBlob, saveBlob } from '../api.js';
 import { EventDocuments, useInvestorEvent } from './BallotPage.jsx';
-import { ArrowIcon, ErrorMessage, InvestorFrame, MeetingIdentity, PrintIcon } from './InvestorFrame.jsx';
+import { ArrowIcon, ErrorMessage, InvestorFrame, MeetingIdentity, LoadingIndicator, PrintIcon } from './InvestorFrame.jsx';
 import { displayDate } from './meeting-utils.js';
 
 export default function ConfirmationPage() {
@@ -42,7 +42,7 @@ export default function ConfirmationPage() {
           <dl><div><dt>Voting power</dt><dd>{vote.votingPower}</dd></div>
             <div><dt>Transaction</dt><dd>{vote.transactionExplorerUrl
               ? <a href={vote.transactionExplorerUrl} target="_blank" rel="noopener noreferrer">{vote.transactionHash}</a>
-              : <span role="status">Waiting for the relayer to broadcast</span>}</dd></div>
+              : <LoadingIndicator>Waiting for the relayer to broadcast</LoadingIndicator>}</dd></div>
             <div><dt>VoteEvent contract</dt><dd><a href={event.contractExplorerUrl} target="_blank" rel="noopener noreferrer">{event.contractAddress}</a></dd></div>
             <div><dt>Source verification</dt><dd>{event.verificationStatus.replaceAll('_', ' ')}</dd></div></dl>
           <details><summary>Review submitted selections</summary><ol>{event.proposals.map((proposal, index) => <li key={index}>

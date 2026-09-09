@@ -19,3 +19,4 @@ packages/contracts/typechain-types/
 .npmrc
 *.pem
 *.key
+galaxy.zip

@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { eventIssuerBranding } from '@pv/shared';
 import { useInvestorSession } from './InvestorSession.jsx';
 import { useNotifications } from '../notifications.jsx';
 import IssuerLogo from '../components/IssuerLogo.jsx';
 import { displayDate } from './meeting-utils.js';
+import BrandLockup, { ProxyVoteMark } from '../components/BrandLockup.jsx';
+import { meetingPresentation } from './presentation.js';
 
 export const EDUCATION_URL = 'https://www.shareholdereducation.com/';
 export const TOKENHOLDER_DISCLOSURE = 'The voting capabilities of tokenholders referenced herein are rights to express preferences to the token minter regarding voting of the shares that the issuer beneficially owns.';
@@ -34,16 +37,22 @@ export function InvestorFooter() {
     </nav>
   </footer>;
 }
+function PlatformLogo({ presentation }) {
+  const [failed, setFailed] = useState(null);
+  const src = presentation.platformLogo;
+  return src && failed !== src
+    ? <img className="investor-platform-logo" src={src} alt={`${presentation.platform} logo`} onError={() => setFailed(src)} />
+    : <span className="investor-platform-name">{presentation.platform}</span>;
+}
+
 export function BrandBand({ event, inverse = false }) {
+  const presentation = meetingPresentation(event);
   return <div className={`investor-brand-band${inverse ? ' inverse' : ''}`}>
-    <div className="investor-brand-lockup">
-      {event ? <IssuerLogo event={event} className="investor-brand-issuer-logo" showNameFallback />
-        : inverse ? <span className="investor-stacked-wordmark" role="img" aria-label="ProxyVote"><span aria-hidden="true">Proxy</span><span aria-hidden="true">Vote</span></span>
-          : <img className="investor-proxyvote-logo" src="/proxyvote-logo.png" alt="ProxyVote" />}
-      <span className="investor-brand-divider" aria-hidden="true" />
-      <span className="investor-powered"><small>POWERED BY</small><img
-        src={inverse ? '/investor/broadridge-white.png' : '/investor/broadridge.png'} alt="Broadridge" /></span>
-    </div>
+    <BrandLockup inverse={inverse} className="investor-brand-lockup">
+      {presentation.header === 'platform' ? <PlatformLogo presentation={presentation} />
+        : presentation.header === 'issuer' ? <IssuerLogo event={event} className="investor-brand-issuer-logo" showNameFallback />
+          : <ProxyVoteMark stacked={inverse} />}
+    </BrandLockup>
   </div>;
 }
 
@@ -51,14 +60,11 @@ export function InvestorFrame({ children, event, hideNavigation = false }) {
   const { session, signOut } = useInvestorSession();
   const { unreadCount } = useNotifications();
   const wallet = session?.walletAddress;
-  const brand = event ? eventIssuerBranding(event) : null;
-  return <div className={`investor-app${brand ? ' investor-issuer-theme' : ''}`} style={brand ? {
-    '--issuer-color': brand.issuerThemeColor, '--issuer-ink': brand.issuerInkColor,
-    '--inv-blue': brand.issuerInkColor, '--inv-navy': brand.issuerInkColor, '--inv-orange': brand.issuerInkColor,
-  } : undefined}>
+  return <div className="investor-app">
     <a href="#investor-main" className="investor-skip">Skip to content</a>
-    {wallet && <div className="investor-utility"><span title={wallet}>Wallet Address:&nbsp; {wallet.slice(0, 6)}...{wallet.slice(-4)}</span>
-      <button type="button" onClick={() => void signOut()}>Sign out</button></div>}
+    {wallet && <div className="investor-utility"><div className="investor-utility-inner">
+      <span title={wallet}>Wallet Address:&nbsp; {wallet.slice(0, 6)}...{wallet.slice(-4)}</span>
+      <button type="button" onClick={() => void signOut()}>Sign out</button></div></div>}
     <BrandBand event={event} />
     {!hideNavigation && <nav className="investor-navigation" aria-label="Investor navigation">
       <NavLink to="/meetings">My Meetings</NavLink>
@@ -70,6 +76,15 @@ export function InvestorFrame({ children, event, hideNavigation = false }) {
     <InvestorFooter />
   </div>;
 }
+
+export function LoadingIndicator({ children }) {
+  return <span className="investor-pending" role="status"><span className="investor-spinner" aria-hidden="true" />{children}</span>;
+}
+
+export function MeetingTags({ platform, children }) {
+  return <div className="investor-tags">{platform?.trim() && <span className="investor-tag">{platform.trim()}</span>}{children}</div>;
+}
+
 export function SecurityIdentity({ event }) {
   const brand = eventIssuerBranding(event);
   return <>
@@ -79,11 +94,15 @@ export function SecurityIdentity({ event }) {
   </>;
 }
 export function MeetingIdentity({ event }) {
+  const presentation = meetingPresentation(event);
   return <header className="investor-meeting-identity">
-    <IssuerLogo event={event} className="investor-issuer-logo" />
-    <div><h1>{event.title}</h1><SecurityIdentity event={event} />
-      {event.platform && <span className="investor-tag">{event.platform}</span>}
-      <p className="investor-muted">Voting deadline: {displayDate(event.votingEndAt)}</p></div>
+    <div className="investor-title-row">
+      {presentation.showIssuerByTitle && <IssuerLogo event={event} className="investor-issuer-logo" />}
+      <h1>{event.title}</h1>
+    </div>
+    <SecurityIdentity event={event} />
+    <MeetingTags platform={presentation.platform} />
+    <p className="investor-muted">Voting deadline: {displayDate(event.votingEndAt)}</p>
   </header>;
 }
 export function StandingDisclosure() {

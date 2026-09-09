@@ -133,7 +133,8 @@ export async function failJob(job, error) {
     await transaction(async (client) => {
       await client.query(
         `UPDATE jobs
-            SET status='PENDING',progress=0,available_at=$2::timestamptz,
+            SET status='PENDING',progress=CASE WHEN type='VERIFY_CONTRACT' THEN progress ELSE 0 END,
+                available_at=$2::timestamptz,
                 message=$3,error=NULL,attempts=greatest(attempts-1,0),
                 locked_at=NULL,locked_by=NULL
           WHERE id=$1`,
@@ -192,7 +193,7 @@ export async function failJob(job, error) {
       );
     } else if (job.type === 'VERIFY_CONTRACT') {
       await client.query(
-        "UPDATE events SET verification_status='FAILED',verification_error=$2 WHERE id=$1",
+        "UPDATE events SET verification_status='FAILED',verification_error=$2 WHERE id=$1 AND verification_status<>'VERIFIED'",
         [job.event_id, message],
       );
     }

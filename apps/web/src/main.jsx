@@ -7,6 +7,7 @@ import App from './App.jsx';
 import { InvestorSessionProvider } from './investor/InvestorSession.jsx';
 import { IssuerSessionProvider } from './issuer/IssuerSession.jsx';
 import './styles.css';
+import './components/brand.css';
 import './investor/investor.css';
 import './issuer/issuer.css';
 

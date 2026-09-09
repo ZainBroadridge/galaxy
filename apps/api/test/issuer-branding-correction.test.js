@@ -83,10 +83,11 @@ test('consent remains in signed message, not in the landing DOM', async () => {
     nonce: 'a'.repeat(48), issuedAt: '2026-09-08T10:00:00Z', expiresAt: '2026-09-08T10:10:00Z' });
   assert.match(message, /agree|acknowledge/iu); assert.match(message, /not cast a vote|does not cast a vote/iu);
 });
-test('event header is issuer-first; PDF colours and letterhead are not platform/ProxyVote themed', async () => {
+test('event header places platform or issuer once; PDF letterhead remains issuer-themed', async () => {
   const frame = await read('apps/web/src/investor/InvestorFrame.jsx');
   const report = await read('apps/api/src/reports.js');
-  assert.doesNotMatch(frame, /ondo-logo|kraken-logo|investor-platform-logo/u);
+  assert.match(frame, /presentation\.header === 'platform'/u);
+  assert.match(frame, /presentation\.showIssuerByTitle/u);
   assert.match(frame, /IssuerLogo event=\{event\} className="investor-brand-issuer-logo"/u);
   assert.doesNotMatch(report, /const NAVY|LINK_BLUE|Broadridge Proxy Voting - Confidential|broadridge-logo-blue/u);
   const addPage = report.slice(report.indexOf('  addPage() {'), report.indexOf('  ensure(height) {'));

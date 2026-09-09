@@ -125,13 +125,17 @@ async function loadEventViewRow(id, wallet) {
   const found = await query(
     `SELECT e.*,
             to_jsonb(j) AS latest_job,
+            to_jsonb(verification) AS verification_job,
             se.raw_balance AS wallet_snapshot_balance,
             se.voting_power AS wallet_voting_power,
             to_jsonb(v) AS wallet_vote
        FROM events e
        LEFT JOIN LATERAL (
-         SELECT * FROM jobs WHERE event_id=e.id AND type<>'RELAY_VOTE' ORDER BY created_at DESC LIMIT 1
+         SELECT * FROM jobs WHERE event_id=e.id AND type IN ('BUILD_SNAPSHOT','DEPLOY_EVENT') ORDER BY created_at DESC LIMIT 1
        ) j ON true
+       LEFT JOIN LATERAL (
+         SELECT * FROM jobs WHERE event_id=e.id AND type='VERIFY_CONTRACT' ORDER BY created_at DESC LIMIT 1
+       ) verification ON true
        LEFT JOIN snapshot_entries se ON se.event_id=e.id AND se.wallet_address=$2
        LEFT JOIN votes v ON v.event_id=e.id AND v.voter_address=$2
       WHERE e.id=$1`,
@@ -168,6 +172,7 @@ async function serializeEventView(id, wallet, row) {
 
   return serializeEvent(row, {
     job: serializeJob(row.latest_job),
+    verificationJob: serializeJob(row.verification_job),
     documents,
     eligibility,
     vote: serializeVote(vote && vote.status !== 'FAILED' ? vote : null, row),

@@ -19,7 +19,7 @@ test('home uses the horizontal ProxyVote shell and a two-slide heading', async (
   assert.match(home, /const rotatingHeadlines = \[/u);
   assert.match(home, /Welcome to Broadridge/u);
   assert.match(home, /Secure shareholder decisions/u);
-  assert.match(home, /https:\/\/www\.shareholdereducation\.com/u);
+  assert.doesNotMatch(home, /home-proxy-info|What is a proxy vote/u);
   assert.match(styles, /@keyframes pv-headline-slide/u);
 });
 
@@ -31,7 +31,7 @@ test('create event restores deterministic demo autofill without touching token o
   assert.match(organiser, /proposals: demoProposals\(\)/u);
   assert.match(organiser, /function fillDemoData\(\)/u);
   assert.match(organiser, />Auto fill dummy data<\/button>/u);
-  assert.match(organiser, /Auto fill dummy data<\/button>[\s\S]*Back to events/u);
+  assert.match(organiser, /create-details-heading[\s\S]*?onClick=\{fillDemoData\}[\s\S]*?Auto fill dummy data/u);
   const fillBody = organiser.match(/function fillDemoData\(\) \{([\s\S]*?)\n  \}/u)?.[1] ?? '';
   assert.ok(fillBody);
   assert.doesNotMatch(fillBody, /setDocuments/u);

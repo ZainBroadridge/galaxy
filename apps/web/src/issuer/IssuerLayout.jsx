@@ -2,6 +2,7 @@ import {
   Link, NavLink, Outlet, useLocation,
 } from 'react-router-dom';
 import { reownConfigured } from '../appkit.js';
+import BrandLockup, { ProxyVoteMark } from '../components/BrandLockup.jsx';
 import { Notice } from '../components/UI.jsx';
 import { useNotifications } from '../notifications.jsx';
 import { useWallet } from '../wallet.jsx';
@@ -65,20 +66,11 @@ export default function IssuerLayout() {
   const issuer = useIssuerSession();
   const { unreadCount } = useNotifications();
   const homeRoute = location.pathname === '/issuer/home';
-  return <div className={`app-shell pv-shell${homeRoute ? ' pv-shell-home' : ''}`}>
+  return <div className={`app-shell pv-shell issuer-shell${homeRoute ? ' pv-shell-home' : ''}`}>
     <header className="topbar pv-topbar">
       <div className="pv-topbar-inner">
         <Link className="pv-brand-lockup" to="/issuer/home" aria-label="ProxyVote home">
-          <img
-            className="pv-proxyvote-logo"
-            src="/proxyvote-logo.png"
-            alt="ProxyVote"
-          />
-          <span className="pv-brand-divider" aria-hidden="true" />
-          <span className="pv-powered-lockup">
-            <small>Powered by</small>
-            <img src="/brd-logo.svg" alt="Broadridge" />
-          </span>
+          <BrandLockup><ProxyVoteMark stacked /></BrandLockup>
         </Link>
 
         <nav className="pv-primary-nav" aria-label="Primary navigation">
@@ -116,7 +108,10 @@ export default function IssuerLayout() {
             <span>{shortAddress(wallet.account)}</span>
             <ChevronIcon />
           </button>
-          <button className="issuer-exit-link" type="button" onClick={() => void issuer.logout()}>Exit issuer</button>
+          <button className="issuer-exit-button" type="button" onClick={() => void issuer.logout()}
+            aria-label="Exit issuer interface" title="Exit issuer interface">
+            <SvgIcon><path d="M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5M14 8l4 4-4 4M8 12h11" /></SvgIcon>
+          </button>
         </div>
       </div>
     </header>

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ISSUER_PRESETS, issuerPreset, TOKEN_PLATFORMS } from '@pv/shared';
+import { issuerPreset, TOKEN_PLATFORMS } from '@pv/shared';
+import RequiredMark from '../components/RequiredMark.jsx';
+import IssuerAutocomplete from './IssuerAutocomplete.jsx';
 
 export default function IssuerBrandingFields({ form, setForm, file, setFile, disabled }) {
   const [preview, setPreview] = useState(null);
@@ -42,17 +44,14 @@ export default function IssuerBrandingFields({ form, setForm, file, setFile, dis
   const logoUrl = preview || (failedPreset !== presetUrl ? presetUrl : null);
   return <section className="create-event-section issuer-branding-fields">
     <header className="create-event-section-heading"><h2>Issuer and listed security</h2>
-      <p>The issuer brands the ballot, confirmation, voting receipt and results report. The platform remains an informational tag.</p></header>
+      <p>The issuer logo identifies the meeting. A selected platform appears in the header. PDF receipts and reports retain the issuer theme.</p></header>
     <div className="field-grid">
-      <label>Official issuer name<input list="issuer-presets" value={form.issuerName} required maxLength={160} disabled={disabled}
-        onChange={(event) => changeIssuer(event.target.value)}
-        onBlur={() => { if (selectedIssuer) setForm((current) => ({ ...current, issuerName: selectedIssuer.name })); }}
-        placeholder="Apple Inc., NVIDIA Corporation, or another issuer" />
-        <datalist id="issuer-presets">{ISSUER_PRESETS.map((item) => <option key={item.id} value={item.name} />)}</datalist></label>
+      <IssuerAutocomplete value={form.issuerName} disabled={disabled} onChange={changeIssuer}
+        onBlur={() => { if (selectedIssuer) setForm((current) => ({ ...current, issuerName: selectedIssuer.name })); }} />
       <label>Tokenization platform<input list="token-platforms" value={form.platform} maxLength={80} disabled={disabled}
         onChange={(event) => setForm((current) => ({ ...current, platform: event.target.value }))} placeholder="Ondo, Dinari, or leave blank" />
         <datalist id="token-platforms">{TOKEN_PLATFORMS.map((item) => <option key={item} value={item} />)}</datalist></label>
-      <label>Listed security{selectedIssuer ? <select value={form.securityTicker || ''} onChange={(event) => chooseSecurity(event.target.value)} required disabled={disabled}>
+      <label><span className="field-label">Listed security{selectedIssuer && <RequiredMark />}</span>{selectedIssuer ? <select value={form.securityTicker || ''} onChange={(event) => chooseSecurity(event.target.value)} required disabled={disabled}>
         <option value="">Select the security / share class</option>
         {selectedIssuer.securities.map((item) => <option key={item.ticker} value={item.ticker}>{item.name}</option>)}
       </select> : <input value={form.securityName || ''} maxLength={240} disabled={disabled}

@@ -19,6 +19,8 @@ import {
 } from '../token-address.js';
 import { useWallet } from '../wallet.jsx';
 import IssuerBrandingFields from '../issuer/IssuerBrandingFields.jsx';
+import RequiredMark from '../components/RequiredMark.jsx';
+import { eventProgress } from '../issuer/event-progress.js';
 import { visibleCreationNotice } from '../issuer/notice-state.js';
 
 const MAX_DOCUMENTS = 3;
@@ -170,19 +172,22 @@ function ProposalEditor({ proposals, onChange }) {
           onClick={() => onChange(proposals.filter((_item, index) => index !== proposalIndex))}
         >Remove</button>}
       </div>
-      <label>Proposal title<input
+      <label><span className="field-label">Proposal title<RequiredMark /></span><input
+        maxLength={220}
         value={proposal.title}
         onChange={(event) => update(proposalIndex, { title: event.target.value })}
         required
       /></label>
       <label>Supporting text<textarea
+        maxLength={5000}
         value={proposal.description}
         onChange={(event) => update(proposalIndex, { description: event.target.value })}
         rows="2"
       /></label>
       <div className="option-edit-list">
         {proposal.options.map((option, optionIndex) => <div className="row" key={optionIndex}>
-          <input
+          <label className="option-edit-field"><span className="field-label">Option {optionIndex + 1}<RequiredMark /></span><input
+            maxLength={180}
             aria-label={`Option ${optionIndex + 1}`}
             value={option}
             onChange={(event) => update(proposalIndex, {
@@ -191,7 +196,7 @@ function ProposalEditor({ proposals, onChange }) {
               )),
             })}
             required
-          />
+          /></label>
           {proposal.options.length > 2 && <button
             type="button"
             className="icon-button"
@@ -459,28 +464,23 @@ export default function OrganiserDashboard() {
   return <Page
     className="organiser-create-page"
     title="Create event"
-    actions={<>
-      <button
-        className="button secondary"
-        type="button"
-        onClick={fillDemoData}
-        title="Fill every demo field except the ERC-20 address and PDFs"
-      >Auto fill dummy data</button>
-      <button className="button secondary" type="button" onClick={() => setCreating(false)}>Back to events</button>
-    </>}
+    actions={<button className="button secondary" type="button" onClick={() => setCreating(false)}>Back to events</button>}
   >
     <ErrorBox error={error} />
     <Panel className="create-event-panel">
       <form className="form create-event-form" onSubmit={submit}>
+        <p className="required-fields-note"><RequiredMark /> Required fields</p>
         <IssuerBrandingFields form={form} setForm={setForm} file={issuerLogoFile} setFile={setIssuerLogoFile} disabled={Boolean(busyStage)} />
         <section className="create-event-section">
-          <header className="create-event-section-heading">
-            <h2>Event details</h2>
-            <p>Choose the ERC-20 token and describe the voting event shown to eligible holders.</p>
+          <header className="create-event-section-heading create-details-heading">
+            <div><h2>Event details</h2>
+              <p>Choose the ERC-20 token and describe the voting event shown to eligible holders.</p></div>
+            <button className="button secondary compact" type="button" onClick={fillDemoData}
+              disabled={Boolean(busyStage)} title="Fill demo fields without replacing the token, issuer or PDFs">Auto fill dummy data</button>
           </header>
 
           <div className="field-grid create-token-grid">
-            <label className="create-token-address-field">ERC-20 token address<div className="create-token-input">
+            <label className="create-token-address-field"><span className="field-label">ERC-20 token address<RequiredMark /></span><div className="create-token-input">
               <input
                 value={form.tokenAddress}
                 onChange={(event) => setForm({ ...form, tokenAddress: event.target.value })}
@@ -504,7 +504,7 @@ export default function OrganiserDashboard() {
                 <span className="sr-only">Inspect ERC-20 token</span>
               </button>
             </div></label>
-            <label>Token-to-vote ratio<input
+            <label><span className="field-label">Token-to-vote ratio<RequiredMark /></span><input
               type="number"
               min="1"
               step="1"
@@ -523,8 +523,8 @@ export default function OrganiserDashboard() {
           </div>}
 
           <div className="field-grid create-copy-grid">
-            <label>Event title<input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
-            <label>Description<textarea rows="2" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Explain the purpose of the vote and any context holders should know." /></label>
+            <label><span className="field-label">Event title<RequiredMark /></span><input maxLength={180} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
+            <label>Description<textarea maxLength={8000} rows="2" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Explain the purpose of the vote and any context holders should know." /></label>
           </div>
         </section>
 
@@ -535,7 +535,7 @@ export default function OrganiserDashboard() {
           </header>
 
           <div className="field-grid three create-schedule-grid">
-            <label>Record date<input
+            <label><span className="field-label">Record date<RequiredMark /></span><input
               type="datetime-local"
               value={form.recordDateAt}
               onChange={(event) => setForm({ ...form, recordDateAt: event.target.value })}
@@ -543,20 +543,21 @@ export default function OrganiserDashboard() {
             /><small>{recordDateIsFuture
               ? 'The snapshot and deployment start automatically after this time reaches Polygon finality.'
               : 'Balances are captured at the latest confirmed block at or before this time.'}</small></label>
-            <label>Voting starts<input type="datetime-local" value={form.votingStartAt} onChange={(event) => setForm({ ...form, votingStartAt: event.target.value })} required /></label>
-            <label>Voting ends<input type="datetime-local" value={form.votingEndAt} onChange={(event) => setForm({ ...form, votingEndAt: event.target.value })} required /></label>
+            <label><span className="field-label">Voting starts<RequiredMark /></span><input type="datetime-local" value={form.votingStartAt} onChange={(event) => setForm({ ...form, votingStartAt: event.target.value })} required /></label>
+            <label><span className="field-label">Voting ends<RequiredMark /></span><input type="datetime-local" value={form.votingEndAt} onChange={(event) => setForm({ ...form, votingEndAt: event.target.value })} required /></label>
           </div>
           <div className="field-grid three create-policy-grid">
-            <label>Authenticity<select value={form.authenticityClaim} onChange={(event) => setForm({ ...form, authenticityClaim: event.target.value })}>
+            <label><span className="field-label">Authenticity<RequiredMark /></span><select required value={form.authenticityClaim} onChange={(event) => setForm({ ...form, authenticityClaim: event.target.value })}>
               <option value="COMMUNITY">Community-created</option>
               <option value="ISSUER_AUTHORIZED">Issuer-authorized claim</option>
             </select></label>
-            <label>Discovery<select value={form.discoveryMode} onChange={(event) => setForm({ ...form, discoveryMode: event.target.value })}>
+            <label><span className="field-label">Discovery<RequiredMark /></span><select required value={form.discoveryMode} onChange={(event) => setForm({ ...form, discoveryMode: event.target.value })}>
               <option value="PUBLIC_ELIGIBLE">Eligible holders</option>
               <option value="SUBSCRIBERS_ONLY">Subscribed holders</option>
               <option value="DIRECT_LINK">Direct link only</option>
             </select></label>
-            <label>Announcement audience<select
+            <label><span className="field-label">Announcement audience{announcementEnabled && <RequiredMark />}</span><select
+              required={announcementEnabled}
               value={announcementEnabled ? form.snapDeliveryMode : announcementAudience}
               onChange={(event) => setAnnouncementDelivery(event.target.value)}
               disabled={!announcementEnabled}
@@ -650,18 +651,16 @@ export function OrganiserEventPage() {
   const [documentFeedback, setDocumentFeedback] = useState(null);
   const [announcementBusy, setAnnouncementBusy] = useState(false);
   const [announcementFeedback, setAnnouncementFeedback] = useState(null);
-  const jobAvailableAt = Date.parse(view.data?.job?.availableAt ?? '');
-  const jobWaitingForRecordDate = view.data?.job?.status === 'PENDING'
-    && Number.isFinite(jobAvailableAt)
-    && jobAvailableAt > Date.now();
-  const jobActive = ['PENDING', 'RUNNING'].includes(view.data?.job?.status)
-    && !jobWaitingForRecordDate;
+  const progress = eventProgress(view.data);
+  const jobAvailableAt = progress.availableAt;
+  const jobWaitingForRecordDate = progress.waitingForRecordDate;
+  const jobActive = progress.active;
   useEventLiveRefresh(
     view.refresh,
     eventId,
-    Boolean(jobActive || view.data?.verificationStatus === 'PENDING'),
+    Boolean(jobActive || progress.verificationActive),
     2_000,
-    jobWaitingForRecordDate ? view.data.job.availableAt : null,
+    jobWaitingForRecordDate ? progress.buildJob.availableAt : null,
   );
 
   async function retry() {
@@ -677,7 +676,9 @@ export function OrganiserEventPage() {
         body: { publisherAddress: wallet.account },
       });
       await view.reload();
-      setRetrySuccess('Retry queued successfully. Processing will resume from the last safe step.');
+      setRetrySuccess(progress.ready
+        ? 'Explorer verification recheck queued. The deployed event and snapshot are unchanged.'
+        : 'Retry queued successfully. Processing will resume from the last safe step.');
     } catch (error) {
       setRetryError(error);
     } finally {
@@ -771,7 +772,7 @@ export function OrganiserEventPage() {
   if (view.loading) return <Page title="Organizer"><Spinner /></Page>;
   if (view.error) return <Page title="Organizer"><ErrorBox error={view.error} /></Page>;
   const event = view.data;
-  const canRetry = Boolean(event.failureReason || event.verificationStatus === 'FAILED');
+  const canRetry = progress.canRetryBuild;
   const documentSlots = Math.max(0, MAX_DOCUMENTS - (event.documents?.length ?? 0));
   const canPublishAnnouncement = event.contractReady
     && ['QUEUED', 'PUBLISHED'].includes(event.announcementStatus);
@@ -797,17 +798,17 @@ export function OrganiserEventPage() {
     <Panel title="Event status">
       <div className="status-line">
         <Status value={event.status} />
-        <span>{event.job?.message}</span>
+        <span>{progress.message}</span>
       </div>
       {jobWaitingForRecordDate && <Notice>
         The record-date snapshot is scheduled for {new Date(jobAvailableAt).toLocaleString()}.
         It will start automatically once that time is confirmation-safe on Polygon.
       </Notice>}
-      {jobActive && <div className="job-progress">
-        <div><span>{event.job?.message}</span><strong>{event.job?.progress ?? 0}%</strong></div>
-        <progress value={event.job?.progress ?? 0} max="100" />
+      {(jobActive || progress.ready) && <div className="job-progress">
+        <div><span>{progress.message}</span><strong>{progress.progress}%</strong></div>
+        <progress value={progress.progress} max="100" />
       </div>}
-      {event.failureReason && <Notice tone="error">{event.failureReason}</Notice>}
+      {!progress.ready && event.failureReason && <Notice tone="error">{event.failureReason}</Notice>}
       {canRetry && <button className="button" onClick={retry} disabled={retrying}>
         {retrying ? 'Queuing retry…' : 'Retry safely'}
       </button>}
@@ -837,7 +838,17 @@ export function OrganiserEventPage() {
         <div><dt>Record block</dt><dd>{event.recordDateBlock ?? 'Pending'}</dd></div>
         <div><dt>Merkle root</dt><dd><ShortAddress value={event.snapshotRoot} /></dd></div>
       </dl>
-      {event.verificationError && <Notice tone="error">{event.verificationError}</Notice>}
+      {progress.ready && event.verificationStatus !== 'VERIFIED' && <div className="verification-background-notice" role="status">
+        <p>{event.verificationStatus === 'FAILED'
+          ? 'The event is ready. Explorer source publication needs a recheck; it does not invalidate the deployed contract.'
+          : event.verificationStatus === 'PENDING'
+            ? 'The event is ready. Source verification continues separately in the background.'
+            : 'Explorer source verification has not been submitted. Deployment is complete.'}</p>
+        {event.verificationStatus === 'FAILED' && <button className="button secondary compact" type="button" onClick={retry} disabled={retrying}>
+          {retrying ? 'Queuing recheck...' : 'Recheck source verification'}
+        </button>}
+      </div>}
+      {event.verificationError && <Notice>{event.verificationError}</Notice>}
     </Panel>
 
     {!['DISABLED', 'NOT_CONFIGURED'].includes(event.announcementStatus) && <Panel
