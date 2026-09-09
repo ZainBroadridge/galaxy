@@ -20,9 +20,12 @@ contract VoteEvent is EIP712 {
     error ZeroVotingPower();
     error InvalidProposal();
     error InvalidOption();
+    error InvalidSelectionText();
 
     bytes32 private constant BALLOT_TYPEHASH =
-        keccak256("Ballot(address voter,string selectedOptions)");
+        keccak256("Ballot(address voter,VoteSelection[] selections)VoteSelection(uint256 proposalNumber,string proposal,uint256 optionNumber,string selectedOption)");
+    bytes32 private constant SELECTION_TYPEHASH =
+        keccak256("VoteSelection(uint256 proposalNumber,string proposal,uint256 optionNumber,string selectedOption)");
 
     /// @notice Zero means that a proposal has no board recommendation.
     /// @dev A non-zero recommendation is one-based: 1 means options[0],
@@ -39,6 +42,18 @@ contract VoteEvent is EIP712 {
         uint256 formId;
         uint8 recommendation;
     }
+
+    /// @notice Text is supplied with the ballot and checked against hashes fixed at deployment.
+    /// @dev This avoids storing long proposal descriptions while preventing relayer text substitution.
+    struct VoteSelection {
+        uint256 proposalNumber;
+        string proposal;
+        uint256 optionNumber;
+        string selectedOption;
+    }
+
+    mapping(uint256 proposalIndex => bytes32 textHash) private _proposalTextHashes;
+    mapping(uint256 proposalOptionKey => bytes32 textHash) private _optionTextHashes;
 
     address public immutable creator;
     address public immutable tokenAddress;
@@ -72,7 +87,7 @@ contract VoteEvent is EIP712 {
     /// @notice Announces proposal text, options, and board recommendations at deployment.
     event AnnouncedProposals(uint256 proposalCount, ProposalInput[] proposals);
 
-    event VoteCast(address indexed voter, uint256 votingPower, bytes choices);
+    event VoteCast(address indexed voter, uint256 votingPower, string selectedOptions);
 
     constructor(
         address creator_,
@@ -86,7 +101,7 @@ contract VoteEvent is EIP712 {
         uint256 proposalConfig_,
         uint64 recordDateTimestamp_,
         ProposalInput[] memory proposals_
-    ) EIP712("PV VoteEvent", "3") {
+    ) EIP712("PV VoteEvent", "4") {
         if (
             creator_ == address(0) ||
             tokenAddress_ == address(0) ||
@@ -112,6 +127,13 @@ contract VoteEvent is EIP712 {
         metadataHash = metadataHash_;
         proposalConfig = proposalConfig_;
 
+        for (uint256 i; i < proposals_.length; ++i) {
+            _proposalTextHashes[i] = keccak256(bytes(proposals_[i].proposalText));
+            for (uint8 j; j < _optionCountUnchecked(i); ++j) {
+                _optionTextHashes[_tallyKey(i, j)] = keccak256(bytes(proposals_[i].options[j]));
+            }
+        }
+
         emit AnnouncedProposals(proposals_.length, proposals_);
         emit AnnounceVoting(
             tokenAddress_,
@@ -128,6 +150,7 @@ contract VoteEvent is EIP712 {
         uint256 snapshotBalance,
         bytes32[] calldata proof,
         bytes calldata choices,
+        VoteSelection[] calldata selections,
         bytes calldata signature
     ) external {
         if (block.timestamp < votingStart || block.timestamp > votingEnd) {
@@ -136,7 +159,7 @@ contract VoteEvent is EIP712 {
         if (hasVoted[voter]) revert AlreadyVoted();
 
         uint256 count = proposalCount();
-        if (choices.length != count) revert InvalidChoices();
+        if (choices.length != count || selections.length != count) revert InvalidChoices();
 
         // Double-hashed leaf matches OpenZeppelin's standard Merkle-tree format.
         bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(voter, snapshotBalance))));
@@ -144,12 +167,12 @@ contract VoteEvent is EIP712 {
             revert InvalidSnapshotProof();
         }
 
-        bytes memory selectedOptions = _selectedOptions(choices);
+        bytes32 selectionsHash = _validatedSelectionsHash(choices, selections);
         bytes32 structHash = keccak256(
             abi.encode(
                 BALLOT_TYPEHASH,
                 voter,
-                keccak256(selectedOptions)
+                selectionsHash
             )
         );
         if (ECDSA.recover(_hashTypedDataV4(structHash), signature) != voter) {
@@ -171,12 +194,12 @@ contract VoteEvent is EIP712 {
             }
         }
 
-        emit VoteCast(voter, votingPower, choices);
+        emit VoteCast(voter, votingPower, _readableSelections(selections));
     }
 
     /// @notice Ballot signing format used by this deployment.
     function ballotVersion() external pure returns (uint8) {
-        return 3;
+        return 4;
     }
 
     function proposalCount() public view returns (uint8) {
@@ -204,24 +227,49 @@ contract VoteEvent is EIP712 {
         }
     }
 
-    function _selectedOptions(bytes calldata choices)
-        private
-        pure
-        returns (bytes memory result)
+    function _validatedSelectionsHash(bytes calldata choices, VoteSelection[] calldata selections)
+        private view returns (bytes32)
     {
-        for (uint256 proposalIndex; proposalIndex < choices.length; ) {
-            if (proposalIndex != 0) result = abi.encodePacked(result, "; ");
-            result = abi.encodePacked(
-                result,
-                "Proposal ",
-                _decimal(proposalIndex + 1),
-                " = Option ",
-                _decimal(uint8(choices[proposalIndex]) + 1)
-            );
-            unchecked {
-                ++proposalIndex;
+        bytes32[] memory hashes = new bytes32[](choices.length);
+        for (uint256 i; i < choices.length; ++i) {
+            uint8 option = uint8(choices[i]);
+            if (option >= _optionCountUnchecked(i)) revert InvalidOption();
+            bytes32 proposalHash = keccak256(bytes(selections[i].proposal));
+            bytes32 optionHash = keccak256(bytes(selections[i].selectedOption));
+            if (selections[i].proposalNumber != i + 1 || selections[i].optionNumber != uint256(option) + 1
+                || proposalHash != _proposalTextHashes[i]
+                || optionHash != _optionTextHashes[_tallyKey(i, option)]) {
+                revert InvalidSelectionText();
             }
+            hashes[i] = keccak256(abi.encode(SELECTION_TYPEHASH, selections[i].proposalNumber, proposalHash, selections[i].optionNumber, optionHash));
         }
+        return keccak256(abi.encodePacked(hashes));
+    }
+
+    function _readableSelections(VoteSelection[] calldata selections)
+        private pure returns (string memory)
+    {
+        // Build each fragment once, then copy into one buffer. Repeatedly joining
+        // an ever-growing prefix would use quadratic memory for long ballots.
+        bytes[] memory parts = new bytes[](selections.length);
+        uint256 length;
+        for (uint256 i; i < selections.length; ++i) {
+            parts[i] = abi.encodePacked(i == 0 ? "" : "\n\n", "Proposal ", _decimal(i + 1), ": ",
+                selections[i].proposal, "\nSelected option: ", selections[i].selectedOption);
+            length += parts[i].length;
+        }
+        bytes memory text = new bytes(length);
+        uint256 offset;
+        for (uint256 i; i < parts.length; ++i) {
+            bytes memory part = parts[i];
+            // The destination is bounded by the sum calculated above. MCOPY
+            // uses the repository's existing Cancun compilation target.
+            assembly ("memory-safe") {
+                mcopy(add(add(text, 0x20), offset), add(part, 0x20), mload(part))
+            }
+            offset += part.length;
+        }
+        return string(text);
     }
 
     function _decimal(uint256 value) private pure returns (bytes memory) {

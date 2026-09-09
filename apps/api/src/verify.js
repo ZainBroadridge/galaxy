@@ -3,8 +3,9 @@ import { config } from './config.js';
 import { query } from './db.js';
 import { permanentError } from './errors.js';
 import { updateJob } from './jobs.js';
-import { loadVerificationInput } from './artifact.js';
+import { loadLegacyVerificationInput, loadVerificationInput } from './artifact.js';
 import { constructorArguments } from './deploy.js';
+import { deployedBallotVersion } from './ballot-protocol.js';
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const endpoint = 'https://api.etherscan.io/v2/api';
@@ -33,7 +34,10 @@ export async function verifyContract(job) {
   if (!found.rowCount) throw permanentError('Event no longer exists.');
   const event = found.rows[0];
   if (!event.contract_address) throw permanentError('Contract address is missing.');
-  const verification = await loadVerificationInput();
+  const version = await deployedBallotVersion(event.contract_address);
+  const verification = version === 4
+    ? await loadVerificationInput()
+    : await loadLegacyVerificationInput(version);
   let guid = event.verification_guid;
 
   if (!guid) {

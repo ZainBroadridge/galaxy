@@ -23,6 +23,11 @@ const proposal = z.object({
 
 export const eventInput = z.object({
   tokenAddress: address,
+  issuerName: z.string().trim().max(160).default(''),
+  securityName: z.string().trim().max(240).default(''),
+  securityTicker: z.string().trim().max(24).regex(/^[A-Za-z0-9.\-]*$/).default(''),
+  platform: z.string().trim().max(80).default(''),
+  issuerLogoId: z.string().uuid().nullable().optional(),
   title: z.string().trim().min(1).max(180),
   description: z.string().trim().max(8000).default(''),
   recordDateAt: isoDate,

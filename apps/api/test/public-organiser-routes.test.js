@@ -24,9 +24,9 @@ function assertPublicWriteRoute(method, path) {
   assert.doesNotMatch(line, /requireAuth/);
 }
 
-test('organiser and notification reads are public and wallet-scoped', () => {
-  assertPublicRoute('get', '/v1/dashboard/organiser');
-  assertPublicRoute('get', '/v1/communications/portal');
+test('issuer reads are demo-session protected while background notification reads stay public', () => {
+  assert.match(routeLine('get', '/v1/dashboard/organiser'), /requireIssuer/u);
+  assert.match(routeLine('get', '/v1/communications/portal'), /requireIssuer/u);
   assertPublicRoute('get', '/v1/communications/subscriptions');
   assertPublicRoute('get', '/v1/communications/inbox');
 
@@ -42,11 +42,18 @@ test('organiser and notification reads are public and wallet-scoped', () => {
   assert.match(home, /dashboard\/organiser\?wallet=.*auth:\s*false/s);
 });
 
-test('organiser writes require no wallet signature and use public wallet-scoped rate limits', () => {
+test('organiser writes require the demo session but no extra wallet signature and keep rate limits', () => {
   assert.doesNotMatch(organiser, /ensureAuthenticated|authBusy|Unlock organiser|getSigner\(|signMessage\(/);
   assert.doesNotMatch(notifications, /ensureAuthenticated|getSigner\(|signMessage\(/);
 
   assert.match(server, /const publicWriteLimiter = limiter\(40/);
+  for (const [method, route] of [
+    ['post', '/v1/tokens/inspect'], ['post', '/v1/events'],
+    ['post', '/v1/events/:id/retry'], ['post', '/v1/events/:id/announcement'],
+    ['post', '/v1/events/:id/documents'], ['delete', '/v1/events/:id/documents/:documentId'],
+    ['post', '/v1/communications/token/platform'], ['post', '/v1/events/:id/communications/platform'],
+  ]) assert.match(routeLine(method, route), /requireIssuer/u, route);
+
   assertPublicWriteRoute('post', '/v1/tokens/inspect');
   assertPublicWriteRoute('post', '/v1/events');
   assertPublicWriteRoute('post', '/v1/events/:id/retry');

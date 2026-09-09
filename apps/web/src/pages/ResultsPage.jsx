@@ -12,6 +12,7 @@ import {
 } from '../components/UI.jsx';
 import { useLoad } from '../hooks.js';
 import { useWallet } from '../wallet.jsx';
+import IssuerLogo from '../components/IssuerLogo.jsx';
 
 function formatDate(value) {
   if (!value) return '—';
@@ -189,6 +190,7 @@ export function EventResultsPage() {
         <Status value={event.status} label={event.status === 'CLOSED' ? 'Closed' : undefined} />
       </div>
       <div className="results-title-row">
+        <IssuerLogo event={event} className="issuer-results-logo" />
         <div>
           <h1>{event.title} Results</h1>
           <p>{event.tokenName} ({event.tokenSymbol})</p>

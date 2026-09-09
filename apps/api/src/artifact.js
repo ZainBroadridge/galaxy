@@ -23,6 +23,9 @@ export async function loadArtifact() {
   if (!artifact) {
     artifact = requireArtifact(JSON.parse(await readFile(artifactUrl, 'utf8')));
   }
+  if (!artifact.abi.some((item) => item.type === 'function' && item.name === 'castVote' && item.inputs.length === 6)) {
+    throw new Error('Stale VoteEvent bytecode: compile and export the v4 contract before deploying the redesigned application.');
+  }
   return artifact;
 }
 
@@ -52,4 +55,9 @@ export async function loadVerificationInput() {
   }
 
   return verification;
+}
+
+export async function loadLegacyVerificationInput(version) {
+  if (Number(version) !== 3) throw new Error('Verification source for this legacy contract is unavailable. Do not submit v4 source for an older deployment.');
+  return JSON.parse(await readFile(new URL('../../../packages/contracts/legacy/VoteEvent-v3.verification.json', import.meta.url), 'utf8'));
 }

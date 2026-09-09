@@ -1,0 +1,51 @@
+[
+  {
+    "issuer": "Apple Inc.",
+    "ticker": "AAPL",
+    "securityClass": "Common Stock",
+    "source": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000013/aapl-20260328.htm",
+    "checkedOn": "2026-09-08"
+  },
+  {
+    "issuer": "Tesla, Inc.",
+    "ticker": "TSLA",
+    "securityClass": "Common Stock",
+    "source": "https://www.sec.gov/Archives/edgar/data/1318605/000162828026026673/tsla-20260331.htm",
+    "checkedOn": "2026-09-08"
+  },
+  {
+    "issuer": "NVIDIA Corporation",
+    "ticker": "NVDA",
+    "securityClass": "Common Stock",
+    "source": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm",
+    "checkedOn": "2026-09-08"
+  },
+  {
+    "issuer": "Alphabet Inc.",
+    "ticker": "GOOGL / GOOG",
+    "securityClass": "Class A Common Stock / Class C Capital Stock",
+    "source": "https://www.sec.gov/Archives/edgar/data/1652044/000119312526256375/d152107d424b5.htm",
+    "checkedOn": "2026-09-08"
+  },
+  {
+    "issuer": "The Walt Disney Company",
+    "ticker": "DIS",
+    "securityClass": "Common Stock",
+    "source": "https://www.sec.gov/Archives/edgar/data/1744489/000174448926000057/dis-20260627.htm",
+    "checkedOn": "2026-09-08"
+  },
+  {
+    "issuer": "Space Exploration Technologies Corp.",
+    "ticker": "SPCX",
+    "securityClass": "Class A Common Stock",
+    "source": "https://ir.spacex.com/updates/releases-details/2026/Space-Exploration-Technologies-Corp--Announces-Closing-of-Initial-Public-Offering-Including-Full-Exercise-of-Underwriters-Option-to-Purchase-Additional-Shares-2026-RgoR-Y1Vwh/default.aspx",
+    "checkedOn": "2026-09-08"
+  },
+  {
+    "issuer": "Oracle Corporation",
+    "ticker": "ORCL",
+    "securityClass": "Common Stock",
+    "source": "https://www.sec.gov/Archives/edgar/data/1341439/000119312526277521/orcl-20260531.htm",
+    "checkedOn": "2026-09-08"
+  }
+]

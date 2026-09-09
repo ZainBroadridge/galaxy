@@ -1,0 +1,25 @@
+{
+  "baseCommit": "eb6dad8396c65fc5fcafff193d7a8a90aec597b3",
+  "baselineArchiveSha256": "d767d98a51ccb15eda7c67ff35d291e56839d10d9b7a80a4e9548ba5c23c2d4e",
+  "designArchiveSha256": "3bbd163a946a80280eb41c4fae34330a0e9cbf5a0aa89e38e7105cf694abca49",
+  "releaseDate": "2026-09-08",
+  "generatedArtifactsIncluded": false,
+  "mandatoryLocalCompile": true,
+  "preservedFiles": {
+    "apps/api/src/snapshot.js": "1c1821ee65bb8bac280ebe1f3b50069e8d09f7f2500fd74a75400e63c6c68a05",
+    "apps/api/src/rpc.js": "8136fcfd72a5df9dedb1954858ae597056afd8bb27dd46d0519d3bb6d3d758cb",
+    "apps/api/src/runner.js": "c6fb056a14746dd15e11e0292de60504a898407b4feb5c4417a00df361acb8b0",
+    "apps/api/src/jobs.js": "7772eed397d82332fc2689bd8697bdafbe7b3a3aa25adb9f13d3c42bae9f4231",
+    "apps/api/src/relayer.js": "3faa858621c29cb949ac081116e5017428082a3b0e90adf3b943845d66fd0c65",
+    "apps/api/src/event-announcements.js": "6efb78bae8524c053a74a982da48f9cb6a3b76d2ddf73c3367b2491aaadc8514",
+    "apps/api/src/communications.js": "0fd6e6601d0b930fa1526445f3054695b6a1e0257489188ce853f79d8a3f10f7",
+    "apps/api/src/communication-recipient-policy.js": "a3a40dda17e39efbecff224818a16c5f9d6482f903d664f57382b2a0a3059cde",
+    "apps/web/src/hooks.js": "f74054a0ef908ecfd53820f2e8bcb518268f43deae48b99e4fc530039459006a",
+    "apps/web/src/styles.css": "e8695c50d7be558076d05bb6455da7d14ab24296c8e071139e22fafccc2585d5",
+    "apps/web/src/browser-push.js": "99a2f197019b2a681c94bf691b72b5cc206b1f5fb6b7485c753acb87c9f75d64",
+    "package.json": "d157fec85227c0946f27ff96318c984462c0e3f6819867dff9711579b9d121d7",
+    "package-lock.json": "4a192320babc587cdc6e548319d213c79c2e23304302940f16fae2b3bf83cc2c",
+    "render.yaml": "2c90358d40a22f8a96ef9e908ba5a9b443f555a15c1233a0025b6dd771561a0d",
+    "vercel.json": "bbddc9e08f497f1530c75a94dd6b4a8ad229db9c0357bc282b87cc21973fa24d"
+  }
+}

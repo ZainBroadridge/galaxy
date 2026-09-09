@@ -88,7 +88,7 @@ test('token address validation trims edge whitespace and explains malformed inpu
 test('wallet connection configures Amoy without a duplicate add-network control', async () => {
   const [wallet, app] = await Promise.all([
     read('apps/web/src/wallet.jsx'),
-    read('apps/web/src/App.jsx'),
+    read('apps/web/src/issuer/IssuerLayout.jsx'),
   ]);
 
   const preflight = wallet.indexOf("await configureAmoy(injected, { allowUntilConnected: true })");

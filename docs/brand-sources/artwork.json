@@ -1,0 +1,53 @@
+[
+  {
+    "id": "apple",
+    "filename": "apple-brand-v2.png",
+    "source": "user-supplied Apple_logo_black.svg",
+    "downloadUrl": null,
+    "checkedOn": "2026-09-08",
+    "sha256": "4ef2ad5a06b10b589c6294d4c3a657d2243a9baf7d41da0c1c99af54aa84f16f"
+  },
+  {
+    "id": "nvidia",
+    "filename": "nvidia-brand-v2.png",
+    "source": "user-supplied Nvidia_Logo.svg",
+    "downloadUrl": null,
+    "checkedOn": "2026-09-08",
+    "sha256": "fad5a972a982a3f1f2967913e2f551e4377a5cd63fd39362a705f8094478bc8f"
+  },
+  {
+    "id": "tesla",
+    "filename": "tesla-brand-v2.png",
+    "source": "https://commons.wikimedia.org/wiki/File:Tesla_Motors.svg",
+    "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bd/Tesla_Motors.svg/500px-Tesla_Motors.svg.png",
+    "checkedOn": "2026-09-08"
+  },
+  {
+    "id": "alphabet",
+    "filename": "alphabet-brand-v2.png",
+    "source": "https://commons.wikimedia.org/wiki/File:Alphabet_Inc_Logo_2015.svg",
+    "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Alphabet_Inc_Logo_2015.svg/1280px-Alphabet_Inc_Logo_2015.svg.png",
+    "checkedOn": "2026-09-08"
+  },
+  {
+    "id": "disney",
+    "filename": "disney-brand-v2.png",
+    "source": "https://commons.wikimedia.org/wiki/File:The_Walt_Disney_Company_Logo.svg",
+    "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/The_Walt_Disney_Company_Logo.svg/1024px-The_Walt_Disney_Company_Logo.svg.png",
+    "checkedOn": "2026-09-08"
+  },
+  {
+    "id": "spacex",
+    "filename": "spacex-brand-v2.png",
+    "source": "https://commons.wikimedia.org/wiki/File:SpaceX_logo_black.svg",
+    "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2e/SpaceX_logo_black.svg/1280px-SpaceX_logo_black.svg.png",
+    "checkedOn": "2026-09-08"
+  },
+  {
+    "id": "oracle",
+    "filename": "oracle-brand-v2.png",
+    "source": "https://commons.wikimedia.org/wiki/File:Oracle_logo.svg",
+    "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/Oracle_logo.svg/1280px-Oracle_logo.svg.png",
+    "checkedOn": "2026-09-08"
+  }
+]

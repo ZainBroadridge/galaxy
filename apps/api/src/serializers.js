@@ -1,4 +1,4 @@
-import { hashEventMetadata } from '@pv/shared';
+import { eventIssuerBranding, hashEventMetadata } from '@pv/shared';
 import { config } from './config.js';
 import { eventAnnouncementStatus } from './event-announcements.js';
 
@@ -28,6 +28,8 @@ export function serializeEvent(row, extras = {}) {
     tokenName: row.token_name,
     tokenSymbol: row.token_symbol,
     tokenDecimals: Number(row.token_decimals),
+    ...eventIssuerBranding(row),
+    platform: row.token_platform || '',
     title: row.title,
     description: row.description,
     proposals: row.proposals,

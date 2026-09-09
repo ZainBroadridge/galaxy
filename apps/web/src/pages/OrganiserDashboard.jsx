@@ -18,6 +18,8 @@ import {
   validateTokenAddressInput,
 } from '../token-address.js';
 import { useWallet } from '../wallet.jsx';
+import IssuerBrandingFields from '../issuer/IssuerBrandingFields.jsx';
+import { visibleCreationNotice } from '../issuer/notice-state.js';
 
 const MAX_DOCUMENTS = 3;
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
@@ -27,6 +29,10 @@ const localDate = (date) => new Date(
 const iso = (value) => new Date(value).toISOString();
 const initialForm = () => ({
   tokenAddress: '',
+  issuerName: '',
+  securityName: '',
+  securityTicker: '',
+  platform: '',
   title: '',
   description: '',
   recordDateAt: localDate(new Date(Date.now() - 5 * 60_000)),
@@ -44,7 +50,7 @@ const initialForm = () => ({
   }],
 });
 
-const DEMO_RECORD_AGE_MS = 24 * 60 * 60_000;
+const DEMO_RECORD_AGE_MS = 2 * 60 * 60_000;
 const DEMO_START_DELAY_MS = 5 * 60_000;
 const DEMO_END_DELAY_MS = 60 * 60_000;
 
@@ -240,6 +246,7 @@ export default function OrganiserDashboard() {
   );
   const [form, setForm] = useState(initialForm);
   const [documents, setDocuments] = useState([]);
+  const [issuerLogoFile, setIssuerLogoFile] = useState(null);
   const [token, setToken] = useState(null);
   const [inspectError, setInspectError] = useState(null);
   const [inspectBusy, setInspectBusy] = useState(false);
@@ -342,12 +349,24 @@ export default function OrganiserDashboard() {
       const tokenAddress = validateTokenAddressInput(form.tokenAddress);
       if (!tokenAddress.valid) throw new Error(tokenAddress.message);
 
+      let issuerLogoId = null;
+      if (issuerLogoFile) {
+        setBusyStage('Uploading issuer logo...');
+        const logo = await api('/v1/issuer/logos', {
+          method: 'POST', auth: false,
+          headers: { 'content-type': issuerLogoFile.type, 'x-wallet-address': wallet.account },
+          body: issuerLogoFile,
+        });
+        issuerLogoId = logo.id;
+      }
+      setBusyStage('Creating event...');
       const created = await api('/v1/events', {
         method: 'POST',
         auth: false,
         body: {
           creatorAddress: wallet.account,
           ...form,
+          issuerLogoId,
           tokenAddress: tokenAddress.tokenAddress,
           recordDateAt: iso(form.recordDateAt),
           votingStartAt: iso(form.votingStartAt),
@@ -453,6 +472,7 @@ export default function OrganiserDashboard() {
     <ErrorBox error={error} />
     <Panel className="create-event-panel">
       <form className="form create-event-form" onSubmit={submit}>
+        <IssuerBrandingFields form={form} setForm={setForm} file={issuerLogoFile} setFile={setIssuerLogoFile} disabled={Boolean(busyStage)} />
         <section className="create-event-section">
           <header className="create-event-section-heading">
             <h2>Event details</h2>
@@ -571,7 +591,7 @@ export default function OrganiserDashboard() {
             <div>
               <strong>Automatic event announcement</strong>
               <small>{announcementEnabled
-                ? `Published after deployment to ${deliveryLabel}. No organiser unlock or MetaMask signature is required.`
+                ? `Published after deployment to ${deliveryLabel}. No additional MetaMask signature is required.`
                 : 'No event announcement will be published after deployment.'}</small>
             </div>
             <label className="announcement-switch" title={`Automatic event announcement: ${announcementEnabled ? 'On' : 'Off'}`}>
@@ -763,7 +783,7 @@ export function OrganiserEventPage() {
   const announcementMessage = event.announcementStatus === 'PUBLISHED'
     ? 'The platform-issued event notice is available in Notifications. Retry delivery if a browser or MetaMask alert was interrupted.'
     : event.contractReady
-      ? 'Automatic publication can be retried here without authentication or a wallet signature.'
+      ? 'Automatic publication can be retried from this issuer session without a wallet signature.'
       : 'The platform will publish this event notice automatically after the VoteEvent contract is deployed.';
 
   return <Page
@@ -771,7 +791,7 @@ export function OrganiserEventPage() {
     intro={`${event.tokenName} (${event.tokenSymbol})`}
     actions={<Link className="button secondary" to="/organiser">Back to events</Link>}
   >
-    {location.state?.notice && <Notice tone="success">{location.state.notice}</Notice>}
+    {visibleCreationNotice(event, location.state?.notice) && <Notice tone="success">{visibleCreationNotice(event, location.state.notice)}</Notice>}
     {location.state?.warning && <Notice>{location.state.warning}</Notice>}
 
     <Panel title="Event status">

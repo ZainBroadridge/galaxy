@@ -53,6 +53,29 @@ export const VOTE_EVENT_ABI = [
     outputs: [],
   },
   {
+    type: 'function', name: 'castVote', stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'voter', type: 'address' },
+      { name: 'snapshotBalance', type: 'uint256' },
+      { name: 'proof', type: 'bytes32[]' },
+      { name: 'choices', type: 'bytes' },
+      { name: 'selections', type: 'tuple[]', components: [
+        { name: 'proposalNumber', type: 'uint256' }, { name: 'proposal', type: 'string' },
+        { name: 'optionNumber', type: 'uint256' }, { name: 'selectedOption', type: 'string' },
+      ] },
+      { name: 'signature', type: 'bytes' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'event', name: 'VoteCast', anonymous: false,
+    inputs: [
+      { name: 'voter', type: 'address', indexed: true },
+      { name: 'votingPower', type: 'uint256', indexed: false },
+      { name: 'selectedOptions', type: 'string', indexed: false },
+    ],
+  },
+  {
     type: 'event',
     name: 'AnnounceVoting',
     anonymous: false,

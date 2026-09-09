@@ -53,9 +53,9 @@ test('Snap RPC handler is assignable without optional undefined JSON fields', as
   assert.doesNotMatch(snap, /export const onRpcRequest: OnRpcRequestHandler = async/u);
 });
 
-test('footer is minute and grey while the Home add-network control is bottom-right', async () => {
+test('issuer footer retains its minute grey presentation without a network plus control', async () => {
   const [app, styles] = await Promise.all([
-    read('apps/web/src/App.jsx'),
+    read('apps/web/src/issuer/IssuerLayout.jsx'),
     read('apps/web/src/styles.css'),
   ]);
 
@@ -65,6 +65,6 @@ test('footer is minute and grey while the Home add-network control is bottom-rig
   assert.match(styles, /\.pv-site-footer \{[\s\S]*background: #f4f4f5/u);
   assert.match(styles, /\.pv-footer-brand \{[\s\S]*font-size: 10px/u);
   assert.match(styles, /\.pv-site-footer \.footer-copyright \{[\s\S]*font-size: 10px/u);
-  assert.match(styles, /\.pv-add-network-wrap \{[\s\S]*right: 24px;[\s\S]*left: auto/u);
-  assert.match(styles, /\.pv-network-tooltip \{[\s\S]*right: calc\(100% \+ 11px\);[\s\S]*left: auto/u);
+  assert.doesNotMatch(app, /pv-add-network-wrap|PlusIcon/u);
+
 });

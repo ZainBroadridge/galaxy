@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('home uses the horizontal ProxyVote shell and a two-slide heading', async () => {
   const [app, home, styles] = await Promise.all([
-    read('apps/web/src/App.jsx'),
+    read('apps/web/src/issuer/IssuerLayout.jsx'),
     read('apps/web/src/pages/HomePage.jsx'),
     read('apps/web/src/styles.css'),
   ]);

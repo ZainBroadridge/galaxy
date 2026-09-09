@@ -105,28 +105,34 @@ describe('VoteEvent', function () {
     };
   }
 
-  async function signBallot(contract, signer, choices) {
+  async function signBallot(contract, signer, choices, overrides = {}) {
     const network = await ethers.provider.getNetwork();
-    const choicesBytes = ethers.hexlify(Uint8Array.from(choices));
-    const signature = await signer.signTypedData(
-      {
-        name: 'PV VoteEvent',
-        version: '3',
-        chainId: network.chainId,
-        verifyingContract: await contract.getAddress(),
-      },
-      {
-        Ballot: [
-          { name: 'voter', type: 'address' },
-          { name: 'selectedOptions', type: 'string' },
-        ],
-      },
-      {
-        voter: signer.address,
-        selectedOptions: choices.map((choice, index) => `Proposal ${index + 1} = Option ${choice + 1}`).join('; '),
-      },
-    );
-    return { choicesBytes, signature };
+    const logs = await contract.queryFilter(contract.filters.AnnouncedProposals());
+    const proposals = logs[0].args.proposals;
+    const selections = choices.map((choice, index) => ({
+      proposalNumber: index + 1,
+      proposal: proposals[index]?.proposalText ?? '',
+      optionNumber: choice + 1,
+      selectedOption: proposals[index]?.options[choice] ?? '',
+    }));
+    const domain = {
+      name: 'PV VoteEvent', version: '4', chainId: network.chainId,
+      verifyingContract: await contract.getAddress(), ...overrides,
+    };
+    const types = {
+      VoteSelection: [
+        { name: 'proposalNumber', type: 'uint256' },
+        { name: 'proposal', type: 'string' },
+        { name: 'optionNumber', type: 'uint256' },
+        { name: 'selectedOption', type: 'string' },
+      ],
+      Ballot: [{ name: 'voter', type: 'address' }, { name: 'selections', type: 'VoteSelection[]' }],
+    };
+    const signature = await signer.signTypedData(domain, types, { voter: signer.address, selections });
+    const text = selections.map((item, index) => (
+      `Proposal ${index + 1}: ${item.proposal}\nSelected option: ${item.selectedOption}`
+    )).join('\n\n');
+    return { choicesBytes: ethers.hexlify(Uint8Array.from(choices)), selections, signature, text, domain, types };
   }
 
   async function cast({ contract, caller, voter, balance, proof, choices }) {
@@ -136,6 +142,7 @@ describe('VoteEvent', function () {
       balance,
       proof,
       ballot.choicesBytes,
+      ballot.selections,
       ballot.signature,
     );
   }
@@ -190,11 +197,12 @@ describe('VoteEvent', function () {
         snapshotBalance,
         tree.proofs.get(voter.address.toLowerCase()),
         ballot.choicesBytes,
+        ballot.selections,
         ballot.signature,
       ),
-    ).to.emit(contract, 'VoteCast').withArgs(voter.address, 20, ballot.choicesBytes);
+    ).to.emit(contract, 'VoteCast').withArgs(voter.address, 20, ballot.text);
 
-    expect(await contract.ballotVersion()).to.equal(3);
+    expect(await contract.ballotVersion()).to.equal(4);
     expect(await contract.hasVoted(voter.address)).to.equal(true);
     expect(await contract.getProposalTallies(0)).to.deep.equal([20n, 0n, 0n]);
     expect(await contract.getProposalTallies(1)).to.deep.equal([0n, 20n]);
@@ -250,6 +258,7 @@ describe('VoteEvent', function () {
       snapshotBalance,
       tree.proofs.get(voter.address.toLowerCase()),
       ballot.choicesBytes,
+      ballot.selections,
       ballot.signature,
     ];
     await contract.connect(relayer).castVote(...args);
@@ -266,6 +275,7 @@ describe('VoteEvent', function () {
         1,
         tree.proofs.get(voter.address.toLowerCase()),
         ballot.choicesBytes,
+        ballot.selections,
         ballot.signature,
       ),
     ).to.be.revertedWithCustomError(contract, 'InvalidSnapshotProof');
@@ -281,9 +291,10 @@ describe('VoteEvent', function () {
         snapshotBalance,
         tree.proofs.get(voter.address.toLowerCase()),
         alteredChoices,
+        ballot.selections,
         ballot.signature,
       ),
-    ).to.be.revertedWithCustomError(contract, 'InvalidSignature');
+    ).to.be.revertedWithCustomError(contract, 'InvalidSelectionText');
   });
 
   it('rejects a signature from another wallet', async function () {
@@ -295,6 +306,7 @@ describe('VoteEvent', function () {
         snapshotBalance,
         tree.proofs.get(voter.address.toLowerCase()),
         ballot.choicesBytes,
+        ballot.selections,
         ballot.signature,
       ),
     ).to.be.revertedWithCustomError(contract, 'InvalidSignature');
@@ -312,6 +324,7 @@ describe('VoteEvent', function () {
         first.snapshotBalance,
         first.tree.proofs.get(first.voter.address.toLowerCase()),
         ballot.choicesBytes,
+        ballot.selections,
         ballot.signature,
       ),
     ).to.be.revertedWithCustomError(second, 'InvalidSignature');
@@ -326,6 +339,7 @@ describe('VoteEvent', function () {
         snapshotBalance,
         tree.proofs.get(voter.address.toLowerCase()),
         ballot.choicesBytes,
+        ballot.selections,
         ballot.signature,
       ),
     ).to.be.revertedWithCustomError(contract, 'InvalidOption');
@@ -341,6 +355,7 @@ describe('VoteEvent', function () {
         snapshotBalance,
         tree.proofs.get(voter.address.toLowerCase()),
         ballot.choicesBytes,
+        ballot.selections,
         ballot.signature,
       ),
     ).to.be.revertedWithCustomError(contract, 'InvalidChoices');
@@ -356,6 +371,7 @@ describe('VoteEvent', function () {
         voterBalance,
         tree.proofs.get(voter.address.toLowerCase()),
         ballot.choicesBytes,
+        ballot.selections,
         ballot.signature,
       ),
     ).to.be.revertedWithCustomError(contract, 'ZeroVotingPower');
@@ -370,6 +386,7 @@ describe('VoteEvent', function () {
         snapshotBalance,
         tree.proofs.get(voter.address.toLowerCase()),
         ballot.choicesBytes,
+        ballot.selections,
         ballot.signature,
       ),
     ).to.be.revertedWithCustomError(contract, 'VotingNotOpen');
@@ -385,6 +402,7 @@ describe('VoteEvent', function () {
         snapshotBalance,
         tree.proofs.get(voter.address.toLowerCase()),
         ballot.choicesBytes,
+        ballot.selections,
         ballot.signature,
       ),
     ).to.be.revertedWithCustomError(contract, 'VotingNotOpen');
@@ -452,4 +470,79 @@ describe('VoteEvent', function () {
       proposalAnnouncements([2]),
     )).to.be.revertedWithCustomError(factory, 'InvalidConfiguration');
   });
+
+  it('rejects validly signed text that differs from the deployed proposal or option', async function () {
+    const f = await fixture();
+    const signed = await signBallot(f.contract, f.voter, [0, 1]);
+    for (const field of ['proposal', 'selectedOption']) {
+      const changed = signed.selections.map((item) => ({ ...item }));
+      changed[0][field] = 'Misleading text';
+      const signature = await f.voter.signTypedData(signed.domain, signed.types, { voter: f.voter.address, selections: changed });
+      await expect(f.contract.castVote(f.voter.address, f.snapshotBalance,
+        f.tree.proofs.get(f.voter.address.toLowerCase()), signed.choicesBytes, changed, signature))
+        .to.be.revertedWithCustomError(f.contract, 'InvalidSelectionText');
+      expect(await f.contract.hasVoted(f.voter.address)).to.equal(false);
+    }
+  });
+
+  it('binds the one-based proposal and option numbers, not just matching strings', async function () {
+    const f = await fixture();
+    const signed = await signBallot(f.contract, f.voter, [0, 1]);
+    const changed = signed.selections.map((item) => ({ ...item }));
+    changed[0].optionNumber = 2;
+    await expect(f.contract.castVote(f.voter.address, f.snapshotBalance,
+      f.tree.proofs.get(f.voter.address.toLowerCase()), signed.choicesBytes, changed, signed.signature))
+      .to.be.revertedWithCustomError(f.contract, 'InvalidSelectionText');
+  });
+
+  it('cannot move a signature between two options that have identical labels', async function () {
+    const f = await fixture();
+    const args = [...f.args];
+    args[10] = f.proposals.map((proposal) => [...proposal]);
+    args[10][0] = [...args[10][0]];
+    args[10][0][1] = ['Same label', 'Same label', 'Other', ''];
+    const contract = await f.factory.deploy(...args);
+    await contract.waitForDeployment();
+    const signed = await signBallot(contract, f.voter, [0, 1]);
+    const changed = signed.selections.map((item) => ({ ...item }));
+    changed[0].optionNumber = 2;
+    await expect(contract.castVote(f.voter.address, f.snapshotBalance,
+      f.tree.proofs.get(f.voter.address.toLowerCase()), '0x0101', changed, signed.signature))
+      .to.be.revertedWithCustomError(contract, 'InvalidSignature');
+  });
+
+  it('rejects signatures for a different chain', async function () {
+    const f = await fixture();
+    const network = await ethers.provider.getNetwork();
+    const signed = await signBallot(f.contract, f.voter, [0, 1], { chainId: network.chainId + 1n });
+    await expect(f.contract.castVote(f.voter.address, f.snapshotBalance,
+      f.tree.proofs.get(f.voter.address.toLowerCase()), signed.choicesBytes, signed.selections, signed.signature))
+      .to.be.revertedWithCustomError(f.contract, 'InvalidSignature');
+  });
+
+  it('formats the maximum 32-proposal ballot without changing tally indexes', async function () {
+    const f = await fixture({ optionCounts: Array(32).fill(2) });
+    const signed = await signBallot(f.contract, f.voter, Array(32).fill(1));
+    await expect(f.contract.castVote(f.voter.address, f.snapshotBalance,
+      f.tree.proofs.get(f.voter.address.toLowerCase()), signed.choicesBytes, signed.selections, signed.signature))
+      .to.emit(f.contract, 'VoteCast').withArgs(f.voter.address, 20n, signed.text);
+    expect(await f.contract.getProposalTallies(31)).to.deep.equal([0n, 20n]);
+  });
+
+  it('keeps the archived v3 deployment callable with the legacy signature and ABI', async function () {
+    const f = await fixture();
+    const old = require('../legacy/VoteEvent-v3.json');
+    const legacy = await new ethers.ContractFactory(old.abi, old.bytecode, f.relayer).deploy(...f.args);
+    await legacy.waitForDeployment();
+    const network = await ethers.provider.getNetwork();
+    const signature = await f.voter.signTypedData({
+      name: 'PV VoteEvent', version: '3', chainId: network.chainId, verifyingContract: await legacy.getAddress(),
+    }, { Ballot: [{ name: 'voter', type: 'address' }, { name: 'selectedOptions', type: 'string' }] }, {
+      voter: f.voter.address, selectedOptions: 'Proposal 1 = Option 1; Proposal 2 = Option 2',
+    });
+    await expect(legacy.castVote(f.voter.address, f.snapshotBalance,
+      f.tree.proofs.get(f.voter.address.toLowerCase()), '0x0001', signature)).to.emit(legacy, 'VoteCast');
+    expect(await legacy.getProposalTallies(1)).to.deep.equal([0n, 20n]);
+  });
+
 });

@@ -20,7 +20,7 @@ const images = [
   'apps/web/public/insights/data-accuracy.jpg',
 ];
 
-test('home adds four functional Broadridge insight cards without changing dashboard metrics', async () => {
+test('issuer home retains four Broadridge insight cards and organiser-owned metrics', async () => {
   const home = await readText('apps/web/src/pages/HomePage.jsx');
 
   assert.match(home, /const insights = \[/u);
@@ -31,9 +31,9 @@ test('home adds four functional Broadridge insight cards without changing dashbo
 
   assert.match(home, /loading="lazy"/u);
   assert.match(home, /target: '_blank', rel: 'noopener noreferrer'/u);
-  assert.match(home, /title="Ongoing voting events"/u);
+  assert.match(home, /title="Your ongoing voting events"/u);
   assert.match(home, /title="Voting events organized by you"/u);
-  assert.match(home, /to="\/voting"/u);
+  assert.doesNotMatch(home, /to="\/voting"/u);
   assert.match(home, /to="\/organiser"/u);
 });
 

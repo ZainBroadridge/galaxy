@@ -1,0 +1,17 @@
+/* Additions are restricted to the issuer gate and event branding controls. */
+.issuer-login-page { min-height: 100vh; display: grid; place-items: center; background: #f4f6fa; padding: 32px 20px; }
+.issuer-login-card { width: min(480px,100%); padding: 36px; border: 1px solid #d5dce6; background: white; border-radius: 12px; display: flex; flex-direction: column; gap: 18px; }
+.issuer-login-card > img { width: 160px; align-self: center; }
+.issuer-login-card h1 { margin: 8px 0 0; }
+.issuer-login-card label { display: flex; flex-direction: column; gap: 8px; }
+.issuer-login-card small { color: #667085; line-height: 1.5; }
+.issuer-exit-link { background: none; border: none; color: #53647b; padding: 5px; font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
+.issuer-branding-fields .field-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; align-items: start; }
+.issuer-branding-fields label { min-width: 0; }
+.issuer-branding-fields small { display: block; color: #667085; font-size: 12px; line-height: 1.5; margin-top: 8px; }
+.issuer-branding-fields input[type='file'] { max-width: 100%; }
+.issuer-logo-preview { min-height: 112px; padding: 16px; border: 1px dashed #cbd3df; border-radius: 8px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: center; color: #667085; }
+.issuer-logo-preview img { max-width: 220px; max-height: 68px; object-fit: contain; }
+.issuer-logo-preview p { width: 100%; font-size: 13px; color: #9c2525; }
+.issuer-results-logo { max-width: 155px; max-height: 66px; object-fit: contain; }
+@media (max-width: 700px) { .issuer-branding-fields .field-grid { grid-template-columns: minmax(0,1fr); } .issuer-login-card { padding: 26px; } }

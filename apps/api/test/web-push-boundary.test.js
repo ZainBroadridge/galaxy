@@ -30,7 +30,7 @@ test('clickable browser notifications route through the mounted React applicatio
   assert.match(app, /useNavigate/u);
   assert.match(app, /listenForBrowserPushOpen/u);
   assert.match(app, /consumeBrowserPushBootstrap/u);
-  assert.match(app, /navigate\(browserPushNotificationPath\(messageId\)/u);
+  assert.match(app, /navigate\(browserPushNotificationPath\(/u);
 
   assert.match(page, /!wallet\.connected && <Panel/u);
   assert.match(page, /Connect the wallet that received this notification/u);

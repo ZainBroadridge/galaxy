@@ -127,12 +127,6 @@ export default function HomePage() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const votingEvents = useLoad(
-    () => (wallet.account
-      ? api(`/v1/dashboard/voting?wallet=${encodeURIComponent(wallet.account)}`, { auth: false })
-      : Promise.resolve([])),
-    [wallet.account],
-  );
   const organisedEvents = useLoad(
     () => (wallet.account
       ? api(`/v1/dashboard/organiser?wallet=${encodeURIComponent(wallet.account)}`, { auth: false })
@@ -140,7 +134,7 @@ export default function HomePage() {
     [wallet.account],
   );
 
-  const votingCount = votingEvents.loading ? '—' : (votingEvents.data?.length ?? 0);
+  const votingCount = organisedEvents.loading ? '—' : (organisedEvents.data?.filter((event) => ['OPEN', 'SCHEDULED'].includes(event.status)).length ?? 0);
   const organisedCount = organisedEvents.loading ? '—' : (organisedEvents.data?.length ?? 0);
   const [headlineTop, headlineBottom] = rotatingHeadlines[headlineIndex];
 
@@ -173,15 +167,15 @@ export default function HomePage() {
     </section>
 
     <section className="home-overview" aria-label="Proxy voting overview">
-      <ErrorBox error={votingEvents.error || organisedEvents.error} />
+      <ErrorBox error={organisedEvents.error} />
       <div className="home-metrics">
         <MetricCard
           primary
           icon={<VotingEventsIcon />}
-          title="Ongoing voting events"
+          title="Your ongoing voting events"
           count={votingCount}
-          action="View voting dashboard"
-          to="/voting"
+          action="Manage voting events"
+          to="/organiser"
         />
         <MetricCard
           icon={<OrganisedEventsIcon />}

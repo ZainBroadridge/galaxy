@@ -8,7 +8,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 test('demo autofill uses relative record, start, and end timestamps', async () => {
   const organiser = await read('apps/web/src/pages/OrganiserDashboard.jsx');
 
-  assert.match(organiser, /const DEMO_RECORD_AGE_MS = 24 \* 60 \* 60_000;/u);
+  assert.match(organiser, /const DEMO_RECORD_AGE_MS = 2 \* 60 \* 60_000;/u);
   assert.match(organiser, /const DEMO_START_DELAY_MS = 5 \* 60_000;/u);
   assert.match(organiser, /const DEMO_END_DELAY_MS = 60 \* 60_000;/u);
   assert.match(organiser, /function demoSchedule\(now = Date\.now\(\)\)/u);

@@ -89,7 +89,7 @@ function readableSnapIssue(value) {
   return text;
 }
 
-export default function WalletComms() {
+export default function WalletComms({ viewer = 'issuer' }) {
   const wallet = useWallet();
   const notifications = useNotifications();
   const configuration = snapConfiguration();
@@ -202,7 +202,7 @@ export default function WalletComms() {
     const address = encodeURIComponent(wallet.account);
     const [savedSubscriptions, events] = await Promise.all([
       api(`/v1/communications/subscriptions?wallet=${address}`, { auth: false }),
-      api(`/v1/dashboard/organiser?wallet=${address}`, { auth: false }),
+      viewer === 'issuer' ? api(`/v1/dashboard/organiser?wallet=${address}`, { auth: false }) : Promise.resolve([]),
     ]);
     setSubscriptions(savedSubscriptions);
     setOrganisedEvents(events);
@@ -216,7 +216,7 @@ export default function WalletComms() {
         eventId: preferredEvent?.id ?? '',
       };
     });
-  }, [wallet.account, wallet.connected]);
+  }, [wallet.account, wallet.connected, viewer]);
 
   useEffect(() => {
     if (!wallet.connected) return;
@@ -504,12 +504,12 @@ export default function WalletComms() {
     || !browserPush?.supported
     || browserPush?.permission === 'denied';
 
-  return <main className="page wallet-comms-page notifications-page">
+  return <div className="page wallet-comms-page notifications-page">
     <header className="wallet-comms-header">
       <div>
         <span className="wallet-comms-kicker">Proxy voting communications</span>
         <h1>Notifications</h1>
-        <p>Read voting announcements or issue a communication for an event or token.</p>
+        <p>{viewer === 'issuer' ? 'Read voting announcements or issue a communication for an event or token.' : 'Read voting announcements and manage your notification delivery preferences.'}</p>
       </div>
       {wallet.connected && <div className="comms-tabs" role="tablist" aria-label="Notifications">
         <button
@@ -527,7 +527,7 @@ export default function WalletComms() {
             aria-label={`${unreadCount} unread announcement${unreadCount === 1 ? '' : 's'}`}
           >{unreadCount > 99 ? '99+' : unreadCount}</span>}
         </button>
-        <button
+        {viewer === 'issuer' && <button
           type="button"
           id="comms-tab-organiser"
           role="tab"
@@ -535,7 +535,7 @@ export default function WalletComms() {
           aria-selected={activeTab === 'organiser'}
           className={`comms-tab${activeTab === 'organiser' ? ' active' : ''}`}
           onClick={() => setActiveTab('organiser')}
-        >Organiser</button>
+        >Organiser</button>}
       </div>}
     </header>
 
@@ -708,7 +708,7 @@ export default function WalletComms() {
       </div>
     </div>}
 
-    {wallet.connected && activeTab === 'organiser' && <div
+    {viewer === 'issuer' && wallet.connected && activeTab === 'organiser' && <div
       id="comms-panel-organiser"
       role="tabpanel"
       aria-labelledby="comms-tab-organiser"
@@ -752,11 +752,11 @@ export default function WalletComms() {
 
           <div className="form-actions notifications-publish-actions">
             <button className="button" disabled={busy || !canPublish}>{pendingAction === 'publish' ? 'Publishing…' : 'Publish communication'}</button>
-            <span>No organiser unlock or MetaMask signature is required.</span>
+            <span>The issuer demo session is required. Publishing does not request a wallet signature.</span>
           </div>
           {actionNotice('publish')}
         </form>
       </Panel>
     </div>}
-  </main>;
+  </div>;
 }

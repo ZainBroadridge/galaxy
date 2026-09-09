@@ -2,7 +2,9 @@ import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { ZodError } from 'zod';
-import { createNonce, optionalAuth, requireAuth, revokeSession, verifyNonce } from './auth.js';
+import { authenticatedWallet, createIssuerSession, createNonce, optionalAuth, portalWallet, requireAuth, requireIssuer, requirePortal, revokeIssuerSession, revokeSession, verifyNonce } from './auth.js';
+import { currentInvestorHolding, investorMeetings } from './investor-events.js';
+import { readIssuerLogo, uploadIssuerLogo } from './issuer-logos.js';
 import {
   draftCommunication,
   draftTokenCommunication,
@@ -64,7 +66,7 @@ import {
 } from './web-push.js';
 
 assertConfig();
-const app = express();
+export const app = express();
 app.set('trust proxy', 1);
 app.use(securityHeaders);
 app.use(cors((request, callback) => {
@@ -107,6 +109,7 @@ const limiter = (limit, keyGenerator = undefined) => rateLimit({
   },
 });
 const authIpLimiter = limiter(120);
+const issuerLoginLimiter = limiter(6);
 const authWalletLimiter = limiter(
   12,
   (request) => String(request.body?.walletAddress ?? 'invalid-wallet').toLowerCase(),
@@ -200,19 +203,72 @@ app.get('/health', async (_request, response, next) => {
 });
 
 app.post('/v1/auth/nonce', authIpLimiter, authWalletLimiter, async (request, response, next) => {
-  try { response.json(await createNonce(request.body?.walletAddress)); } catch (error) { next(error); }
+  try { response.set('Cache-Control', 'no-store').json(await createNonce(request.body?.walletAddress, request.get('origin'))); } catch (error) { next(error); }
 });
 app.post('/v1/auth/verify', authIpLimiter, authWalletLimiter, async (request, response, next) => {
-  try { response.json(await verifyNonce(request.body?.walletAddress, request.body?.signature)); } catch (error) { next(error); }
+  try { response.set('Cache-Control', 'no-store').json(await verifyNonce(request.body?.walletAddress, request.body?.signature, request.body?.challengeId, request.get('origin'))); } catch (error) { next(error); }
 });
 app.post('/v1/auth/logout', writeLimiter, async (request, response, next) => {
   try { await revokeSession(request); response.status(204).end(); } catch (error) { next(error); }
 });
 
-app.post('/v1/tokens/inspect', publicWriteLimiter, async (request, response, next) => {
+app.get('/v1/auth/session', requireAuth, (request, response) => {
+  response.set('Cache-Control', 'no-store');
+  response.json({ walletAddress: request.auth.wallet_address, expiresAt: request.auth.expires_at });
+});
+app.post('/v1/issuer/login', issuerLoginLimiter, async (request, response, next) => {
+  try { response.set('Cache-Control', 'no-store').json(await createIssuerSession(request.body?.password, request.get('origin'))); }
+  catch (error) { next(error); }
+});
+app.get('/v1/issuer/session', requireIssuer, (request, response) => {
+  response.set('Cache-Control', 'no-store').json({ expiresAt: request.issuer.expires_at, demo: true });
+});
+app.post('/v1/issuer/logout', async (request, response, next) => {
+  try { await revokeIssuerSession(request); response.status(204).end(); } catch (error) { next(error); }
+});
+app.post('/v1/issuer/logos', requireIssuer, publicWriteLimiter,
+  express.raw({ type: ['image/png', 'image/jpeg'], limit: '512kb' }), async (request, response, next) => {
+    try { response.status(201).json(await uploadIssuerLogo(request.get('x-wallet-address'), request.body)); }
+    catch (error) { next(error); }
+  });
+app.get('/v1/issuer-logos/:id', async (request, response, next) => {
+  try {
+    const logo = await readIssuerLogo(request.params.id);
+    response.set({ 'Content-Type': logo.mimeType, 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' });
+    response.send(logo.bytes);
+  } catch (error) { next(error); }
+});
+
+app.use('/v1/investor', requireAuth, (_request, response, next) => {
+  response.set('Cache-Control', 'private, no-store'); next();
+});
+app.get('/v1/investor/meetings', async (request, response, next) => {
+  try { response.json(await investorMeetings(authenticatedWallet(request))); } catch (error) { next(error); }
+});
+app.get('/v1/investor/events/:id', async (request, response, next) => {
+  try { response.json(await eventView(request.params.id, authenticatedWallet(request))); } catch (error) { next(error); }
+});
+app.get('/v1/investor/events/:id/holding', async (request, response, next) => {
+  try { response.json(await currentInvestorHolding(request.params.id, authenticatedWallet(request))); } catch (error) { next(error); }
+});
+app.get('/v1/investor/events/:id/ballot', async (request, response, next) => {
+  try { response.json(await ballot(request.params.id, authenticatedWallet(request))); } catch (error) { next(error); }
+});
+app.post('/v1/investor/events/:id/votes', voteLimiter, async (request, response, next) => {
+  try {
+    const input = parse(voteInput, request.body);
+    const wallet = authenticatedWallet(request, input.voterAddress);
+    response.status(202).json(await submitVote(request.params.id, wallet, input.choices, input.signature));
+  } catch (error) { next(error); }
+});
+app.get('/v1/investor/events/:id/receipt', async (request, response, next) => {
+  try { sendPdf(response, await createVoteReceipt(request.params.id, authenticatedWallet(request))); } catch (error) { next(error); }
+});
+
+app.post('/v1/tokens/inspect', requireIssuer, publicWriteLimiter, async (request, response, next) => {
   try { response.json(await inspectToken(request.body?.tokenAddress)); } catch (error) { next(error); }
 });
-app.post('/v1/events', publicWriteLimiter, async (request, response, next) => {
+app.post('/v1/events', requireIssuer, publicWriteLimiter, async (request, response, next) => {
   try {
     const creator = parse(announcementTriggerInput, {
       publisherAddress: request.body?.creatorAddress,
@@ -220,24 +276,24 @@ app.post('/v1/events', publicWriteLimiter, async (request, response, next) => {
     response.status(201).json(await createEvent(creator, parse(eventInput, request.body)));
   } catch (error) { next(error); }
 });
-app.get('/v1/events/:id/view', async (request, response, next) => {
-  try { response.json(await eventView(request.params.id, request.query.wallet)); } catch (error) { next(error); }
+app.get('/v1/events/:id/view', requireAuth, async (request, response, next) => {
+  try { response.json(await eventView(request.params.id, authenticatedWallet(request, request.query.wallet))); } catch (error) { next(error); }
 });
-app.get('/v1/events/:id/organiser-view', async (request, response, next) => {
+app.get('/v1/events/:id/organiser-view', requireIssuer, async (request, response, next) => {
   try { response.json(await organiserEventView(request.params.id, request.query.wallet)); } catch (error) { next(error); }
 });
 app.get('/v1/events/:id/stream', openEventStream);
-app.post('/v1/events/:id/retry', publicWriteLimiter, async (request, response, next) => {
+app.post('/v1/events/:id/retry', requireIssuer, publicWriteLimiter, async (request, response, next) => {
   try {
     const publisher = parse(announcementTriggerInput, request.body).publisherAddress;
     response.json(await retryEvent(request.params.id, publisher));
   } catch (error) { next(error); }
 });
-app.get('/v1/events/:id/results', async (request, response, next) => {
-  try { response.json(await eventResults(request.params.id, request.query.wallet)); } catch (error) { next(error); }
+app.get('/v1/events/:id/results', requirePortal, async (request, response, next) => {
+  try { response.json(await eventResults(request.params.id, portalWallet(request, request.query.wallet))); } catch (error) { next(error); }
 });
 
-app.post('/v1/events/:id/announcement', publicWriteLimiter, async (request, response, next) => {
+app.post('/v1/events/:id/announcement', requireIssuer, publicWriteLimiter, async (request, response, next) => {
   try {
     const input = parse(announcementTriggerInput, request.body);
     const result = await triggerEventAnnouncement(request.params.id, input.publisherAddress);
@@ -246,7 +302,7 @@ app.post('/v1/events/:id/announcement', publicWriteLimiter, async (request, resp
   } catch (error) { next(error); }
 });
 // Backwards-compatible alias for earlier frontend packages. No wallet signature is required.
-app.put('/v1/events/:id/announcement', publicWriteLimiter, async (request, response, next) => {
+app.put('/v1/events/:id/announcement', requireIssuer, publicWriteLimiter, async (request, response, next) => {
   try {
     const input = parse(announcementTriggerInput, request.body);
     const result = await triggerEventAnnouncement(request.params.id, input.publisherAddress);
@@ -255,7 +311,7 @@ app.put('/v1/events/:id/announcement', publicWriteLimiter, async (request, respo
   } catch (error) { next(error); }
 });
 
-app.post('/v1/events/:id/documents', publicWriteLimiter, pdfBody, async (request, response, next) => {
+app.post('/v1/events/:id/documents', requireIssuer, publicWriteLimiter, pdfBody, async (request, response, next) => {
   try {
     const publisher = parse(announcementTriggerInput, {
       publisherAddress: request.query.wallet || request.get('x-wallet-address'),
@@ -268,7 +324,7 @@ app.post('/v1/events/:id/documents', publicWriteLimiter, pdfBody, async (request
     ));
   } catch (error) { next(error); }
 });
-app.delete('/v1/events/:id/documents/:documentId', publicWriteLimiter, async (request, response, next) => {
+app.delete('/v1/events/:id/documents/:documentId', requireIssuer, publicWriteLimiter, async (request, response, next) => {
   try {
     const publisher = parse(announcementTriggerInput, {
       publisherAddress: request.query.wallet || request.get('x-wallet-address'),
@@ -294,28 +350,28 @@ app.get('/v1/events/:id/documents/:documentId', async (request, response, next) 
     response.send(document.bytes);
   } catch (error) { next(error); }
 });
-app.get('/v1/events/:id/reports/results', async (request, response, next) => {
+app.get('/v1/events/:id/reports/results', requirePortal, async (request, response, next) => {
   try {
     const wallet = request.query.wallet ?? request.auth?.wallet_address;
     if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
-    sendPdf(response, await createResultsReport(request.params.id, wallet));
+    sendPdf(response, await createResultsReport(request.params.id, portalWallet(request, wallet)));
   } catch (error) { next(error); }
 });
-app.get('/v1/events/:id/reports/receipt', async (request, response, next) => {
+app.get('/v1/events/:id/reports/receipt', requireAuth, async (request, response, next) => {
   try {
     const wallet = request.query.wallet ?? request.auth?.wallet_address;
     if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
-    sendPdf(response, await createVoteReceipt(request.params.id, wallet));
+    sendPdf(response, await createVoteReceipt(request.params.id, authenticatedWallet(request, wallet)));
   } catch (error) { next(error); }
 });
 
-app.get('/v1/dashboard/voting', async (request, response, next) => {
-  try { response.json(await votingDashboard(request.query.wallet)); } catch (error) { next(error); }
+app.get('/v1/dashboard/voting', requireAuth, async (request, response, next) => {
+  try { response.json(await votingDashboard(authenticatedWallet(request, request.query.wallet))); } catch (error) { next(error); }
 });
-app.get('/v1/dashboard/results', async (request, response, next) => {
-  try { response.json(await resultsDashboard(request.query.wallet)); } catch (error) { next(error); }
+app.get('/v1/dashboard/results', requirePortal, async (request, response, next) => {
+  try { response.json(await resultsDashboard(portalWallet(request, request.query.wallet))); } catch (error) { next(error); }
 });
-app.get('/v1/dashboard/organiser', async (request, response, next) => {
+app.get('/v1/dashboard/organiser', requireIssuer, async (request, response, next) => {
   try {
     const wallet = request.query.wallet ?? request.auth?.wallet_address;
     if (!wallet) return response.json([]);
@@ -323,22 +379,22 @@ app.get('/v1/dashboard/organiser', async (request, response, next) => {
   } catch (error) { return next(error); }
 });
 
-app.get('/v1/events/:id/ballot', async (request, response, next) => {
-  try { response.json(await ballot(request.params.id, request.query.wallet)); } catch (error) { next(error); }
+app.get('/v1/events/:id/ballot', requireAuth, async (request, response, next) => {
+  try { response.json(await ballot(request.params.id, authenticatedWallet(request, request.query.wallet))); } catch (error) { next(error); }
 });
-app.post('/v1/events/:id/votes', voteLimiter, async (request, response, next) => {
+app.post('/v1/events/:id/votes', requireAuth, voteLimiter, async (request, response, next) => {
   try {
     const input = parse(voteInput, request.body);
     response.status(202).json(await submitVote(
       request.params.id,
-      input.voterAddress,
+      authenticatedWallet(request, input.voterAddress),
       input.choices,
       input.signature,
     ));
   } catch (error) { next(error); }
 });
 
-app.get('/v1/communications/portal', async (request, response, next) => {
+app.get('/v1/communications/portal', requireIssuer, async (request, response, next) => {
   try {
     const wallet = request.query.wallet ?? request.auth?.wallet_address;
     if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
@@ -388,7 +444,7 @@ app.put('/v1/communications/inbox/read', publicWriteLimiter, async (request, res
     response.json(await markInboxRead(input.walletAddress));
   } catch (error) { next(error); }
 });
-app.post('/v1/communications/token/draft', requireAuth, writeLimiter, async (request, response, next) => {
+app.post('/v1/communications/token/draft', requireIssuer, requireAuth, writeLimiter, async (request, response, next) => {
   try {
     response.json(await draftTokenCommunication(
       request.auth.wallet_address,
@@ -396,7 +452,7 @@ app.post('/v1/communications/token/draft', requireAuth, writeLimiter, async (req
     ));
   } catch (error) { next(error); }
 });
-app.post('/v1/communications/token', requireAuth, writeLimiter, async (request, response, next) => {
+app.post('/v1/communications/token', requireIssuer, requireAuth, writeLimiter, async (request, response, next) => {
   try {
     const message = await publishTokenCommunication(
       request.auth.wallet_address,
@@ -406,7 +462,7 @@ app.post('/v1/communications/token', requireAuth, writeLimiter, async (request, 
     response.status(201).json(message);
   } catch (error) { next(error); }
 });
-app.post('/v1/communications/token/platform', publicWriteLimiter, async (request, response, next) => {
+app.post('/v1/communications/token/platform', requireIssuer, publicWriteLimiter, async (request, response, next) => {
   try {
     const message = await publishPlatformTokenCommunication(
       parse(platformTokenCommunicationInput, request.body),
@@ -416,7 +472,7 @@ app.post('/v1/communications/token/platform', publicWriteLimiter, async (request
   } catch (error) { next(error); }
 });
 
-app.post('/v1/events/:id/communications/platform', publicWriteLimiter, async (request, response, next) => {
+app.post('/v1/events/:id/communications/platform', requireIssuer, publicWriteLimiter, async (request, response, next) => {
   try {
     const message = await publishPlatformCommunication(
       request.params.id,
@@ -427,7 +483,7 @@ app.post('/v1/events/:id/communications/platform', publicWriteLimiter, async (re
   } catch (error) { next(error); }
 });
 
-app.post('/v1/events/:id/communications/draft', requireAuth, writeLimiter, async (request, response, next) => {
+app.post('/v1/events/:id/communications/draft', requireIssuer, requireAuth, writeLimiter, async (request, response, next) => {
   try {
     response.json(await draftCommunication(
       request.params.id,
@@ -436,7 +492,7 @@ app.post('/v1/events/:id/communications/draft', requireAuth, writeLimiter, async
     ));
   } catch (error) { next(error); }
 });
-app.post('/v1/events/:id/communications', requireAuth, writeLimiter, async (request, response, next) => {
+app.post('/v1/events/:id/communications', requireIssuer, requireAuth, writeLimiter, async (request, response, next) => {
   try {
     const message = await publishCommunication(
       request.params.id,

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "apple",
+    "filename": "apple-brand-v2.png",
+    "source": "user-supplied Apple_logo_black.svg",
+    "sha256": "4ef2ad5a06b10b589c6294d4c3a657d2243a9baf7d41da0c1c99af54aa84f16f"
+  },
+  {
+    "id": "nvidia",
+    "filename": "nvidia-brand-v2.png",
+    "source": "user-supplied Nvidia_Logo.svg",
+    "sha256": "fad5a972a982a3f1f2967913e2f551e4377a5cd63fd39362a705f8094478bc8f"
+  },
+  {
+    "id": "tesla",
+    "filename": "tesla-brand-v2.png",
+    "source": "https://commons.wikimedia.org/wiki/File:Tesla_Motors.svg",
+    "sha256": "8a92267751dee43625bcc5173a7375d2999f72ec871fc64d3f7ace3fb94b3f9c"
+  },
+  {
+    "id": "alphabet",
+    "filename": "alphabet-brand-v2.png",
+    "source": "https://commons.wikimedia.org/wiki/File:Alphabet_Inc_Logo_2015.svg",
+    "sha256": "191800698a49adf10a567fec230ce76f464708ce97f9b7ab84d59013227fc03e"
+  },
+  {
+    "id": "disney",
+    "filename": "disney-brand-v2.png",
+    "source": "https://commons.wikimedia.org/wiki/File:The_Walt_Disney_Company_Logo.svg",
+    "sha256": "65eac958ddf3f3b1ad7bf6e4b63fa0e82f9dd3c61102d58304507f9793d7cac5"
+  },
+  {
+    "id": "spacex",
+    "filename": "spacex-brand-v2.png",
+    "source": "https://commons.wikimedia.org/wiki/File:SpaceX_logo_black.svg",
+    "sha256": "66b40f0bf24b4729d314459d7653a9c54f18d078aee01d45ab63145f2f87b3f0"
+  },
+  {
+    "id": "oracle",
+    "filename": "oracle-brand-v2.png",
+    "source": "https://commons.wikimedia.org/wiki/File:Oracle_logo.svg",
+    "sha256": "e9b82d6f4c98ae0f4ec37d5bac07f1528cfc17316d6dfa357c1102950409bd25"
+  }
+]

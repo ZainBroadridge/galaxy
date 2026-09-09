@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react';
+import { useAppKit, useAppKitAccount, useAppKitProvider, useDisconnect } from '@reown/appkit/react';
 import { BrowserProvider } from 'ethers';
 import {
   canDeferNetworkSetupUntilConnected,
@@ -94,6 +94,7 @@ export function WalletProvider({ children }) {
   const accountState = useAppKitAccount({ namespace: 'eip155' });
   const providerState = useAppKitProvider('eip155');
   const { open } = useAppKit();
+  const { disconnect } = useDisconnect();
   const connection = useStableEvmConnection({
     address: accountState.address,
     isConnected: accountState.isConnected,
@@ -154,8 +155,7 @@ export function WalletProvider({ children }) {
     void configureAmoy(walletProvider).catch(() => {});
   }, [account, configureAmoy, connected, walletProvider]);
 
-  // This is deliberately the only wallet-signing capability exposed by the
-  // application. It is called only when the voter submits the final ballot.
+  // Final ballots remain EIP-712 signed; sign-in uses a separate disclaimer challenge.
   const signBallot = useCallback(async (typedData) => {
     if (!connected || !account || !walletProvider) {
       throw new Error('Connect your wallet before signing the ballot.');
@@ -170,6 +170,21 @@ export function WalletProvider({ children }) {
 
     return signer.signTypedData(typedData.domain, typedData.types, typedData.message);
   }, [account, configureAmoy, connected, walletProvider]);
+
+  // Sign-in is separate from the final EIP-712 ballot and never approves assets.
+  const signDisclaimer = useCallback(async (message, expectedAccount) => {
+    if (!connected || !walletProvider || account !== expectedAccount.toLowerCase()) {
+      throw new Error('Connect the investor wallet before accepting the disclaimer.');
+    }
+    await configureAmoy(walletProvider);
+    const signer = await new BrowserProvider(walletProvider, 'any').getSigner(account);
+    if ((await signer.getAddress()).toLowerCase() !== expectedAccount.toLowerCase()) {
+      throw new Error('Wallet account changed. Please start sign-in again.');
+    }
+    return signer.signMessage(message);
+  }, [account, connected, configureAmoy, walletProvider]);
+
+  const disconnectWallet = useCallback(() => disconnect({ namespace: 'eip155' }), [disconnect]);
 
   const openWallet = useCallback(async () => {
     if (connected) {
@@ -216,6 +231,8 @@ export function WalletProvider({ children }) {
     reconnecting: connection.reconnecting,
     openWallet,
     signBallot,
+    signDisclaimer,
+    disconnectWallet,
     ensureAmoy,
     networkBusy,
     networkError,
@@ -229,6 +246,8 @@ export function WalletProvider({ children }) {
     networkError,
     openWallet,
     signBallot,
+    signDisclaimer,
+    disconnectWallet,
     walletProvider,
   ]);
 

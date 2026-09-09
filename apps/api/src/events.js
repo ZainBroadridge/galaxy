@@ -4,6 +4,7 @@ import {
   VOTE_EVENT_ABI,
   hashEventMetadata,
   packProposalConfig,
+  issuerBranding,
 } from '@pv/shared';
 import { config } from './config.js';
 import { query, transaction } from './db.js';
@@ -16,6 +17,7 @@ import { provider } from './rpc.js';
 import { kickJobRunner } from './runner.js';
 import { serializeEvent, serializeJob, serializeVote } from './serializers.js';
 import { inspectToken } from './tokens.js';
+import { ensureOwnedIssuerLogo } from './issuer-logos.js';
 
 export async function createEvent(wallet, input) {
   const creator = normalizeAddress(wallet);
@@ -29,6 +31,10 @@ export async function createEvent(wallet, input) {
     throw new HttpError(429, 'Daily event-creation limit reached.', 'EVENT_LIMIT');
   }
 
+  await ensureOwnedIssuerLogo(input.issuerLogoId, creator);
+  let branding;
+  try { branding = issuerBranding(input); }
+  catch (error) { throw new HttpError(400, error.message, 'INVALID_SECURITY_IDENTITY'); }
   const token = await inspectToken(input.tokenAddress);
   const { metadata, hash } = hashEventMetadata(input);
   const proposalConfig = packProposalConfig(
@@ -44,8 +50,9 @@ export async function createEvent(wallet, input) {
       `INSERT INTO events(
          creator_address,token_address,token_name,token_symbol,token_decimals,title,description,proposals,
          metadata_hash,proposal_config,record_date_at,token_to_vote_ratio,vote_unit,voting_start_at,voting_end_at,
-         discovery_mode,authenticity_status,snap_delivery_mode
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         discovery_mode,authenticity_status,snap_delivery_mode,
+         issuer_name,token_platform,issuer_logo_preset,issuer_logo_id,issuer_theme_color,security_name,security_ticker
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
        RETURNING *`,
       [
         creator,
@@ -66,6 +73,13 @@ export async function createEvent(wallet, input) {
         input.discoveryMode,
         authenticityStatus,
         input.snapDeliveryMode,
+        branding.issuerName,
+        branding.platform,
+        branding.issuerLogoPreset,
+        input.issuerLogoId ?? null,
+        branding.issuerThemeColor,
+        branding.securityName,
+        branding.securityTicker,
       ],
     );
     let event = result.rows[0];

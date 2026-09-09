@@ -21,20 +21,15 @@ test('unvoted events are ordered ahead of voted events with lifecycle timestamps
   );
 });
 
-test('receipt and document cards share one width and every external detail link is underlined', async () => {
+test('issuer-branded receipt and document sections share the same parent width and readable links', async () => {
   const [page, styles] = await Promise.all([
-    read('apps/web/src/pages/VotingDashboard.jsx'),
-    read('apps/web/src/styles.css'),
+    read('apps/web/src/investor/ConfirmationPage.jsx'),
+    read('apps/web/src/investor/investor.css'),
   ]);
-
-  assert.equal((page.match(/vote-detail-link/gu) ?? []).length, 4);
-  assert.match(
-    styles,
-    /\.vote-content-frame > \.ballot-documents \{\s*width: min\(var\(--ui-receipt-width\), 100%\);\s*max-width: var\(--ui-receipt-width\);/u,
-  );
-  assert.match(
-    styles,
-    /\.receipt-panel\.receipt \{[\s\S]*width: min\(var\(--ui-receipt-width\), 100%\);[\s\S]*max-width: var\(--ui-receipt-width\);/u,
-  );
-  assert.match(styles, /\.vote-detail-link \{[\s\S]*text-decoration-line: underline;/u);
+  assert.match(page, /investor-confirmation investor-page-width/u);
+  assert.match(page, /investor-transaction-card/u);
+  assert.match(page, /<EventDocuments event=\{event\}/u);
+  assert.match(page, /vote\.transactionExplorerUrl/u);
+  assert.match(page, /event\.contractExplorerUrl/u);
+  assert.match(styles, /\.investor-app a[\s\S]*?text-decoration: underline/u);
 });

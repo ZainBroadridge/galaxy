@@ -7,21 +7,21 @@ import { query } from './db.js';
 import { readAllEventDocuments } from './documents.js';
 import { HttpError, normalizeAddress } from './errors.js';
 import { eventResults, getEventRow } from './events.js';
+import { reportIssuerLogo } from './issuer-logos.js';
+import { eventIssuerBranding } from '@pv/shared';
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
 const MARGIN = 42;
-const HEADER_HEIGHT = 68;
+const HEADER_HEIGHT = 104;
 const CONTENT_BOTTOM = 48;
 const CONTENT_TOP = PAGE_HEIGHT - HEADER_HEIGHT - 28;
 const CONTENT_HEIGHT = CONTENT_TOP - CONTENT_BOTTOM;
-const NAVY = rgb(0.02, 0.13, 0.29);
-const LINK_BLUE = rgb(0, 0.33, 0.88);
-const TEXT = rgb(0.11, 0.14, 0.18);
-const MUTED = rgb(0.39, 0.43, 0.49);
-const LINE = rgb(0.87, 0.89, 0.92);
-const LIGHT = rgb(0.96, 0.97, 0.98);
-const logoPath = fileURLToPath(new URL('../assets/broadridge-logo-white.png', import.meta.url));
+const TEXT = rgb(0.12, 0.12, 0.12);
+const MUTED = rgb(0.42, 0.42, 0.42);
+const LINE = rgb(0.88, 0.88, 0.88);
+const LIGHT = rgb(0.97, 0.97, 0.97);
+const logoPath = fileURLToPath(new URL('../assets/broadridge-logo-neutral.png', import.meta.url));
 
 function safeFilename(value) {
   return String(value ?? 'report')
@@ -151,56 +151,63 @@ function wrapText(text, font, size, width) {
 }
 
 class ReportWriter {
-  constructor(document, fonts, logo, reportTitle, reportSubtitle) {
+  constructor(document, fonts, logo, reportTitle, reportSubtitle, issuerImage, event) {
     this.document = document;
     this.fonts = fonts;
     this.logo = logo;
+    this.issuerImage = issuerImage;
+    const branding = eventIssuerBranding(event);
+    this.issuerName = pdfText(branding.issuerName || event?.token_name || 'Issuer');
+    const color = (hex) => rgb(...[1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16) / 255));
+    this.accent = color(branding.issuerThemeColor);
+    this.ink = color(branding.issuerInkColor);
     this.reportTitle = pdfText(reportTitle);
-    this.reportSubtitle = pdfText(reportSubtitle);
+    this.reportSubtitle = pdfText(branding.securityTicker ? `Security: ${branding.securityTicker}` : reportSubtitle ? `Token: ${reportSubtitle}` : '');
     this.page = null;
     this.y = 0;
     this.reportPages = [];
     this.addPage();
   }
 
-  static async create(document, title, subtitle) {
+  static async create(document, title, subtitle, event) {
     const [regular, bold, logoBytes] = await Promise.all([
       document.embedFont(StandardFonts.Helvetica),
       document.embedFont(StandardFonts.HelveticaBold),
-      readFile(logoPath),
+      readFile(logoPath).catch(() => null),
     ]);
-    const logo = await document.embedPng(logoBytes);
-    return new ReportWriter(document, { regular, bold }, logo, title, subtitle);
+    const logo = logoBytes ? await document.embedPng(logoBytes) : null;
+    const issuer = await reportIssuerLogo(event || {}).catch(() => null);
+    let issuerImage = null;
+    if (issuer) {
+      try { issuerImage = issuer.mimeType === 'image/jpeg' ? await document.embedJpg(issuer.bytes) : await document.embedPng(issuer.bytes); }
+      catch { /* A damaged optional logo must not prevent a vote receipt. */ }
+    }
+    return new ReportWriter(document, { regular, bold }, logo, title, subtitle, issuerImage, event);
   }
 
   addPage() {
     this.page = this.document.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     this.reportPages.push(this.page);
-    this.page.drawRectangle({ x: 0, y: PAGE_HEIGHT - HEADER_HEIGHT, width: PAGE_WIDTH, height: HEADER_HEIGHT, color: NAVY });
-    const logoWidth = 166;
-    const logoHeight = logoWidth * (this.logo.height / this.logo.width);
-    this.page.drawImage(this.logo, {
-      x: MARGIN,
-      y: PAGE_HEIGHT - HEADER_HEIGHT / 2 - logoHeight / 2,
-      width: logoWidth,
-      height: logoHeight,
-    });
-    this.page.drawText(this.reportTitle, {
-      x: PAGE_WIDTH - MARGIN - this.fonts.bold.widthOfTextAtSize(this.reportTitle, 12),
-      y: PAGE_HEIGHT - 30,
-      size: 12,
-      font: this.fonts.bold,
-      color: rgb(1, 1, 1),
-    });
-    if (this.reportSubtitle) {
-      this.page.drawText(this.reportSubtitle, {
-        x: PAGE_WIDTH - MARGIN - this.fonts.regular.widthOfTextAtSize(this.reportSubtitle, 8),
-        y: PAGE_HEIGHT - 45,
-        size: 8,
-        font: this.fonts.regular,
-        color: rgb(0.82, 0.87, 0.94),
-      });
+    this.page.drawRectangle({ x: 0, y: PAGE_HEIGHT - 5, width: PAGE_WIDTH, height: 5, color: this.accent });
+    if (this.issuerImage) {
+      const scale = Math.min(170 / this.issuerImage.width, 38 / this.issuerImage.height);
+      this.page.drawImage(this.issuerImage, { x: MARGIN, y: PAGE_HEIGHT - 56,
+        width: this.issuerImage.width * scale, height: this.issuerImage.height * scale });
+      wrapText(this.issuerName, this.fonts.bold, 11, 270).slice(0, 2).forEach((line, index) => this.page.drawText(line, {
+        x: MARGIN, y: PAGE_HEIGHT - 76 - index * 13, size: 11, font: this.fonts.bold, color: this.ink,
+      }));
+    } else {
+      const lines = wrapText(this.issuerName, this.fonts.bold, 17, 265);
+      lines.slice(0, 2).forEach((line, index) => this.page.drawText(line, {
+        x: MARGIN, y: PAGE_HEIGHT - 33 - index * 20, size: 17, font: this.fonts.bold, color: this.ink,
+      }));
     }
+    this.page.drawText(this.reportTitle, { x: PAGE_WIDTH - MARGIN - this.fonts.bold.widthOfTextAtSize(this.reportTitle, 11),
+      y: PAGE_HEIGHT - 26, size: 11, font: this.fonts.bold, color: this.ink });
+    this.page.drawText(this.reportSubtitle, { x: PAGE_WIDTH - MARGIN - this.fonts.regular.widthOfTextAtSize(this.reportSubtitle, 8),
+      y: PAGE_HEIGHT - 41, size: 8, font: this.fonts.regular, color: MUTED });
+    this.page.drawLine({ start: { x: MARGIN, y: PAGE_HEIGHT - HEADER_HEIGHT },
+      end: { x: PAGE_WIDTH - MARGIN, y: PAGE_HEIGHT - HEADER_HEIGHT }, color: this.accent, thickness: 1 });
     this.y = CONTENT_TOP;
   }
 
@@ -210,9 +217,14 @@ class ReportWriter {
   }
 
   heading(text, size = 15, keepWithNext = 0) {
-    this.ensure(size + 10 + keepWithNext);
-    this.page.drawText(pdfText(text), { x: MARGIN, y: this.y, size, font: this.fonts.bold, color: NAVY });
-    this.y -= size + 10;
+    const lines = wrapText(text, this.fonts.bold, size, PAGE_WIDTH - 2 * MARGIN);
+    this.ensure(lines.length * size * 1.25 + 10 + keepWithNext);
+    for (const line of lines) {
+      this.ensure(size * 1.25);
+      this.page.drawText(line, { x: MARGIN, y: this.y, size, font: this.fonts.bold, color: this.ink });
+      this.y -= size * 1.25;
+    }
+    this.y -= 10;
   }
 
   paragraphHeight(text, { size = 9.5, gap = 10 } = {}) {
@@ -289,7 +301,7 @@ class ReportWriter {
       y,
       size,
       font,
-      color: styledAsLink ? LINK_BLUE : TEXT,
+      color: styledAsLink ? this.ink : TEXT,
     });
     if (!styledAsLink || !text) return;
 
@@ -299,7 +311,7 @@ class ReportWriter {
       start: { x, y: y - 1.35 },
       end: { x: x + width, y: y - 1.35 },
       thickness: 0.7,
-      color: LINK_BLUE,
+      color: this.ink,
     });
     if (url) this.addLinkAnnotation({ x, y: y - 2, width, height: height + 3, url });
   }
@@ -330,7 +342,7 @@ class ReportWriter {
     this.ensure(64);
     this.page.drawRectangle({ x: MARGIN, y: this.y - 48, width: PAGE_WIDTH - 2 * MARGIN, height: 56, color: LIGHT, borderColor: LINE, borderWidth: 1 });
     this.page.drawText(pdfText(label), { x: MARGIN + 14, y: this.y - 10, size: 9, font: this.fonts.bold, color: MUTED });
-    this.page.drawText(pdfText(value), { x: MARGIN + 14, y: this.y - 34, size: 18, font: this.fonts.bold, color: NAVY });
+    this.page.drawText(pdfText(value), { x: MARGIN + 14, y: this.y - 34, size: 18, font: this.fonts.bold, color: this.ink });
     this.y -= 68;
   }
 
@@ -361,7 +373,7 @@ class ReportWriter {
   table(headers, rows, widths) {
     const { totalWidth, actualWidths, layouts } = this.tableLayouts(rows, widths);
     const drawHeader = () => {
-      this.page.drawRectangle({ x: MARGIN, y: this.y - 18, width: totalWidth, height: 24, color: NAVY });
+      this.page.drawRectangle({ x: MARGIN, y: this.y - 18, width: totalWidth, height: 24, color: this.ink });
       let x = MARGIN + 6;
       headers.forEach((header, index) => {
         this.page.drawText(pdfText(header), { x, y: this.y - 10, size: 8, font: this.fonts.bold, color: rgb(1, 1, 1) });
@@ -398,7 +410,10 @@ class ReportWriter {
   finishFooters() {
     this.reportPages.forEach((page, index) => {
       page.drawLine({ start: { x: MARGIN, y: 33 }, end: { x: PAGE_WIDTH - MARGIN, y: 33 }, color: LINE, thickness: 0.5 });
-      page.drawText('Broadridge Proxy Voting - Confidential', { x: MARGIN, y: 20, size: 7, font: this.fonts.regular, color: MUTED });
+      page.drawText('Voting record - Confidential', { x: MARGIN, y: 20, size: 7, font: this.fonts.regular, color: MUTED });
+      page.drawText('Powered by', { x: PAGE_WIDTH / 2 - 48, y: 20, size: 6.5, font: this.fonts.regular, color: MUTED });
+      if (this.logo) page.drawImage(this.logo, { x: PAGE_WIDTH / 2 - 9, y: 17, width: 63, height: 63 * this.logo.height / this.logo.width });
+      else page.drawText('Broadridge', { x: PAGE_WIDTH / 2 - 9, y: 20, size: 6.5, font: this.fonts.bold, color: MUTED });
       const pageText = `Page ${index + 1} of ${this.reportPages.length}`;
       page.drawText(pageText, {
         x: PAGE_WIDTH - MARGIN - this.fonts.regular.widthOfTextAtSize(pageText, 7),
@@ -431,11 +446,16 @@ async function viewerContext(eventId, walletInput) {
 }
 
 function eventDetails(event) {
+  const branding = eventIssuerBranding(event);
   const contractUrl = event.contract_address
     ? (verifiedContractUrl(event) ?? explorerPath(`address/${event.contract_address}`))
     : null;
   return [
     ['Event', event.title],
+    ['Issuer', branding.issuerName || 'Not specified'],
+    ...(branding.securityName ? [['Listed security', branding.securityName]] : []),
+    ...(branding.securityTicker ? [['Security trading symbol', branding.securityTicker]] : []),
+    ...(event.token_platform ? [['Tokenization platform', event.token_platform]] : []),
     ['Token', `${event.token_name} (${event.token_symbol})`],
     ['Token address', addressValue(event.token_address)],
     ['Creator', addressValue(event.creator_address)],
@@ -443,7 +463,7 @@ function eventDetails(event) {
     ['Voting period', `${formatDate(event.voting_start_at)} - ${formatDate(event.voting_end_at)}`],
     ['Token-to-vote ratio', `${event.token_to_vote_ratio} token(s) per vote`],
     ['VoteEvent contract', addressValue(event.contract_address, contractUrl)],
-    ...(contractUrl ? [['Verified VoteEvent URL', linkedValue(contractUrl, contractUrl)]] : []),
+    ...(contractUrl ? [['VoteEvent explorer URL', linkedValue(contractUrl, contractUrl)]] : []),
   ];
 }
 
@@ -491,7 +511,7 @@ export async function createResultsReport(eventId, walletInput) {
   const turnout = eligiblePower === 0n ? 0 : Number((powerCast * 10_000n) / eligiblePower) / 100;
 
   const pdf = await PDFDocument.create();
-  const writer = await ReportWriter.create(pdf, 'Proxy Voting Results Report', context.event.token_symbol);
+  const writer = await ReportWriter.create(pdf, 'Proxy Voting Results Report', context.event.token_symbol, context.event);
   const introduction = context.event.description || 'Final proxy voting report.';
   writer.heading(context.event.title, 18, writer.paragraphHeight(introduction, { size: 9.5, gap: 10 }));
   writer.paragraph(introduction, { color: MUTED });
@@ -618,10 +638,8 @@ export async function createResultsReport(eventId, walletInput) {
 export async function createVoteReceipt(eventId, walletInput) {
   const wallet = normalizeAddress(walletInput, 'wallet');
   const event = await getEventRow(eventId);
-  const contractUrl = verifiedContractUrl(event);
-  if (!contractUrl) {
-    throw new HttpError(409, 'The vote receipt is available after the VoteEvent contract is verified on PolygonScan.', 'RECEIPT_NOT_READY');
-  }
+  const contractUrl = event.contract_address ? explorerPath(`address/${event.contract_address}#code`) : null;
+  if (!contractUrl) throw new HttpError(409, 'The event contract is not deployed yet.', 'RECEIPT_NOT_READY');
   const voteResult = await query(
     `SELECT * FROM votes
       WHERE event_id=$1 AND voter_address=$2 AND status<>'FAILED'`,
@@ -633,7 +651,7 @@ export async function createVoteReceipt(eventId, walletInput) {
   const vote = voteResult.rows[0];
 
   const pdf = await PDFDocument.create();
-  const writer = await ReportWriter.create(pdf, 'Proxy Voting Receipt', event.token_symbol);
+  const writer = await ReportWriter.create(pdf, 'Proxy Voting Receipt', event.token_symbol, event);
   const receiptIntroduction = 'Receipt of submitted proxy voting instructions.';
   writer.heading(event.title, 18, writer.paragraphHeight(receiptIntroduction));
   writer.paragraph(receiptIntroduction, { color: MUTED });

@@ -1,6 +1,7 @@
 import { Contract, Interface } from 'ethers';
-import { VOTE_EVENT_ABI } from '@pv/shared';
+import { VOTE_EVENT_ABI, voteCall } from '@pv/shared';
 import { config } from './config.js';
+import { deployedBallotVersion } from './ballot-protocol.js';
 import { query } from './db.js';
 import { errorText, permanentError } from './errors.js';
 import { updateJob } from './jobs.js';
@@ -22,7 +23,7 @@ function voteLog(receipt, contractAddress) {
 
 export async function relayVote(job) {
   const found = await query(
-    `SELECT e.*,v.voter_address,v.snapshot_balance,v.choices_hex,v.signature,v.status AS vote_status,
+    `SELECT e.*,v.voter_address,v.snapshot_balance,v.choices,v.choices_hex,v.signature,v.status AS vote_status,
             v.transaction_hash,se.merkle_proof
      FROM events e JOIN votes v ON v.event_id=e.id AND v.voter_address=$2
      JOIN snapshot_entries se ON se.event_id=e.id AND se.wallet_address=v.voter_address
@@ -34,14 +35,19 @@ export async function relayVote(job) {
   if (row.vote_status === 'CONFIRMED') return { transactionHash: row.transaction_hash, alreadyComplete: true };
   if (!row.contract_address || row.deployment_block === null) throw new Error('VoteEvent deployment is not complete.');
 
-  const args = [row.voter_address, BigInt(row.snapshot_balance), row.merkle_proof, row.choices_hex, row.signature];
+  const { method, args } = voteCall({
+    ballotVersion: await deployedBallotVersion(row.contract_address),
+    voter: row.voter_address, snapshotBalance: row.snapshot_balance,
+    proof: row.merkle_proof, choicesBytes: row.choices_hex, choices: row.choices,
+    proposals: row.proposals, signature: row.signature,
+  });
   const contract = new Contract(row.contract_address, VOTE_EVENT_ABI, relayer);
   await updateJob(job.id, 12, 'Validating signed ballot');
-  try { await contract.castVote.staticCall(...args); }
+  try { await contract[method].staticCall(...args); }
   catch (error) { throw permanentError(`VoteEvent rejected the ballot: ${errorText(error)}`); }
   const prepared = await prepareTransaction({
     job, eventId: row.id, voterAddress: row.voter_address, type: 'RELAY_VOTE',
-    request: { to: row.contract_address, data: iface.encodeFunctionData('castVote', args) },
+    request: { to: row.contract_address, data: iface.encodeFunctionData(method, args) },
     onPrepared: async (client, tx) => {
       await client.query(
         `UPDATE votes SET status='SUBMITTED',transaction_hash=$3,failure_reason=NULL WHERE event_id=$1 AND voter_address=$2`,

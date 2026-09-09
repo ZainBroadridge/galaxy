@@ -9,7 +9,7 @@ test('voter event views require a snapshot entry while organiser access stays se
   const [events, server, votingPage, organiserPage] = await Promise.all([
     read('apps/api/src/events.js'),
     read('apps/api/src/server.js'),
-    read('apps/web/src/pages/VotingDashboard.jsx'),
+    read('apps/web/src/investor/BallotPage.jsx'),
     read('apps/web/src/pages/OrganiserDashboard.jsx'),
   ]);
 
@@ -23,8 +23,10 @@ test('voter event views require a snapshot entry while organiser access stays se
   );
   assert.match(server, /app\.get\('\/v1\/events\/:id\/view'[\s\S]*eventView/u);
   assert.match(server, /app\.get\('\/v1\/events\/:id\/organiser-view'[\s\S]*organiserEventView/u);
-  assert.match(votingPage, /account[\s\S]*\/view\?wallet=\$\{encodeURIComponent\(account\)\}/u);
-  assert.match(votingPage, /view\.error\?\.code === 'NOT_ELIGIBLE'/u);
+  assert.match(votingPage, /\/v1\/investor\/events\/\$\{eventId\}/u);
+  assert.match(server, /app\.use\('\/v1\/investor', requireAuth/u);
+  assert.match(server, /eventView\(request\.params\.id, authenticatedWallet\(request\)\)/u);
+  assert.match(votingPage, /<ErrorMessage error=\{view\.error\}/u);
   assert.match(organiserPage, /\/organiser-view/u);
 });
 

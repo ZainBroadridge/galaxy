@@ -1,5 +1,7 @@
 const baseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
 const sessionKey = 'pv-v2-session';
+const issuerSessionKey = 'pv-issuer-demo-session';
+export const SESSION_EXPIRED_EVENT = 'pv-session-expired';
 
 export class ApiError extends Error {
   constructor(status, payload) {
@@ -13,7 +15,7 @@ export class ApiError extends Error {
 export function readSession() {
   try {
     const value = JSON.parse(sessionStorage.getItem(sessionKey));
-    if (!value?.token || !value?.walletAddress || Date.parse(value.expiresAt) <= Date.now()) {
+    if (!value?.token || !value?.walletAddress || !(Date.parse(value.expiresAt) > Date.now())) {
       throw new Error();
     }
     return value;
@@ -28,13 +30,27 @@ export function saveSession(value) {
   else sessionStorage.removeItem(sessionKey);
 }
 
+export function readIssuerSession() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(issuerSessionKey));
+    return value?.token && Date.parse(value.expiresAt) > Date.now() ? value : null;
+  } catch { return null; }
+}
+
+export function saveIssuerSession(value) {
+  if (value) sessionStorage.setItem(issuerSessionKey, JSON.stringify(value));
+  else sessionStorage.removeItem(issuerSessionKey);
+}
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function request(path, options = {}, responseType = 'json', retry = true) {
-  const { auth = true, ...fetchOptions } = options;
+  const { auth = true, issuerAuth = true, ...fetchOptions } = options;
   const headers = new Headers(fetchOptions.headers || {});
   const session = auth ? readSession() : null;
   if (session?.token) headers.set('authorization', `Bearer ${session.token}`);
+  const issuer = issuerAuth ? readIssuerSession() : null;
+  if (issuer?.token) headers.set('x-issuer-session', issuer.token);
 
   let body = fetchOptions.body;
   const rawBody = body instanceof Blob || body instanceof FormData || body instanceof ArrayBuffer;
@@ -64,6 +80,9 @@ async function request(path, options = {}, responseType = 'json', retry = true) 
   }
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
+    if (response.status === 401 && ['AUTH_REQUIRED', 'ISSUER_AUTH_REQUIRED'].includes(payload?.error?.code)) {
+      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: payload.error.code }));
+    }
     throw new ApiError(response.status, payload);
   }
   if (responseType === 'blob') return response.blob();
