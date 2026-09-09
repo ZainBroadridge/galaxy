@@ -40,7 +40,7 @@ export function BrandBand({ event, inverse = false }) {
     <BrandLockup inverse={inverse} className="investor-brand-lockup">
       {presentation.header === 'platform' ? <PlatformLogo presentation={presentation} />
         : presentation.header === 'issuer' ? <IssuerLogo event={event} className="investor-brand-issuer-logo" showNameFallback />
-          : <ProxyVoteMark stacked={inverse} />}
+          : <ProxyVoteMark inverse={inverse} />}
     </BrandLockup>
   </div>;
 }
