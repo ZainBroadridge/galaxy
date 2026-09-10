@@ -1,5 +1,6 @@
-export function ProxyVoteMark({ inverse = false }) {
-  const src = inverse ? '/proxyvote-landing-mark.svg' : '/proxyvote-mark.svg';
+export function ProxyVoteMark({ inverse = false, variant = 'default' }) {
+  const src = inverse ? '/proxyvote-landing-mark.svg'
+    : variant === 'investor' ? '/proxyvote-voter-mark.svg' : '/proxyvote-mark.svg';
   return <img className="proxyvote-artwork" src={src} alt="ProxyVote" width="158" height="58" />;
 }
 
