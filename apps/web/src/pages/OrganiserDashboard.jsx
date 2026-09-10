@@ -59,7 +59,7 @@ const initialForm = () => ({
   }],
 });
 
-const DEMO_RECORD_AGE_MS = 24 * 60 * 60_000;
+const DEMO_RECORD_AGE_MS = 2 * 60 * 60_000;
 const DEMO_START_DELAY_MS = 5 * 60_000;
 const DEMO_END_DELAY_MS = 60 * 60_000;
 
