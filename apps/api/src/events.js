@@ -18,9 +18,16 @@ import { kickJobRunner } from './runner.js';
 import { serializeEvent, serializeJob, serializeVote } from './serializers.js';
 import { inspectToken } from './tokens.js';
 import { ensureOwnedIssuerLogo } from './issuer-logos.js';
+import { resolveTokenSelection, TokenCatalogueError } from './token-catalogue.js';
 
 export async function createEvent(wallet, input) {
   const creator = normalizeAddress(wallet);
+  let selection;
+  try { selection = resolveTokenSelection(input, config.chainId); }
+  catch (error) {
+    if (error instanceof TokenCatalogueError) throw new HttpError(error.status, error.message, error.code);
+    throw error;
+  }
   const used = await query(
     `SELECT count(*)::int AS count
        FROM events
@@ -33,9 +40,12 @@ export async function createEvent(wallet, input) {
 
   await ensureOwnedIssuerLogo(input.issuerLogoId, creator);
   let branding;
-  try { branding = issuerBranding(input); }
+  try {
+    branding = { ...issuerBranding({ issuerName: selection.issuerName, platform: selection.platform }),
+      securityName: selection.securityName, securityTicker: selection.securityTicker };
+  }
   catch (error) { throw new HttpError(400, error.message, 'INVALID_SECURITY_IDENTITY'); }
-  const token = await inspectToken(input.tokenAddress);
+  const token = await inspectToken(selection.tokenAddress);
   const { metadata, hash } = hashEventMetadata(input);
   const proposalConfig = packProposalConfig(
     metadata.proposals.map((proposal) => proposal.options.length),
@@ -51,8 +61,8 @@ export async function createEvent(wallet, input) {
          creator_address,token_address,token_name,token_symbol,token_decimals,title,description,proposals,
          metadata_hash,proposal_config,record_date_at,token_to_vote_ratio,vote_unit,voting_start_at,voting_end_at,
          discovery_mode,authenticity_status,snap_delivery_mode,
-         issuer_name,token_platform,issuer_logo_preset,issuer_logo_id,issuer_theme_color,security_name,security_ticker
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+         issuer_name,token_platform,issuer_logo_preset,issuer_logo_id,issuer_theme_color,security_name,security_ticker,token_catalogue_id,cusip
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
        RETURNING *`,
       [
         creator,
@@ -80,6 +90,8 @@ export async function createEvent(wallet, input) {
         branding.issuerThemeColor,
         branding.securityName,
         branding.securityTicker,
+        selection.id,
+        selection.cusip,
       ],
     );
     let event = result.rows[0];

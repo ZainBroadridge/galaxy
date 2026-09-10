@@ -27,7 +27,7 @@ test('Completed build and scheduled/open/closed voting are independent and time-
   const event = { snapshotRoot: 'root', contractAddress: 'address', contractReady: true, deploymentBlock: 42,
     status: 'SCHEDULED', votingStartAt: '2026-09-09T10:00:00Z', votingEndAt: '2026-09-09T11:00:00Z', verificationStatus: 'PENDING' };
   assert.equal(eventProgress(event).progress, 100);
-  assert.match(eventProgress(event).message, /^Completed/u);
+  assert.equal(eventProgress(event).message, 'Successfully created event');
   assert.equal(meetingLifecycle(event, Date.parse('2026-09-09T09:59:00Z')), 'SCHEDULED');
   assert.equal(meetingLifecycle(event, Date.parse(event.votingStartAt)), 'OPEN');
   assert.equal(meetingLifecycle(event, Date.parse(event.votingEndAt) + 1), 'CLOSED');
@@ -92,17 +92,17 @@ test('server-accepted participation immediately updates meeting categories witho
   assert.equal(store.snapshot('event:test-event').data.vote.status, 'QUEUED', 'a stale GET cannot erase the accepted vote');
 });
 
-test('both issuer and platform suggestions use the same fuzzy behavior and retain free text', () => {
+test('issuer and supported-platform suggestions share typo-tolerant matching', () => {
   assert.equal(searchIssuers(ISSUER_PRESETS, 'tesal')[0].id, 'tesla');
   assert.equal(searchIssuers(ISSUER_PRESETS, 'disney').length, 0);
-  assert.equal(searchPlatforms(TOKEN_PLATFORMS, 'onod')[0], 'Ondo');
+  assert.equal(searchPlatforms(TOKEN_PLATFORMS, 'coinbsae')[0], 'Coinbase');
   assert.equal(searchPlatforms(TOKEN_PLATFORMS, 'dinrai')[0], 'Dinari');
-  assert.equal(searchPlatforms(TOKEN_PLATFORMS, 'krakn')[0], 'Kraken');
+  assert.equal(searchPlatforms(TOKEN_PLATFORMS, 'krakn').length, 0);
   assert.equal(searchPlatforms(TOKEN_PLATFORMS, 'unknown platform').length, 0);
 });
 
 test('new options are capped consistently while displayed and signed legacy text is not truncated', async () => {
-  assert.equal(MAX_OPTION_LABEL_LENGTH, 80);
+  assert.equal(MAX_OPTION_LABEL_LENGTH, 24);
   const [form, validation, ballot] = await Promise.all([
     read('apps/web/src/pages/OrganiserDashboard.jsx'), read('apps/api/src/validation.js'), read('apps/web/src/investor/BallotPage.jsx'),
   ]);
@@ -139,7 +139,7 @@ test('layout uses a single shared footer and accessible fieldset inner grids', a
   assert.equal((app.match(/<SiteFooter \/>/gu) ?? []).length, 1);
   assert.doesNotMatch(frame, /<footer|<InvestorFooter/u); assert.doesNotMatch(issuer, /<footer/u);
   assert.match(footer, /All rights reserved/u);
-  assert.match(ballot, /<div className="investor-proposal-row">/u);
+  assert.match(ballot, /<div className="investor-proposal-row" data-expanded=/u);
   assert.match(css, /\.investor-proposal-row \{ display: grid/u);
   assert.match(css, /background: #f6f5f1/u);
   assert.doesNotMatch(ballot, /Meeting Agenda|Current holdings do not change|Reconnect your investor wallet/u);

@@ -2,10 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useEventPolling } from '../hooks.js';
 import { useInvestorData, useInvestorResource } from './InvestorData.jsx';
-import BackLink from '../components/BackLink.jsx';
 import ResourceSkeleton from '../components/ResourceSkeleton.jsx';
 import IssuerLogo from '../components/IssuerLogo.jsx';
-import { ArrowIcon, ErrorMessage, InvestorFrame, MeetingTags, SecurityIdentity, StandingDisclosure } from './InvestorFrame.jsx';
+import { ArrowIcon, ErrorMessage, InvestorFrame, MeetingTags, SecurityIdentity } from './InvestorFrame.jsx';
 import { displayDate, groupMeetings, MEETING_TABS } from './meeting-utils.js';
 
 export default function MeetingsPage() {
@@ -47,6 +46,6 @@ export default function MeetingsPage() {
             {voted ? 'View receipt' : tab.id === 'past' || scheduled ? 'View' : 'Vote'}<ArrowIcon /></Link>
         </article>;
       })}</div>
-    </section><StandingDisclosure />
+    </section>
   </section></InvestorFrame>;
 }

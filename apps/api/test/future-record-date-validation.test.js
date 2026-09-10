@@ -4,7 +4,9 @@ import { eventInput } from '../src/validation.js';
 
 function validEvent(now = Date.now()) {
   return {
-    tokenAddress: '0x0000000000000000000000000000000000000001',
+    tokenAddress: '0x682e82d5a3f0bbb81b7c086081bd757cd5b2c4b4',
+    tokenCatalogueId: 'aapl-issuer',
+    cusip: 'DEMO01001',
     title: 'Future record-date event',
     description: '',
     recordDateAt: new Date(now + 60 * 60_000).toISOString(),
@@ -37,4 +39,16 @@ test('event validation still requires record date at or before voting start', ()
     issue.path[0] === 'recordDateAt'
     && issue.message === 'Record date must be at or before voting start.'
   )));
+});
+
+
+test('new event validation rejects long or multiline options and missing catalogue identifiers', () => {
+  const input = validEvent();
+  for (const label of ['x'.repeat(25), 'For\nAgainst', 'For\tAgainst']) {
+    const bad = { ...input, proposals: [{ ...input.proposals[0], options: [label, 'Against'] }] };
+    assert.equal(eventInput.safeParse(bad).success, false);
+  }
+  assert.equal(eventInput.safeParse({ ...input, proposals: [{ ...input.proposals[0], options: ['x'.repeat(24), 'Against'] }] }).success, true);
+  assert.equal(eventInput.safeParse({ ...input, tokenCatalogueId: undefined }).success, false);
+  assert.equal(eventInput.safeParse({ ...input, cusip: undefined }).success, false);
 });

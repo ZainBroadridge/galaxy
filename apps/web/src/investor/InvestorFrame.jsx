@@ -4,12 +4,13 @@ import { eventIssuerBranding } from '@pv/shared';
 import { useInvestorSession } from './InvestorSession.jsx';
 import { useNotifications } from '../notifications.jsx';
 import IssuerLogo from '../components/IssuerLogo.jsx';
+import BackLink from '../components/BackLink.jsx';
+import ExitButton from '../components/ExitButton.jsx';
 import { displayDate } from './meeting-utils.js';
 import BrandLockup, { ProxyVoteMark } from '../components/BrandLockup.jsx';
 import { meetingPresentation } from './presentation.js';
 
 export const EDUCATION_URL = 'https://www.shareholdereducation.com/';
-export const TOKENHOLDER_DISCLOSURE = 'The voting capabilities of tokenholders referenced herein are rights to express preferences to the token minter regarding voting of the shares that the issuer beneficially owns.';
 
 export function ArrowIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg>;
@@ -53,7 +54,7 @@ export function InvestorFrame({ children, event, hideNavigation = false }) {
     <a href="#investor-main" className="investor-skip">Skip to content</a>
     {wallet && <div className="investor-utility"><div className="investor-utility-inner">
       <span title={wallet}>Wallet Address:&nbsp; {wallet.slice(0, 6)}...{wallet.slice(-4)}</span>
-      <button type="button" onClick={() => void signOut()}>Sign out</button></div></div>}
+      <ExitButton onClick={() => void signOut()} label="Sign out of the investor interface" /></div></div>}
     <BrandBand event={event} />
     {!hideNavigation && <nav className="investor-navigation" aria-label="Investor navigation">
       <NavLink to="/meetings">My Meetings</NavLink>
@@ -75,10 +76,14 @@ export function MeetingTags({ platform, children }) {
 
 export function SecurityIdentity({ event }) {
   const brand = eventIssuerBranding(event);
+  const explorer = import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://amoy.polygonscan.com';
   return <>
     <p className="investor-security-name">{brand.securityName || brand.issuerName}
       {brand.securityTicker ? ` (${brand.securityTicker})` : ''}</p>
-    <p className="investor-token-name">{event.tokenName}{event.tokenSymbol ? ` (${event.tokenSymbol})` : ''}</p>
+    <p className="investor-token-name"><span>Tokenised stock: {event.tokenName}{event.tokenSymbol ? ` (${event.tokenSymbol})` : ''}</span>
+      {event.tokenAddress && <a className="investor-token-address" href={`${explorer}/address/${event.tokenAddress}`}
+        target="_blank" rel="noopener noreferrer" aria-label={`Token contract ${event.tokenAddress}`}>{event.tokenAddress}</a>}</p>
+    {event.cusip && <p className="investor-cusip">Demo CUSIP: {event.cusip}</p>}
   </>;
 }
 export function MeetingIdentity({ event }) {
@@ -93,6 +98,10 @@ export function MeetingIdentity({ event }) {
     <p className="investor-muted">Voting deadline: {displayDate(event.votingEndAt)}</p>
   </header>;
 }
-export function StandingDisclosure() {
-  return <p id="tokenholder-voting-disclosure" className="investor-disclosure">{TOKENHOLDER_DISCLOSURE}</p>;
+
+export function MeetingPageHeader({ event }) {
+  return <div className="investor-detail-heading">
+    <BackLink to="/meetings?tab=active">Back to my meetings</BackLink>
+    {event && <MeetingIdentity event={event} />}
+  </div>;
 }

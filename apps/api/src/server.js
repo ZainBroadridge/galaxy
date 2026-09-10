@@ -42,6 +42,7 @@ import { createResultsReport, createVoteReceipt } from './reports.js';
 import { jobRunnerStatus, startJobRunner } from './runner.js';
 import { securityHeaders } from './security.js';
 import { inspectToken } from './tokens.js';
+import { tokenCatalogue } from './token-catalogue.js';
 import {
   announcementTriggerInput,
   browserPushSubscriptionInput,
@@ -225,6 +226,10 @@ app.get('/v1/issuer/session', requireIssuer, (request, response) => {
 });
 app.post('/v1/issuer/logout', async (request, response, next) => {
   try { await revokeIssuerSession(request); response.status(204).end(); } catch (error) { next(error); }
+});
+app.get('/v1/issuer/token-catalogue', requireIssuer, (_request, response, next) => {
+  try { response.set('Cache-Control', 'private, no-store').json(tokenCatalogue(config.chainId)); }
+  catch (error) { next(error); }
 });
 app.post('/v1/issuer/logos', requireIssuer, publicWriteLimiter,
   express.raw({ type: ['image/png', 'image/jpeg'], limit: '512kb' }), async (request, response, next) => {

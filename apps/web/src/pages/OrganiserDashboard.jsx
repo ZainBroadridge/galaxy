@@ -3,7 +3,7 @@ import { MAX_OPTION_LABEL_LENGTH } from '@pv/shared';
 import BackLink from '../components/BackLink.jsx';
 import { useDeadlineClock } from '../data/useDeadlineClock.js';
 import { meetingLifecycle } from '../investor/meeting-utils.js';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { API_BASE_URL, api, uploadEventPdf } from '../api.js';
 import {
   Empty,
@@ -23,6 +23,7 @@ import {
 } from '../token-address.js';
 import { useWallet } from '../wallet.jsx';
 import IssuerBrandingFields from '../issuer/IssuerBrandingFields.jsx';
+import { applyCatalogueEntry, clearCatalogueEntry, selectedCatalogueEntry } from '../issuer/catalogue-form.js';
 import RequiredMark from '../components/RequiredMark.jsx';
 import { eventProgress } from '../issuer/event-progress.js';
 import { scheduleCreationLimitNotice, visibleCreationNotice } from '../issuer/notice-state.js';
@@ -35,6 +36,8 @@ const localDate = (date) => new Date(
 const iso = (value) => new Date(value).toISOString();
 const initialForm = () => ({
   tokenAddress: '',
+  tokenCatalogueId: '',
+  cusip: '',
   issuerName: '',
   securityName: '',
   securityTicker: '',
@@ -56,7 +59,7 @@ const initialForm = () => ({
   }],
 });
 
-const DEMO_RECORD_AGE_MS = 2 * 60 * 60_000;
+const DEMO_RECORD_AGE_MS = 24 * 60 * 60_000;
 const DEMO_START_DELAY_MS = 5 * 60_000;
 const DEMO_END_DELAY_MS = 60 * 60_000;
 
@@ -70,28 +73,28 @@ function demoSchedule(now = Date.now()) {
 
 function demoProposals() {
   return [{
-    title: 'P-01 - Election of Director Slate',
-    description: 'Should Galaxy shareholders elect the proposed director slate for the next annual cycle? This demonstrates a director-election style ballot with a slate-level choice.',
-    options: ['For all nominees', 'Withhold all nominees', 'For all except Nominee C'],
+    title: 'P-01 - Election of Directors',
+    description: 'Elect the nominated directors to serve until the next annual meeting.',
+    options: ['For all', 'Withhold all', 'Except Nominee C'],
     recommendation: 0,
   }, {
-    title: 'P-02 - Ratification of Independent Auditor',
-    description: "Should Zenith & Co. LLP be ratified as Galaxy's independent auditor for FY2026? This demonstrates the common auditor-ratification pattern.",
+    title: 'P-02 - Appointment of Independent Auditor',
+    description: 'Ratify the appointment of the independent auditor for the next financial year.',
     options: ['For', 'Against', 'Abstain'],
     recommendation: 0,
   }, {
     title: 'P-03 - Advisory Vote on Executive Compensation',
-    description: "Should shareholders approve, on an advisory basis, Galaxy's executive compensation program? This demonstrates a non-binding say-on-pay vote.",
+    description: 'Approve the executive compensation arrangements on an advisory basis.',
     options: ['For', 'Against', 'Abstain'],
     recommendation: 0,
   }, {
-    title: 'P-04 - Frequency of Future Advisory Compensation Votes',
-    description: 'How often should Galaxy hold future advisory votes on executive compensation? This demonstrates a non-binary say-on-frequency ballot.',
-    options: ['Every 1 year', 'Every 2 years', 'Every 3 years', 'Abstain'],
+    title: 'P-04 - Frequency of Compensation Votes',
+    description: 'Select how often future advisory votes on executive compensation should be held.',
+    options: ['Every year', 'Every 2 years', 'Every 3 years', 'Abstain'],
     recommendation: 0,
   }, {
-    title: 'P-05 - Tokenized Shareholder Recordkeeping Charter',
-    description: 'Should Galaxy approve the Tokenized Shareholder Recordkeeping Charter for using on-chain vote proof in future pilots? This fictional governance proposal demonstrates on-chain proof and recordkeeping concepts.',
+    title: 'P-05 - Approval of the Equity Incentive Plan',
+    description: 'Approve the proposed equity incentive plan and its administration.',
     options: ['For', 'Against', 'Abstain'],
     recommendation: 0,
   }];
@@ -102,7 +105,7 @@ function demoForm(current) {
     ...current,
     tokenAddress: current.tokenAddress,
     title: '2026 Annual Proxy Voting Demonstration',
-    description: 'Fictional Galaxy Holdings Ltd. Mini Galaxy on-chain proxy-voting demonstration (GAL-2026-AGM-DEMO). Eligible record-date holders may submit one weighted ballot covering five sample proposals. This event is for UI, workflow, reporting, and technical proof-of-concept use only; it is not a legal proxy solicitation or production voting record.',
+    description: 'Annual meeting demonstration covering director elections, auditor appointment, compensation and equity incentives. Eligible record-date holders may submit one final weighted ballot. Sample agenda for testing only; not a legal proxy solicitation.',
     ...demoSchedule(),
     tokenToVoteRatio: 1,
     authenticityClaim: 'COMMUNITY',
@@ -192,7 +195,7 @@ function ProposalEditor({ proposals, onChange }) {
         {proposal.options.map((option, optionIndex) => <div className="row" key={optionIndex}>
           <label className="option-edit-field"><span className="field-label">Option {optionIndex + 1}<RequiredMark /></span><input
             maxLength={MAX_OPTION_LABEL_LENGTH}
-            title="Option label: maximum 80 characters"
+            title={`Option label: maximum ${MAX_OPTION_LABEL_LENGTH} characters`}
             aria-label={`Option ${optionIndex + 1}`}
             value={option}
             onChange={(event) => update(proposalIndex, {
@@ -255,6 +258,9 @@ export default function OrganiserDashboard() {
     [wallet.account],
   );
   const [form, setForm] = useState(initialForm);
+  const catalogue = useLoad(() => creating
+    ? api('/v1/issuer/token-catalogue', { auth: false }) : Promise.resolve(null), [creating]);
+  const selection = selectedCatalogueEntry(catalogue.data, form);
   const [documents, setDocuments] = useState([]);
   const [issuerLogoFile, setIssuerLogoFile] = useState(null);
   const [token, setToken] = useState(null);
@@ -268,6 +274,17 @@ export default function OrganiserDashboard() {
 
   useEffect(() => scheduleCreationLimitNotice(error, () => setError((current) => current === error ? null : current)), [error]);
 
+  async function refreshCatalogue() {
+    setError(null);
+    try {
+      const latest = await catalogue.reload();
+      setForm((current) => {
+        const entry = latest.entries.find((item) => item.id === current.tokenCatalogueId);
+        return entry ? applyCatalogueEntry(current, entry) : clearCatalogueEntry(current);
+      });
+    } catch (value) { setError(value); }
+  }
+
   function fillDemoData() {
     setForm((current) => demoForm(current));
     setAnnouncementAudience('ELIGIBLE');
@@ -276,6 +293,7 @@ export default function OrganiserDashboard() {
   }
 
   const inspectTokenAddress = useCallback(async (rawValue) => {
+    if (!selection?.configured) return null;
     const validation = validateTokenAddressInput(rawValue);
     const requestId = inspectRequestRef.current + 1;
     inspectRequestRef.current = requestId;
@@ -305,7 +323,7 @@ export default function OrganiserDashboard() {
     } finally {
       if (inspectRequestRef.current === requestId) setInspectBusy(false);
     }
-  }, []);
+  }, [selection]);
 
   useEffect(() => {
     if (automaticInspectTimerRef.current !== null) {
@@ -318,7 +336,7 @@ export default function OrganiserDashboard() {
     setToken(null);
     setInspectError(null);
 
-    if (!creating || !form.tokenAddress.trim()) return undefined;
+    if (!creating || !selection?.configured || !form.tokenAddress.trim()) return undefined;
 
     automaticInspectTimerRef.current = window.setTimeout(() => {
       automaticInspectTimerRef.current = null;
@@ -331,7 +349,7 @@ export default function OrganiserDashboard() {
         automaticInspectTimerRef.current = null;
       }
     };
-  }, [creating, form.tokenAddress, inspectTokenAddress]);
+  }, [creating, form.tokenAddress, selection, inspectTokenAddress]);
 
   function inspect() {
     if (automaticInspectTimerRef.current !== null) {
@@ -358,6 +376,7 @@ export default function OrganiserDashboard() {
     setBusyStage('Creating event…');
     setError(null);
     try {
+      if (!selection?.configured) throw new Error('Select a configured token mapping before creating an event.');
       const tokenAddress = validateTokenAddressInput(form.tokenAddress);
       if (!tokenAddress.valid) throw new Error(tokenAddress.message);
 
@@ -414,7 +433,7 @@ export default function OrganiserDashboard() {
   }
 
   if (!wallet.connected) {
-    return <Page title="Organizer" actions={<BackLink to="/issuer/home">Back to home</BackLink>}>
+    return <Page title="Organizer">
       <Panel><Empty>
         <p>Connect a wallet to create and manage voting events.</p>
         <button className="button" onClick={wallet.openWallet}>Connect wallet</button>
@@ -427,7 +446,7 @@ export default function OrganiserDashboard() {
       className="organiser-index-page"
       title="Your Voting Events"
       intro={`${events.data?.length ?? 0} event${events.data?.length === 1 ? '' : 's'} created by this wallet`}
-      actions={<><BackLink to="/issuer/home">Back to home</BackLink><button className="button" type="button" onClick={() => setCreating(true)}>Create Voting Event</button></>}
+      actions={<button className="button" type="button" onClick={() => setCreating(true)}>Create Voting Event</button>}
     >
       <ErrorBox error={error || events.error} />
       {events.loading
@@ -471,11 +490,18 @@ export default function OrganiserDashboard() {
   return <Page
     className="organiser-create-page"
     title="Create event"
-    actions={<button className="button secondary" type="button" onClick={() => setCreating(false)}>Back to events</button>}
+    actions={<BackLink onClick={() => setCreating(false)}>Back to events</BackLink>}
   >
     <ErrorBox error={error} />
+    {error?.code === 'TOKEN_MAPPING_MISMATCH' && <button type="button" className="button secondary compact"
+      onClick={() => void refreshCatalogue()} disabled={catalogue.loading}>Refresh token mapping</button>}
       <form className="form create-event-form" onSubmit={submit}>
-        <IssuerBrandingFields form={form} setForm={setForm} file={issuerLogoFile} setFile={setIssuerLogoFile} disabled={Boolean(busyStage)} />
+        {catalogue.loading && <p role="status">Loading token catalogue...</p>}
+        <ErrorBox error={catalogue.error} />
+        {catalogue.error && <button type="button" className="button secondary compact" onClick={() => void catalogue.reload().catch(() => {})}>Retry catalogue</button>}
+        <IssuerBrandingFields form={form} setForm={setForm} file={issuerLogoFile} setFile={setIssuerLogoFile}
+          disabled={Boolean(busyStage)} catalogue={catalogue.data} />
+        {selection && !selection.configured && <Notice tone="warning">This token mapping is not configured yet. Update its address in apps/api/src/token-catalogue.js before creating an event.</Notice>}
         <section className="create-event-section">
           <header className="create-event-section-heading create-details-heading">
             <div><h2>Event details</h2>
@@ -488,8 +514,9 @@ export default function OrganiserDashboard() {
             <label className="create-token-address-field"><span className="field-label">ERC-20 token address<RequiredMark /></span><div className="create-token-input">
               <input
                 value={form.tokenAddress}
-                onChange={(event) => setForm({ ...form, tokenAddress: event.target.value })}
-                placeholder="0x…"
+                readOnly
+                aria-label="ERC-20 token address from selected catalogue mapping"
+                placeholder="Select an issuer and platform above"
                 autoCapitalize="none"
                 autoComplete="off"
                 autoCorrect="off"
@@ -500,7 +527,7 @@ export default function OrganiserDashboard() {
                 type="button"
                 className="create-token-inspect-button"
                 onClick={inspect}
-                disabled={!form.tokenAddress.trim() || inspectBusy}
+                disabled={!selection?.configured || inspectBusy}
                 aria-busy={inspectBusy}
                 aria-label="Inspect ERC-20 token"
                 title="Inspect ERC-20 token"
@@ -630,7 +657,7 @@ export default function OrganiserDashboard() {
               ? 'The event is saved now; snapshot processing starts automatically after the record date.'
               : 'Snapshot processing and deployment continue in the background.'}</span>
           </div>
-          <button className="button" disabled={Boolean(busyStage)}>
+          <button className="button" disabled={Boolean(busyStage) || !selection?.configured}>
             {busyStage || 'Create Event'}
           </button>
         </footer>
@@ -795,7 +822,7 @@ export function OrganiserEventPage() {
   return <Page
     title={event.title}
     intro={`${event.tokenName} (${event.tokenSymbol})`}
-    actions={<Link className="button secondary" to="/organiser">Back to events</Link>}
+    actions={<BackLink to="/organiser">Back to events</BackLink>}
   >
     {visibleCreationNotice(event, location.state?.notice) && <Notice tone="success">{visibleCreationNotice(event, location.state.notice)}</Notice>}
     {location.state?.warning && <Notice>{location.state.warning}</Notice>}
@@ -809,7 +836,7 @@ export function OrganiserEventPage() {
         The record-date snapshot is scheduled for {new Date(jobAvailableAt).toLocaleString()}.
         It will start automatically once that time is confirmation-safe on Polygon.
       </Notice>}
-      {(jobActive || progress.ready) && <div className="job-progress">
+      {!progress.ready && jobActive && <div className="job-progress">
         <div><span>{progress.message}</span><strong>{progress.progress}%</strong></div>
         <progress value={progress.progress} max="100" />
       </div>}

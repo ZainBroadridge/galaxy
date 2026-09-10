@@ -18,7 +18,7 @@ export function eventProgress(event, now = Date.now()) {
     active: !ready && active(buildJob) && !waitingForRecordDate,
     verificationActive: event?.verificationStatus !== 'VERIFIED'
       && (event?.verificationStatus === 'PENDING' || active(verificationJob)),
-    message: ready ? 'Completed - snapshot saved and VoteEvent deployed'
+    message: ready ? 'Successfully created event'
       : buildJob?.message || 'Preparing the voting event',
     canRetryBuild: !ready && Boolean(event?.failureReason || buildJob?.status === 'FAILED'),
   };

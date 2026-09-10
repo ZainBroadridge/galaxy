@@ -3,7 +3,6 @@ import {
 } from 'react-router-dom';
 import { reownConfigured } from '../appkit.js';
 import BrandLockup, { ProxyVoteMark } from '../components/BrandLockup.jsx';
-import BackLink from '../components/BackLink.jsx';
 import { Notice } from '../components/UI.jsx';
 import { useNotifications } from '../notifications.jsx';
 import { useWallet } from '../wallet.jsx';
@@ -122,7 +121,6 @@ export default function IssuerLayout() {
         {!reownConfigured && <Notice tone="warning">Set <code>VITE_REOWN_PROJECT_ID</code> before deployment.</Notice>}
         {wallet.networkError && <Notice tone="error">{wallet.networkError.message}</Notice>}
       </div>
-      {location.pathname === '/issuer/notifications' && <div className="issuer-route-back"><BackLink to="/issuer/home">Back to home</BackLink></div>}
       <Outlet />
     </div>
 

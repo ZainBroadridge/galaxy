@@ -18,12 +18,14 @@ const signature = z.string().regex(/^0x[0-9a-fA-F]+$/);
 const proposal = z.object({
   title: z.string().trim().min(1).max(220),
   description: z.string().trim().max(5000).default(''),
-  options: z.array(z.string().trim().min(1).max(MAX_OPTION_LABEL_LENGTH, 'Option labels must be 80 characters or fewer.')).min(MIN_OPTIONS).max(MAX_OPTIONS),
+  options: z.array(z.string().trim().min(1).max(MAX_OPTION_LABEL_LENGTH, `Option labels must be ${MAX_OPTION_LABEL_LENGTH} characters or fewer.`).regex(/^[^\r\n\t]*$/, 'Option labels must be on one line.')).min(MIN_OPTIONS).max(MAX_OPTIONS),
   recommendation: z.number().int().min(0).max(MAX_OPTIONS - 1).nullable().default(null),
 });
 
 export const eventInput = z.object({
   tokenAddress: address,
+  tokenCatalogueId: z.string().trim().min(1).max(100).regex(/^[a-z0-9-]+$/),
+  cusip: z.string().trim().regex(/^[A-Z0-9]{9}$/, 'Select a nine-character demo CUSIP from the catalogue.'),
   issuerName: z.string().trim().max(160).default(''),
   securityName: z.string().trim().max(240).default(''),
   securityTicker: z.string().trim().max(24).regex(/^[A-Za-z0-9.\-]*$/).default(''),

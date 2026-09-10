@@ -1,4 +1,4 @@
-export const MAX_OPTION_LABEL_LENGTH = 80;
+export const MAX_OPTION_LABEL_LENGTH = 24;
 export const AMOY_CHAIN_ID = 80002;
 export const AMOY_CHAIN_HEX = '0x13882';
 export const AMOY_EXPLORER = 'https://amoy.polygonscan.com';

@@ -4,13 +4,12 @@ import { ballotTypedData } from '@pv/shared';
 import { API_BASE_URL, api } from '../api.js';
 import { useEventLiveRefresh, useEventPolling, useLoad } from '../hooks.js';
 import { useWallet } from '../wallet.jsx';
-import BackLink from '../components/BackLink.jsx';
 import ResourceSkeleton from '../components/ResourceSkeleton.jsx';
 import { useInvestorData, useInvestorResource } from './InvestorData.jsx';
 import { useDeadlineClock } from '../data/useDeadlineClock.js';
 import { meetingLifecycle } from './meeting-utils.js';
 import { useInvestorSession } from './InvestorSession.jsx';
-import { ArrowIcon, DocumentIcon, ErrorMessage, InvestorFrame, MeetingIdentity, StandingDisclosure } from './InvestorFrame.jsx';
+import { ArrowIcon, DocumentIcon, ErrorMessage, InvestorFrame, MeetingPageHeader } from './InvestorFrame.jsx';
 import { boardRecommendedChoices, completeChoices, displayDate, displayHolding } from './meeting-utils.js';
 
 export function EventDocuments({ event }) {
@@ -99,13 +98,12 @@ export default function BallotPage() {
   }
 
   return <InvestorFrame event={event} hideNavigation><div className="investor-page-width investor-ballot-page">
-    <BackLink to="/meetings?tab=active">Back to my meetings</BackLink>
+    <MeetingPageHeader event={event} />
     <ErrorMessage error={view.error} />
     {view.loading && <ResourceSkeleton label="Loading meeting" rows={2} />}
     {event && <>
-      <MeetingIdentity event={event} />
       <div className="investor-ballot-status"><strong>{lifecycle === 'CLOSED' ? 'Voting closed' : lifecycle === 'SCHEDULED' ? 'Voting scheduled' : 'Not Voted'}</strong>
-        <p>{lifecycle === 'SCHEDULED' ? `Voting opens ${displayDate(event.votingStartAt)}` : `Vote by ${displayDate(event.votingEndAt)}`}</p></div>
+        {lifecycle === 'SCHEDULED' && <p>Voting opens {displayDate(event.votingStartAt)}</p>}</div>
       <EventDocuments event={event} />
       {event.eligibility.onChainOnly && <p className="investor-info-note">This wallet has already voted on-chain. The service has not indexed a local receipt for that transaction yet. Voting again is disabled.</p>}
       {!event.metadataIntegrity && <ErrorMessage error={new Error('The proposal details failed their integrity check. Voting is disabled.')} />}
@@ -123,10 +121,10 @@ export default function BallotPage() {
           </div>
           {event.proposals.map((proposal, proposalIndex) => <fieldset className="investor-proposal" key={`${event.metadataHash}-${proposalIndex}`} disabled={submitting || !canVote}>
             <legend className="investor-sr-only">{proposalIndex + 1}. {proposal.title}</legend>
-            <div className="investor-proposal-row"><div className="investor-proposal-copy"><h3>{proposalIndex + 1}. {proposal.title}</h3>
+            <div className="investor-proposal-row" data-expanded={proposal.options.length > 3 || proposal.options.some((option) => option.text.length > 16)}><div className="investor-proposal-copy"><h3>{proposalIndex + 1}. {proposal.title}</h3>
               <p>Board Recommendation: <strong>{Number.isInteger(proposal.recommendation) ? proposal.options[proposal.recommendation]?.text ?? 'None' : 'None'}</strong></p>
               {proposal.description && <details><summary>More Details</summary><p>{proposal.description}</p></details>}</div>
-            <div className="investor-options" data-count={proposal.options.length}>{proposal.options.map((option, optionIndex) => <label key={optionIndex}>
+            <div className="investor-options" data-count={proposal.options.length} style={{ '--option-count': proposal.options.length }}>{proposal.options.map((option, optionIndex) => <label key={optionIndex}>
               <input type="radio" name={`proposal-${proposalIndex}`} value={optionIndex} checked={choices[proposalIndex] === optionIndex}
                 onChange={() => setChoices((current) => current.map((value, index) => index === proposalIndex ? optionIndex : value))} />
               <span>{option.text}</span>
@@ -141,9 +139,7 @@ export default function BallotPage() {
               {submitting ? 'Review and sign in your wallet...' : 'Submit Vote'}<ArrowIcon /></button></div>
         </div>
         <ErrorMessage error={error} />
-        <p className="investor-vote-note">Select one option for every proposal. Nothing is submitted by Reset All or Vote with Board.
-          Your final signature authorizes this ballot; your wallet address and choices will be public on-chain.</p>
-      </form><StandingDisclosure />
+      </form>
     </>}
   </div></InvestorFrame>;
 }

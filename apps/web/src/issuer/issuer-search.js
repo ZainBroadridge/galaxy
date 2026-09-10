@@ -52,3 +52,9 @@ export function searchIssuers(catalog, value, limit = 6) {
 export function searchPlatforms(platforms, value, limit = 6) {
   return rank(platforms, value, (platform) => [platform], limit);
 }
+
+/** Demo CUSIPs use the same ranking as the adjacent issuer/platform fields. */
+export function searchCusips(entries, value, limit = 18) {
+  return rank(entries, value, (entry) => [entry.cusip, entry.issuerName, entry.symbol,
+    entry.platform || 'Issuer sponsored', `${entry.issuerName} ${entry.platform}`, ...(entry.aliases ?? [])], limit);
+}

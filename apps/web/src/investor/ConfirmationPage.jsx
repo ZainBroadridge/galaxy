@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import BackLink from '../components/BackLink.jsx';
 import ResourceSkeleton from '../components/ResourceSkeleton.jsx';
 import { apiBlob, saveBlob } from '../api.js';
 import { EventDocuments, useInvestorEvent } from './BallotPage.jsx';
-import { ArrowIcon, ErrorMessage, InvestorFrame, MeetingIdentity, LoadingIndicator, PrintIcon } from './InvestorFrame.jsx';
+import { ArrowIcon, ErrorMessage, InvestorFrame, MeetingPageHeader, LoadingIndicator, PrintIcon } from './InvestorFrame.jsx';
 import { displayDate } from './meeting-utils.js';
 
 export default function ConfirmationPage() {
@@ -25,9 +24,9 @@ export default function ConfirmationPage() {
     finally { setBusy(false); }
   }
   return <InvestorFrame event={event} hideNavigation><div className="investor-confirmation investor-page-width">
-    <BackLink to="/meetings?tab=active">Back to my meetings</BackLink>
+    <MeetingPageHeader event={event} />
     <ErrorMessage error={view.error} />{view.loading && <ResourceSkeleton label="Loading vote status" rows={2} />}
-    {event && <><MeetingIdentity event={event} />
+    {event && <>
       {!successful ? <section className="investor-confirmation-message">
         <h2>{vote?.status === 'FAILED' ? 'Your vote was not recorded' : 'No submitted vote'}</h2>
         <p>{vote?.failureReason || 'This page shows a receipt only after a ballot has been submitted.'}</p>
@@ -39,7 +38,6 @@ export default function ConfirmationPage() {
           <p>You submitted selections for {vote.choices.length} of {event.proposals.length} proposals on {displayDate(vote.createdAt)}.</p>
           <p>{vote.status === 'CONFIRMED' ? 'Your vote is confirmed on Polygon Amoy. Confirmed votes cannot be changed.'
             : 'The relayer is processing your signed ballot. This page updates automatically; confirmation is not complete yet.'}</p>
-          <p>Voting deadline: <strong>{displayDate(event.votingEndAt)}</strong></p>
         </section>
         <section className="investor-transaction-card" aria-label="Vote transaction details">
           <dl><div><dt>Voting power</dt><dd>{vote.votingPower}</dd></div>

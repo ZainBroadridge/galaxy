@@ -1,3 +1,4 @@
+import BackLink from '../components/BackLink.jsx';
 import {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
@@ -505,7 +506,8 @@ export default function WalletComms({ viewer = 'issuer' }) {
     || browserPush?.permission === 'denied';
 
   return <div className="page wallet-comms-page notifications-page">
-    <header className="wallet-comms-header">
+    <header className="wallet-comms-header portal-comms-heading">
+      <BackLink to={viewer === 'issuer' ? '/issuer/home' : '/meetings?tab=active'}>{viewer === 'issuer' ? 'Back to home' : 'Back to my meetings'}</BackLink>
       <div>
         <span className="wallet-comms-kicker">Proxy voting communications</span>
         <h1>Notifications</h1>

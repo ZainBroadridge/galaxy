@@ -1,4 +1,5 @@
 const PLATFORM_LOGOS = Object.freeze({
+  coinbase: { name: 'Coinbase', src: '/investor/coinbase-logo.svg' },
   ondo: { name: 'Ondo', src: '/investor/ondo-logo.png' },
   'ondo finance': { name: 'Ondo', src: '/investor/ondo-logo.png' },
   kraken: { name: 'Kraken', src: '/investor/kraken-logo.png' },

@@ -18,7 +18,7 @@ export const ISSUER_PRESETS = Object.freeze([
   preset('spacex', 'Space Exploration Technologies Corp.', ['spacex', 'space exploration technologies', 'space exploration technologies corp'], '#111111', '#111111', [['SPCX', 'Class A Common Stock']]),
   preset('oracle', 'Oracle Corporation', ['oracle', 'oracle corporation', 'oracle corp'], '#c74634', '#aa3627', [['ORCL', 'Common Stock']]),
 ]);
-export const TOKEN_PLATFORMS = Object.freeze(['Ondo', 'Dinari', 'Kraken', 'Other']);
+export const TOKEN_PLATFORMS = Object.freeze(['Coinbase', 'Dinari']);
 
 const clean = (value) => String(value ?? '').trim().replace(/\s+/gu, ' ');
 const aliasKey = (value) => clean(value).toLowerCase().replace(/[.,]/gu, '');

@@ -30,6 +30,8 @@ export function serializeEvent(row, extras = {}) {
     tokenDecimals: Number(row.token_decimals),
     ...eventIssuerBranding(row),
     platform: row.token_platform || '',
+    tokenCatalogueId: row.token_catalogue_id ?? null,
+    cusip: row.cusip ?? null,
     title: row.title,
     description: row.description,
     proposals: row.proposals,

@@ -8,7 +8,6 @@ import {
   Panel,
   ShortAddress,
   Spinner,
-  Status,
 } from '../components/UI.jsx';
 import { useLoad } from '../hooks.js';
 import { useWallet } from '../wallet.jsx';
@@ -51,6 +50,7 @@ export default function ResultsPage() {
   return <Page
     className="results-index-page"
     title="Voting Results"
+    intro="Per-proposal tallies read from each VoteEvent contract for events you created or participated in."
     actions={<><BackLink to="/issuer/home">Back to home</BackLink><button className="button secondary compact" onClick={() => results.reload().catch(() => {})} disabled={!account}>Refresh</button></>}
   >
     <ErrorBox error={results.error} />
@@ -172,7 +172,7 @@ export function EventResultsPage() {
   }
 
   if (!wallet.account) {
-    return <Page title="Results" actions={<Link className="button secondary compact" to="/results">Back</Link>}>
+    return <Page title="Results" actions={<BackLink to="/results">Back to results</BackLink>}>
       <Panel><Empty>Connect the creator or participating wallet to view these results.</Empty></Panel>
     </Page>;
   }
@@ -186,20 +186,16 @@ export function EventResultsPage() {
   return <main className="page results-detail-page">
     <section className="results-summary-card">
       <div className="results-summary-top">
-        <Link className="back-link" to="/results">← Back</Link>
-        <Status value={event.status} label={event.status === 'CLOSED' ? 'Closed' : undefined} />
-      </div>
-      <div className="results-title-row">
-        <IssuerLogo event={event} className="issuer-results-logo" />
-        <div>
-          <h1>{event.title} Results</h1>
-          <p>{event.tokenName} ({event.tokenSymbol})</p>
-        </div>
+        <BackLink to="/results">Back to results</BackLink>
         <button className="button compact" onClick={downloadReport} disabled={downloading}>
           {downloading && <span className="button-spinner" aria-hidden="true" />}
-          {downloading ? 'Generating report…' : 'Download result report'}
+          {downloading ? 'Generating report...' : 'Download result report'}
         </button>
       </div>
+      <header className="issuer-results-identity">
+        <IssuerLogo event={event} className="issuer-results-logo" />
+        <div><h1>{event.title} Results</h1><p>{event.tokenName} ({event.tokenSymbol})</p></div>
+      </header>
 
       <div className="results-summary-metrics">
         <div><span>Eligible voters</span><strong>{eligibleWallets(event)}</strong></div>

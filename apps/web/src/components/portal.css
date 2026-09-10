@@ -6,9 +6,25 @@
 .portal-footer-inner { min-height: 34px; padding: 8px 18px; display: flex; align-items: center; justify-content: space-between; gap: 8px 20px; font: 400 10px/1.5 'Segoe UI', Arial, sans-serif; }
 .portal-footer-brand { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .portal-footer-brand img { width: 14px; height: 14px; filter: grayscale(1); opacity: .65; }
-a.portal-back { display: inline-flex; align-items: center; gap: 6px; width: fit-content; color: #2a6ba2; font-size: 14px; line-height: 22px; text-decoration: underline; text-underline-offset: 3px; margin-bottom: 16px; }
+.portal-root a.portal-back, .portal-root button.portal-back { display: inline-flex; align-items: center; gap: 6px; width: fit-content; color: #2a6ba2; font: inherit; font-size: 14px; line-height: 22px; text-decoration: none; margin-bottom: 16px; padding: 0; background: transparent; border: 0; cursor: pointer; }
+.portal-root .portal-back:hover { text-decoration: none; color: #184d77; }
 .portal-back svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 .portal-back:focus-visible { outline: 2px solid #2a6ba2; outline-offset: 4px; }
+.portal-titlebar { display: grid; grid-template-columns: 64px minmax(0,1fr) 64px; gap: 16px; align-items: start; margin-bottom: 20px; }
+.portal-titlebar > h1 { margin: 0; text-align: center; }
+.portal-titlebar > .portal-back { margin-top: 6px; }
+.investor-utility .portal-exit-button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px solid #e0abb0; border-radius: 8px; color: #b51f2b; background: #fff5f5; text-decoration: none; cursor: pointer; }
+.portal-exit-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.portal-exit-button:hover { background: #fde9eb; }
+.portal-exit-button:focus-visible { outline: 2px solid white; outline-offset: 3px; }
+.portal-root .portal-comms-heading { display: grid; grid-template-columns: 64px minmax(0,1fr) auto; gap: 20px; align-items: start; }
+.portal-comms-heading > .portal-back { margin-top: 8px; }
+@media (max-width: 700px) {
+  .portal-titlebar { grid-template-columns: 64px minmax(0,1fr); }
+  .portal-titlebar > h1 { text-align: left; }
+  .portal-root .portal-comms-heading { grid-template-columns: 64px minmax(0,1fr); }
+  .portal-comms-heading > .comms-tabs { grid-column: 1 / -1; }
+}
 .portal-skeleton { padding: 12px 0; }
 .portal-skeleton-row { display: grid; gap: 12px; padding: 28px 0; border-bottom: 1px solid #eee; }
 .portal-skeleton-row span { display: block; background: #f1f2f3; height: 16px; width: 65%; border-radius: 3px; }

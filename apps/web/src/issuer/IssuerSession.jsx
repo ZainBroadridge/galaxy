@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Link, Navigate, Outlet, useNavigate } from 'react-router-dom';
+import { Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { api, readIssuerSession, saveIssuerSession, SESSION_EXPIRED_EVENT } from '../api.js';
 
 import BrandLockup, { ProxyVoteMark } from '../components/BrandLockup.jsx';
 import RequiredMark from '../components/RequiredMark.jsx';
+import BackLink from '../components/BackLink.jsx';
 import ParticleBackground from './ParticleBackground.jsx';
 
 const IssuerContext = createContext(null);
@@ -65,6 +66,6 @@ export function IssuerLogin() {
     {error && <p role="alert" className="investor-error">{error.message}</p>}
     <button className="button" disabled={busy || checking}>{busy ? 'Checking...' : 'Enter issuer interface'}</button>
     <small>This shared-password gate is for demonstration only, not production issuer authorization.</small>
-    <Link to="/">Back to investor sign-in</Link>
+    <BackLink to="/">Back to investor sign-in</BackLink>
   </form></div>;
 }

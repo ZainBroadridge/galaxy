@@ -1,19 +1,21 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import RequiredMark from './RequiredMark.jsx';
 
-/** Accessible free-text combobox shared by issuer and tokenization-platform fields. */
-export default function FuzzyCombobox({ label, value, onChange, onBlur, options,
+/** Shared editable combobox for issuer, platform and catalogue identifier searches. */
+export default function FuzzyCombobox({ label, value, onChange, onBlur, onSelect, options,
   disabled = false, required = false, maxLength = 160, placeholder = '' }) {
   const id = useId();
   const list = useRef(null);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const expanded = open && !disabled && options.length > 0;
+  useEffect(() => { setActive(-1); }, [value]);
   useEffect(() => {
     if (expanded && active >= 0) list.current?.children[active]?.scrollIntoView({ block: 'nearest' });
   }, [active, expanded]);
   function select(option) {
-    onChange(option.label);
+    if (onSelect) onSelect(option);
+    else onChange(option.label);
     setOpen(false); setActive(-1);
   }
   function keyDown(event) {

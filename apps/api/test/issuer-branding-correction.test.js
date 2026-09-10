@@ -75,7 +75,7 @@ test('consent remains in signed message, not in the landing DOM', async () => {
     read('apps/web/src/investor/LandingPage.jsx'), read('apps/web/src/investor/InvestorSession.jsx'), read('apps/web/src/wallet.jsx'),
   ]);
   assert.doesNotMatch(landing, /INVESTOR_DISCLAIMER|<details|Why authenticate my wallet|investor-testnet-note/u);
-  assert.match(landing, /Approve the request in your wallet to securely continue\./u);
+  assert.match(landing, /Wallet Authentication/u);
   assert.match(landing, /investor\.begin\(\)/u);
   assert.match(session, /signDisclaimer\(challenge\.message/u);
   assert.match(wallet, /signMessage\(message\)/u);

@@ -18,8 +18,8 @@ export default function EducationPage() {
     target?.scrollIntoView({ block: 'start' });
   }, [hash]);
   return <InvestorFrame><article className="investor-education investor-page-width">
-    <BackLink to={session ? "/meetings?tab=active" : "/"}>{session ? "Back to my meetings" : "Back to sign-in"}</BackLink>
-    <h1>Investor Education</h1><p className="investor-education-intro">{EDUCATION_INTRO}</p>
+    <header className="portal-titlebar"><BackLink to={session ? "/meetings?tab=active" : "/"}>{session ? "Back to my meetings" : "Back to sign-in"}</BackLink>
+      <h1>Investor Education</h1></header><p className="investor-education-intro">{EDUCATION_INTRO}</p>
     <aside className="investor-info-note">This is a Polygon Amoy demonstration. The background material below comes from the supplied product prototype;
       an issuer name, logo or platform tag shown in a demo does not establish a live partnership or legal voting right. Review the issuer's actual documents.</aside>
     {EDUCATION_SECTIONS.map((section) => <section key={section.id} id={section.id}>
