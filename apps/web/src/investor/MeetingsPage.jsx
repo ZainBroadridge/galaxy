@@ -19,7 +19,6 @@ export default function MeetingsPage() {
   const groups = useMemo(() => groupMeetings(meetings.data ?? [], now), [meetings.data, now]);
   const matching = groups[tab.id];
   return <InvestorFrame><section className="investor-meetings investor-page-width">
-    <BackLink to="/?welcome=1">Back to welcome</BackLink>
     <h1>Here are the meetings you can vote</h1>
     <div className="investor-tabs" role="tablist" aria-label="Meeting categories">
       {MEETING_TABS.map((item) => <button type="button" key={item.id} role="tab" id={`tab-${item.id}`}
