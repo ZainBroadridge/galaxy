@@ -51,7 +51,6 @@ export default function ResultsPage() {
   return <Page
     className="results-index-page"
     title="Voting Results"
-    intro="Per-proposal tallies read from each VoteEvent contract for events you created or participated in."
     actions={<><BackLink to="/issuer/home">Back to home</BackLink><button className="button secondary compact" onClick={() => results.reload().catch(() => {})} disabled={!account}>Refresh</button></>}
   >
     <ErrorBox error={results.error} />
