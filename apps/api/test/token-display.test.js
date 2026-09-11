@@ -98,25 +98,28 @@ test('an absent token address leaves a readable name rather than an empty link',
   assert.ok(text(tree).includes('Tesla, Inc. (TSLA)'));
 });
 
-test('ballot hides platform tags without hiding its issuer logo, CUSIP, deadline or platform header', async () => {
+test('ballot moves CUSIP below the options and hides tags while preserving its issuer and deadline', async () => {
   const { MeetingPageHeader, BrandBand } = await loadFrame();
-  const tree = MeetingPageHeader({ event, showTags: false });
+  const tree = MeetingPageHeader({ event, showTags: false, showCusip: false });
   assert.equal(nodes(tree).filter((node) => node.props.className === 'investor-tags').length, 0);
-  assert.ok(text(tree).includes(event.title)); assert.ok(text(tree).includes(event.cusip));
+  assert.ok(text(tree).includes(event.title)); assert.ok(!text(tree).includes(event.cusip));
   assert.ok(text(tree).includes('Voting deadline:'));
   assert.equal(nodes(tree).filter((node) => node.props.className === 'investor-issuer-logo').length, 1);
   const band = nodes(BrandBand({ event }));
   assert.equal(band.find((node) => node.props.className === 'investor-platform-logo').props.src, '/investor/dinari-logo.png');
   const ballot = await read('apps/web/src/investor/BallotPage.jsx');
-  assert.match(ballot, /<MeetingPageHeader event=\{event\} showTags=\{false\} \/>/u);
+  assert.match(ballot, /<MeetingPageHeader event=\{event\} showTags=\{false\} showCusip=\{false\} \/>/u);
+  assert.match(ballot, /<\/table>[\s\S]*className="investor-ballot-cusip">CUSIP: <strong>\{event.cusip\}<\/strong>/u);
 });
 
-test('confirmation and meeting-list platform/status tags are retained', async () => {
+test('confirmation hides platform tags while meeting-list tags and confirmation CUSIP remain visible', async () => {
   const { MeetingPageHeader, MeetingTags } = await loadFrame();
-  assert.equal(nodes(MeetingPageHeader({ event })).filter((node) => node.props.className === 'investor-tags').length, 1);
+  const header = MeetingPageHeader({ event, showTags: false });
+  assert.equal(nodes(header).filter((node) => node.props.className === 'investor-tags').length, 0);
+  assert.ok(text(header).includes(event.cusip));
   assert.ok(text(MeetingTags({ platform: 'Dinari', children: 'Voted' })).includes('DinariVoted'));
   const confirmation = await read('apps/web/src/investor/ConfirmationPage.jsx');
-  assert.match(confirmation, /<MeetingPageHeader event=\{event\} \/>/u);
+  assert.match(confirmation, /<MeetingPageHeader event=\{event\} showTags=\{false\} \/>/u);
   const meetings = await read('apps/web/src/investor/MeetingsPage.jsx');
   assert.match(meetings, /<MeetingTags platform=\{event.platform\}/u);
 });

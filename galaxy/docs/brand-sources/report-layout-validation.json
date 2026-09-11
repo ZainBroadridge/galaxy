@@ -1,0 +1,14 @@
+{
+  "apple": {
+    "pages": 1,
+    "links": 6,
+    "textBounds": "all within page",
+    "method": "actual createVoteReceipt and ReportWriter via drawing API harness; rendered with PyMuPDF, not production pdf-lib"
+  },
+  "nvidia": {
+    "pages": 1,
+    "links": 6,
+    "textBounds": "all within page",
+    "method": "actual createVoteReceipt and ReportWriter via drawing API harness; rendered with PyMuPDF, not production pdf-lib"
+  }
+}

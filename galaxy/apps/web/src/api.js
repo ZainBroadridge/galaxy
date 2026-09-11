@@ -1,0 +1,124 @@
+const baseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
+const sessionKey = 'pv-v2-session';
+const issuerSessionKey = 'pv-issuer-demo-session';
+export const SESSION_EXPIRED_EVENT = 'pv-session-expired';
+
+export class ApiError extends Error {
+  constructor(status, payload) {
+    super(payload?.error?.message || `API request failed (${status}).`);
+    this.status = status;
+    this.code = payload?.error?.code || 'API_ERROR';
+    this.details = payload?.error?.details;
+  }
+}
+
+export function readSession() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(sessionKey));
+    if (!value?.token || !value?.walletAddress || !(Date.parse(value.expiresAt) > Date.now())) {
+      throw new Error();
+    }
+    return value;
+  } catch {
+    sessionStorage.removeItem(sessionKey);
+    return null;
+  }
+}
+
+export function saveSession(value) {
+  if (value) sessionStorage.setItem(sessionKey, JSON.stringify(value));
+  else sessionStorage.removeItem(sessionKey);
+}
+
+export function readIssuerSession() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(issuerSessionKey));
+    return value?.token && Date.parse(value.expiresAt) > Date.now() ? value : null;
+  } catch { return null; }
+}
+
+export function saveIssuerSession(value) {
+  if (value) sessionStorage.setItem(issuerSessionKey, JSON.stringify(value));
+  else sessionStorage.removeItem(issuerSessionKey);
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function request(path, options = {}, responseType = 'json', retry = true) {
+  const { auth = true, issuerAuth = true, ...fetchOptions } = options;
+  const headers = new Headers(fetchOptions.headers || {});
+  const session = auth ? readSession() : null;
+  if (session?.token) headers.set('authorization', `Bearer ${session.token}`);
+  const issuer = issuerAuth ? readIssuerSession() : null;
+  if (issuer?.token) headers.set('x-issuer-session', issuer.token);
+
+  let body = fetchOptions.body;
+  const rawBody = body instanceof Blob || body instanceof FormData || body instanceof ArrayBuffer;
+  if (body !== undefined && !rawBody && typeof body !== 'string') {
+    headers.set('content-type', 'application/json');
+    body = JSON.stringify(body);
+  }
+
+  let response;
+  try {
+    response = await fetch(`${baseUrl}${path}`, { ...fetchOptions, headers, body });
+  } catch (error) {
+    throw new ApiError(0, {
+      error: {
+        code: 'NETWORK_ERROR',
+        message: `Could not reach the Render API at ${baseUrl}. Check that it is awake and that CORS_ORIGINS includes this dApp origin.`,
+        details: error?.message,
+      },
+    });
+  }
+
+  if (response.status === 204) return null;
+  if (response.status === 429 && retry && (!fetchOptions.method || fetchOptions.method === 'GET')) {
+    const seconds = Number(response.headers.get('retry-after'));
+    await sleep(Number.isFinite(seconds) ? Math.min(5000, seconds * 1000) : 1000);
+    return request(path, options, responseType, false);
+  }
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401 && ['AUTH_REQUIRED', 'ISSUER_AUTH_REQUIRED'].includes(payload?.error?.code)) {
+      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: payload.error.code }));
+    }
+    throw new ApiError(response.status, payload);
+  }
+  if (responseType === 'blob') return response.blob();
+  return response.json().catch(() => ({}));
+}
+
+export function api(path, options = {}) {
+  return request(path, options, 'json');
+}
+
+export function apiBlob(path, options = {}) {
+  return request(path, options, 'blob');
+}
+
+export function uploadEventPdf(eventId, file, walletAddress) {
+  return api(`/v1/events/${eventId}/documents`, {
+    method: 'POST',
+    auth: false,
+    headers: {
+      'content-type': 'application/pdf',
+      'x-file-name': encodeURIComponent(file.name),
+      ...(walletAddress ? { 'x-wallet-address': walletAddress } : {}),
+    },
+    body: file,
+  });
+}
+
+export function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export { baseUrl as API_BASE_URL };

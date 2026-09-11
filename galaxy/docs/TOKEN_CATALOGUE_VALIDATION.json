@@ -1,0 +1,130 @@
+{
+  "source_baseline": "Original user archive plus applied overlays and the latest ten investor source uploads; not the withdrawn issuer-logo patch.",
+  "new_tests": {
+    "files": [
+      "token-catalogue.test.js",
+      "token-catalogue-workflow.test.js",
+      "catalogue-portal.test.js"
+    ],
+    "passed": 21,
+    "failed": 0
+  },
+  "broader_focused_tests": {
+    "command": "node --test apps/api/test/token-catalogue.test.js apps/api/test/token-catalogue-workflow.test.js apps/api/test/catalogue-portal.test.js apps/api/test/portal-refinements.test.js apps/api/test/interface-enhancements.test.js apps/api/test/explorer-verification.test.js apps/api/test/verification-workflow.test.js apps/api/test/landing-logo.test.js",
+    "passed": 57,
+    "failed": 0
+  },
+  "full_api_suite": {
+    "total": 154,
+    "passed": 151,
+    "failed": 3,
+    "failures": [
+      "event-announcements.test.js: ethers unavailable",
+      "future-record-date-validation.test.js: zod unavailable",
+      "existing issuer preset byte test: Tesla artwork absent from provided archive (user installation retains its own assets)"
+    ]
+  },
+  "syntax": {
+    "files": 160,
+    "status": "passed"
+  },
+  "relative_imports": {
+    "files": 160,
+    "status": "passed"
+  },
+  "architecture": {
+    "files": 262,
+    "status": "passed"
+  },
+  "browser_fixture_checks": {
+    "screens": 40,
+    "widths": [
+      1440,
+      1024,
+      768,
+      390,
+      320
+    ],
+    "status": "passed",
+    "notes": "Chromium rendered actual JSX/CSS with mocked wallet/API/hooks. Not production Vite/React or live MetaMask. No horizontal overflow, exactly one footer, form dropdown widths matched inputs, reference sample option labels stayed one line, back/title aligned on desktop/tablet, results heading centered."
+  },
+  "jsx_callback_fixture_checks": [
+    {
+      "check": "real wallet begin callback invoked",
+      "pass": true
+    },
+    {
+      "check": "both other methods are disabled fieldsets",
+      "pass": true
+    },
+    {
+      "check": "no forms submit control number or password",
+      "pass": true
+    },
+    {
+      "check": "exit keeps signOut callback",
+      "pass": true
+    },
+    {
+      "check": "no redundant meetings back control",
+      "pass": true
+    },
+    {
+      "check": "issuer callback prefills Tesla sponsored row and clears old uploaded logo",
+      "pass": true
+    },
+    {
+      "check": "platform callback atomically switches mapping and CUSIP",
+      "pass": true
+    },
+    {
+      "check": "CUSIP callback prefills issuer platform and address",
+      "pass": true
+    },
+    {
+      "check": "CUSIP dropdown selection invokes the same mapping path",
+      "pass": true
+    },
+    {
+      "check": "partial issuer input clears old token and CUSIP",
+      "pass": true
+    },
+    {
+      "check": "placeholder reaches field but remains non-configured",
+      "pass": true
+    }
+  ],
+  "not_run": [
+    "Production Vite build (vite not installed; dependency restore failed DNS to npm registry)",
+    "Live Neon migration or API integration against a database",
+    "Live token inspection, MetaMask sign-in/voting or Render/Vercel deployment"
+  ],
+  "unchanged_uploaded_files_sha256": {
+    "education-content.js": "9c215587b6fc9737063cdd134fb3c4305f27637e4aa832375e48cfdcd2da8886",
+    "help-position.js": "d3143f51eac1733ab4ef7a6ee4a298867305fc3ee28b2087e7905d999232c7bd",
+    "InvestorData.jsx": "6a5385a66e1acd5ffc0b75a5e58a8dad6a8c50b72e5f095b7da1d9838caee6f5",
+    "InvestorSession.jsx": "4d4860d336206b303e6d85b68827d8e76ba0cde25d1226a6ef14e64982e5e997"
+  },
+  "unchanged_runtime_boundaries": [
+    "apps/api/src/snapshot.js",
+    "apps/api/src/verify.js",
+    "apps/api/src/explorer-verification.js",
+    "apps/api/src/jobs.js",
+    "apps/api/src/runner.js",
+    "apps/api/src/deploy.js",
+    "apps/api/src/relayer.js",
+    "apps/api/src/reports.js",
+    "apps/api/src/auth.js",
+    "apps/api/src/votes.js",
+    "apps/api/src/communications.js",
+    "apps/web/src/wallet.jsx",
+    "apps/web/src/api.js",
+    "apps/web/src/components/BrandLockup.jsx",
+    "apps/web/src/components/SiteFooter.jsx",
+    "apps/web/src/data/resource-store.js",
+    "packages/contracts/contracts/VoteEvent.sol",
+    "packages/shared/src/canonical.js",
+    "package.json",
+    "package-lock.json"
+  ]
+}

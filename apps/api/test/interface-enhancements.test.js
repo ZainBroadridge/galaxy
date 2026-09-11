@@ -63,10 +63,15 @@ test('meeting search is removed and the fixed web palette does not inherit issue
   assert.match(styles, /--inv-blue: #2a6ba2/u);
 });
 test('document counts, compact board control and broadcast spinner are explicit components', async () => {
-  const [ballot, receipt, styles] = await Promise.all([
+  const [ballot, receipt, styles, documents] = await Promise.all([
     read('apps/web/src/investor/BallotPage.jsx'), read('apps/web/src/investor/ConfirmationPage.jsx'), read('apps/web/src/investor/investor.css'),
+    read('apps/web/src/investor/EventDocuments.jsx'),
   ]);
-  assert.match(ballot, /data-count=\{event.documents.length\}/u);
+  assert.match(ballot, /<EventDocuments event=\{event\} \/>/u);
+  assert.match(receipt, /<EventDocuments event=\{event\}/u);
+  assert.match(documents, /data-count=\{documents.length\}/u);
+  assert.match(documents, /if \(!documents.length\) return null/u);
+  assert.match(documents, /rel="noopener noreferrer"/u);
   assert.match(ballot, /investor-board-button/u);
   assert.match(receipt, /<LoadingIndicator>Waiting for the relayer to broadcast<\/LoadingIndicator>/u);
   for (const count of ['1', '2']) assert.ok(styles.includes(`[data-count='${count}']`));

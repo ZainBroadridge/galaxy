@@ -1,0 +1,184 @@
+import { z } from 'zod';
+import {
+  AUTHENTICITY_CLAIM,
+  AUTHENTICITY_STATUS,
+  COMMUNICATION_AUDIENCE,
+  COMMUNICATION_CATEGORY,
+  DISCOVERY_MODE,
+  MAX_OPTIONS,
+  MAX_OPTION_LABEL_LENGTH,
+  MAX_PROPOSALS,
+  MIN_OPTIONS,
+  SNAP_DELIVERY_MODE,
+} from '@pv/shared';
+
+const isoDate = z.string().datetime({ offset: true });
+const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
+const signature = z.string().regex(/^0x[0-9a-fA-F]+$/);
+const proposal = z.object({
+  title: z.string().trim().min(1).max(220),
+  description: z.string().trim().max(5000).default(''),
+  options: z.array(z.string().trim().min(1).max(MAX_OPTION_LABEL_LENGTH, `Option labels must be ${MAX_OPTION_LABEL_LENGTH} characters or fewer.`).regex(/^[^\r\n\t]*$/, 'Option labels must be on one line.')).min(MIN_OPTIONS).max(MAX_OPTIONS),
+  recommendation: z.number().int().min(0).max(MAX_OPTIONS - 1).nullable().default(null),
+});
+
+export const eventInput = z.object({
+  tokenAddress: address,
+  tokenCatalogueId: z.string().trim().min(1).max(100).regex(/^[a-z0-9-]+$/),
+  cusip: z.string().trim().regex(/^[A-Z0-9]{9}$/, 'Select a nine-character demo CUSIP from the catalogue.'),
+  issuerName: z.string().trim().max(160).default(''),
+  securityName: z.string().trim().max(240).default(''),
+  securityTicker: z.string().trim().max(24).regex(/^[A-Za-z0-9.\-]*$/).default(''),
+  platform: z.string().trim().max(80).default(''),
+  issuerLogoId: z.string().uuid().nullable().optional(),
+  title: z.string().trim().min(1).max(180),
+  description: z.string().trim().max(8000).default(''),
+  recordDateAt: isoDate,
+  votingStartAt: isoDate,
+  votingEndAt: isoDate,
+  tokenToVoteRatio: z.coerce.number().int().positive().max(1_000_000_000),
+  authenticityClaim: z.enum(Object.values(AUTHENTICITY_CLAIM)),
+  discoveryMode: z.enum(Object.values(DISCOVERY_MODE)),
+  snapDeliveryMode: z.enum(Object.values(SNAP_DELIVERY_MODE)),
+  proposals: z.array(proposal).min(1).max(MAX_PROPOSALS),
+}).superRefine((value, context) => {
+  const now = Date.now();
+  const record = Date.parse(value.recordDateAt);
+  const start = Date.parse(value.votingStartAt);
+  const end = Date.parse(value.votingEndAt);
+  if (record > start) context.addIssue({ code: 'custom', path: ['recordDateAt'], message: 'Record date must be at or before voting start.' });
+  if (start >= end) context.addIssue({ code: 'custom', path: ['votingEndAt'], message: 'Voting end must be after voting start.' });
+  if (end <= now + 10 * 60_000) context.addIssue({ code: 'custom', path: ['votingEndAt'], message: 'Voting must remain available for at least ten minutes.' });
+  value.proposals.forEach((item, index) => {
+    if (item.recommendation !== null && item.recommendation >= item.options.length) {
+      context.addIssue({ code: 'custom', path: ['proposals', index, 'recommendation'], message: 'Recommendation must refer to an existing option.' });
+    }
+  });
+});
+
+export const publicEventInput = eventInput.and(z.object({
+  creatorAddress: address,
+}));
+
+export const publicCreatorInput = z.object({
+  publisherAddress: address,
+});
+
+export const voteInput = z.object({
+  voterAddress: address,
+  choices: z.array(z.number().int().min(0).max(MAX_OPTIONS - 1)).min(1).max(MAX_PROPOSALS),
+  signature,
+});
+
+export const subscriptionInput = z.object({
+  tokenAddress: address,
+  enabled: z.boolean(),
+});
+
+const eventAudience = z.enum([
+  COMMUNICATION_AUDIENCE.ALL_ELIGIBLE,
+  COMMUNICATION_AUDIENCE.NOT_VOTED,
+  COMMUNICATION_AUDIENCE.SUBSCRIBERS,
+]);
+const tokenAudience = z.enum([
+  COMMUNICATION_AUDIENCE.CURRENT_HOLDERS,
+  COMMUNICATION_AUDIENCE.SUBSCRIBERS,
+]);
+const communicationFields = z.object({
+  category: z.enum(Object.values(COMMUNICATION_CATEGORY)),
+  title: z.string().trim().min(1).max(180),
+  body: z.string().trim().min(1).max(12_000),
+  actionUrl: z.string().url(),
+  publishedAt: isoDate,
+  expiresAt: isoDate,
+});
+
+function validateCommunicationDates(value, context) {
+  if (Date.parse(value.expiresAt) <= Math.max(Date.now(), Date.parse(value.publishedAt))) {
+    context.addIssue({
+      code: 'custom', path: ['expiresAt'], message: 'Expiry must be in the future and after publication.',
+    });
+  }
+}
+
+export const communicationDraftInput = communicationFields
+  .extend({ audience: eventAudience })
+  .superRefine(validateCommunicationDates);
+const signedCommunication = communicationFields.extend({
+  messageId: z.string().uuid(),
+  audience: eventAudience,
+  chainId: z.number().int().positive(),
+  eventId: z.string().uuid(),
+  eventTitle: z.string().min(1).max(180),
+  tokenSymbol: z.string().min(1).max(40),
+  contractAddress: address,
+  creatorAddress: address,
+  authenticityStatus: z.enum(Object.values(AUTHENTICITY_STATUS)),
+}).superRefine(validateCommunicationDates);
+export const communicationPublishInput = z.object({
+  message: signedCommunication,
+  signature,
+});
+
+export const tokenCommunicationDraftInput = communicationFields.extend({
+  tokenAddress: address,
+  audience: tokenAudience,
+}).superRefine(validateCommunicationDates);
+const signedTokenCommunication = communicationFields.extend({
+  scope: z.literal('TOKEN'),
+  messageId: z.string().uuid(),
+  audience: tokenAudience,
+  chainId: z.number().int().positive(),
+  tokenAddress: address,
+  tokenName: z.string().min(1).max(120),
+  tokenSymbol: z.string().min(1).max(40),
+  creatorAddress: address,
+  authenticityStatus: z.enum(Object.values(AUTHENTICITY_STATUS)),
+}).superRefine(validateCommunicationDates);
+export const tokenCommunicationPublishInput = z.object({
+  message: signedTokenCommunication,
+  signature,
+});
+
+export const publicSubscriptionInput = subscriptionInput.extend({
+  walletAddress: address,
+});
+
+export const notificationReadInput = z.object({
+  walletAddress: address,
+});
+
+export const platformCommunicationInput = communicationFields.extend({
+  publisherAddress: address,
+  audience: eventAudience,
+}).superRefine(validateCommunicationDates);
+
+export const platformTokenCommunicationInput = communicationFields.extend({
+  publisherAddress: address,
+  tokenAddress: address,
+  audience: tokenAudience,
+}).superRefine(validateCommunicationDates);
+
+export const announcementTriggerInput = z.object({
+  publisherAddress: address,
+});
+
+
+const pushKey = z.string().min(8).max(512).regex(/^[A-Za-z0-9_-]+={0,2}$/u);
+const browserPushSubscription = z.object({
+  endpoint: z.string().url().max(4096),
+  keys: z.object({
+    p256dh: pushKey,
+    auth: pushKey,
+  }),
+});
+
+export const browserPushSubscriptionInput = z.object({
+  walletAddress: address,
+  subscription: browserPushSubscription,
+});
+
+export const browserPushUnsubscribeInput = z.object({
+  walletAddress: address,
+  endpoint: z.string().url().max(4096),
+});

@@ -7,7 +7,8 @@ import { CREATION_LIMIT_NOTICE_MS, scheduleCreationLimitNotice } from '../../web
 import { searchIssuers, searchPlatforms } from '../../web/src/issuer/issuer-search.js';
 import { eventProgress } from '../../web/src/issuer/event-progress.js';
 import { meetingLifecycle, groupMeetings } from '../../web/src/investor/meeting-utils.js';
-import { MAX_OPTION_LABEL_LENGTH } from '../../../packages/shared/src/constants.js';
+import { MAX_OPTION_LABEL_LENGTH, MAX_PROPOSAL_TITLE_LENGTH } from '../../../packages/shared/src/constants.js';
+import { proposalTextIssues } from '../../../packages/shared/src/proposal-text.js';
 import { ISSUER_PRESETS, TOKEN_PLATFORMS } from '../../../packages/shared/src/issuer-branding.js';
 
 const read = (path) => readFile(new URL(`../../../${path}`, import.meta.url), 'utf8');
@@ -102,12 +103,17 @@ test('issuer and supported-platform suggestions share typo-tolerant matching', (
 });
 
 test('new options are capped consistently while displayed and signed legacy text is not truncated', async () => {
-  assert.equal(MAX_OPTION_LABEL_LENGTH, 24);
+  assert.equal(MAX_OPTION_LABEL_LENGTH, 20);
+  assert.equal(MAX_PROPOSAL_TITLE_LENGTH, 80);
+  assert.deepEqual(proposalTextIssues([{ title: 'T'.repeat(80), options: ['O'.repeat(20), 'Against'] }]), []);
+  assert.deepEqual(proposalTextIssues([{ title: 'T'.repeat(81), options: ['O'.repeat(21), 'Against'] }]).map(({ path }) => path),
+    [['proposals', 0, 'title'], ['proposals', 0, 'options', 0]]);
   const [form, validation, ballot] = await Promise.all([
     read('apps/web/src/pages/OrganiserDashboard.jsx'), read('apps/api/src/validation.js'), read('apps/web/src/investor/BallotPage.jsx'),
   ]);
   assert.match(form, /maxLength=\{MAX_OPTION_LABEL_LENGTH\}/u);
-  assert.match(validation, /options: z.array\(z.string\(\).trim\(\).min\(1\).max\(MAX_OPTION_LABEL_LENGTH/u);
+  assert.match(form, /maxLength=\{MAX_PROPOSAL_TITLE_LENGTH\}/u);
+  assert.match(validation, /proposalTextIssues\(value.proposals\)/u);
   assert.match(ballot, /<span>\{option.text\}<\/span>/u);
   assert.match(ballot, /wallet.account !== voter/u);
   assert.match(ballot, /api\(`\/v1\/investor\/events\/\$\{eventId\}\/ballot`/u);
@@ -130,20 +136,22 @@ test('PDF hyperlink text, underline and actual annotation remain together for ev
   }
 });
 
-test('layout uses a single shared footer and accessible fieldset inner grids', async () => {
-  const [app, frame, issuer, ballot, css, logo, footer] = await Promise.all([
+test('layout uses a single shared footer and a ballot-wide accessible option table', async () => {
+  const [app, frame, issuer, ballot, css, footer] = await Promise.all([
     read('apps/web/src/App.jsx'), read('apps/web/src/investor/InvestorFrame.jsx'), read('apps/web/src/issuer/IssuerLayout.jsx'),
     read('apps/web/src/investor/BallotPage.jsx'), read('apps/web/src/investor/investor.css'),
-    read('apps/web/public/proxyvote-mark.svg'), read('apps/web/src/components/SiteFooter.jsx'),
+    read('apps/web/src/components/SiteFooter.jsx'),
   ]);
   assert.equal((app.match(/<SiteFooter \/>/gu) ?? []).length, 1);
   assert.doesNotMatch(frame, /<footer|<InvestorFooter/u); assert.doesNotMatch(issuer, /<footer/u);
   assert.match(footer, /All rights reserved/u);
-  assert.match(ballot, /<div className="investor-proposal-row">/u);
-  assert.doesNotMatch(ballot, /data-expanded|'--option-count'/u);
+  assert.equal((ballot.match(/<table className="investor-proposals-table"/gu) ?? []).length, 1);
+  assert.match(ballot, /<th scope="row" className="investor-proposal-copy"/u);
+  assert.match(ballot, /aria-describedby=\{`proposal-title-\$\{proposalIndex\}`\}/u);
   assert.match(ballot, /'--ballot-option-columns': optionColumns/u);
-  assert.match(css, /\.investor-proposal-row \{ display: grid/u);
-  assert.match(css, /background: #f6f5f1/u);
+  assert.doesNotMatch(ballot, /data-expanded/u);
+  assert.match(css, /\.investor-proposals-table \{[^}]*table-layout: fixed/u);
+  assert.match(css, /\.investor-option-column \{ width: var\(--ballot-option-width\)/u);
+  assert.match(css, /\.investor-proposals-scroll \{[^}]*overflow-x: auto/u);
   assert.doesNotMatch(ballot, /Meeting Agenda|Current holdings do not change|Reconnect your investor wallet/u);
-  assert.match(logo, /<path/u); assert.doesNotMatch(logo, /<text|data:image|<image/u);
 });

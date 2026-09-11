@@ -6,64 +6,34 @@ import test from 'node:test';
 const root = new URL('../../../', import.meta.url);
 const read = (path) => readFile(new URL(path, root), 'utf8');
 
-test('landing logo preserves the supplied artwork without an opaque background', async () => {
-  const svg = await read('apps/web/public/proxyvote-landing-mark.svg');
-  assert.match(svg, /viewBox="0 0 158 58"/u);
-  assert.match(svg, /<title id="title">ProxyVote<\/title>/u);
-  assert.doesNotMatch(svg, /<rect\b|<script\b|<foreignObject\b|<text\b/u);
-  assert.match(svg, /<feComposite in2="SourceGraphic" operator="in"/u);
-  assert.match(svg, /filter="url\(#inverse-artwork\)"/u);
-  const image = svg.match(/href="data:image\/png;base64,([A-Za-z0-9+/=]+)"/u);
-  assert.ok(image, 'The supplied embedded artwork must remain self-contained.');
-  const png = Buffer.from(image[1], 'base64');
-  assert.equal(createHash('sha256').update(png).digest('hex'), 'fcc6f4295c54d5a9d463292532812d6680fea1b1ac498bb27f8f44da3de25b91');
-  assert.equal(png.readUInt32BE(16), 158);
-  assert.equal(png.readUInt32BE(20), 58);
-  assert.equal(png[25], 6, 'The source PNG must retain its alpha channel.');
-});
+for (const [variant, hash] of [
+  ['blue', 'fcc6f4295c54d5a9d463292532812d6680fea1b1ac498bb27f8f44da3de25b91'],
+  ['white', 'a4c000cf6321f86adbf24f3c934b50f3136aa29a70267b715adafe494786ab55'],
+]) {
+  test(`the supplied ${variant} PNG preserves its exact artwork, dimensions and transparency`, async () => {
+    const png = await readFile(new URL(`apps/web/public/proxyvote-brand-${variant}.png`, root));
+    assert.equal(createHash('sha256').update(png).digest('hex'), hash);
+    assert.equal(png.readUInt32BE(16), 158);
+    assert.equal(png.readUInt32BE(20), 58);
+    assert.equal(png[25], 6, 'The supplied artwork retains its alpha channel.');
+  });
+}
 
-test('investor headers select the supplied mark in normal and inverse variants', async () => {
-  const [brand, frame, landing] = await Promise.all([
-    read('apps/web/src/components/BrandLockup.jsx'),
-    read('apps/web/src/investor/InvestorFrame.jsx'),
-    read('apps/web/src/investor/LandingPage.jsx'),
+test('headers select the supplied blue and white images without recoloring or masks', async () => {
+  const [brand, frame, landing, css] = await Promise.all([
+    read('apps/web/src/components/BrandLockup.jsx'), read('apps/web/src/investor/InvestorFrame.jsx'),
+    read('apps/web/src/investor/LandingPage.jsx'), read('apps/web/src/components/brand.css'),
   ]);
-  assert.match(brand, /function ProxyVoteMark\(\{ inverse = false, variant = 'default' \}\)/u);
-  assert.match(brand, /inverse \? '\/proxyvote-landing-mark\.svg'\s*: variant === 'investor' \? '\/proxyvote-voter-mask\.svg' : '\/proxyvote-mark\.svg'/u);
+  assert.match(brand, /inverse \? '\/proxyvote-brand-white\.png' : '\/proxyvote-brand-blue\.png'/u);
+  assert.match(brand, /<img className="proxyvote-artwork"/u);
+  assert.match(brand, /width="158" height="58" alt="ProxyVote"/u);
   assert.match(brand, /children \?\? <ProxyVoteMark inverse=\{inverse\} \/>/u);
-  assert.match(frame, /<ProxyVoteMark inverse=\{inverse\} variant="investor" \/>/u);
+  assert.match(frame, /<BrandLockup inverse=\{inverse\}/u);
   assert.match(landing, /<BrandBand inverse \/>/u);
   assert.match(frame, /<BrandBand event=\{event\} \/>/u);
-});
-
-test('logo dimensions remain intact while service blue and inverse white use the same artwork mask', async () => {
-  const [brand, css] = await Promise.all([
-    read('apps/web/src/components/BrandLockup.jsx'),
-    read('apps/web/src/components/brand.css'),
-  ]);
-  assert.match(brand, /className="proxyvote-artwork" role="img" aria-label="ProxyVote"/u);
-  assert.match(brand, /'--proxyvote-source': `url\("\$\{src\}"\)`/u);
-  assert.match(css, /\.brand-lockup\.inverse \.proxyvote-artwork \{ background: #fff; \}/u);
-  assert.match(css, /width: 158px; height: 58px; aspect-ratio: 158 \/ 58/u);
-  assert.match(css, /mask-mode: alpha/u);
-  assert.match(css, /mask-image: var\(--proxyvote-source\)/u);
-  assert.match(css, /object-fit: contain/u);
-});
-
-
-test('normal-color voter logo preserves the same supplied image without recoloring or an opaque wrapper', async () => {
-  const svg = await read('apps/web/public/proxyvote-voter-mark.svg');
-  const landing = await read('apps/web/public/proxyvote-landing-mark.svg');
-  const imagePattern = /href="data:image\/png;base64,([A-Za-z0-9+/=]+)"/u;
-  const image = svg.match(imagePattern);
-  const landingImage = landing.match(imagePattern);
-  assert.ok(image && landingImage, 'Both assets must embed the supplied image.');
-  assert.equal(image[1], landingImage[1], 'Normal and inverse variants must share the same lettering.');
-  assert.equal(createHash('sha256').update(Buffer.from(image[1], 'base64')).digest('hex'),
-    'fcc6f4295c54d5a9d463292532812d6680fea1b1ac498bb27f8f44da3de25b91');
-  assert.match(svg, /viewBox="0 0 158 58"/u);
-  assert.doesNotMatch(svg, /<rect\b|<filter\b|<script\b|<foreignObject\b|<text\b|<path\b/u);
-  assert.doesNotMatch(svg, /(?:href|xlink:href)="https?:/u);
+  assert.match(css, /\.proxyvote-artwork \{[^}]*object-fit: contain/u);
+  assert.doesNotMatch(brand, /mask|proxyvote-(?:landing|voter)-mark/u);
+  assert.doesNotMatch(css, /mask-image|filter: brightness/u);
 });
 
 test('generic voter pages share the corrected header while event and issuer branding remain separate', async () => {
@@ -83,15 +53,4 @@ test('generic voter pages share the corrected header while event and issuer bran
     const source = await read(`apps/web/src/issuer/${page}.jsx`);
     assert.doesNotMatch(source, /variant="investor"|proxyvote-voter-mark/u, page);
   }
-});
-
-
-test('blue mask derives smooth coverage from the supplied artwork without changing the original image', async () => {
-  const mask = await read('apps/web/public/proxyvote-voter-mask.svg');
-  const original = await read('apps/web/public/proxyvote-voter-mark.svg');
-  const imagePattern = /href="data:image\/png;base64,([A-Za-z0-9+/=]+)"/u;
-  assert.equal(mask.match(imagePattern)[1], original.match(imagePattern)[1]);
-  assert.match(mask, /color-interpolation-filters="sRGB"/u);
-  assert.match(mask, /<feComposite in2="SourceGraphic" operator="in"/u);
-  assert.doesNotMatch(mask, /<script|<foreignObject|<text|<path|href="https?:/u);
 });

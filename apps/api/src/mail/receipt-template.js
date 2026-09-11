@@ -63,7 +63,7 @@ ${hasLogo ? `<img src="cid:issuer-logo" width="120" alt="${escapeHtml(issuer)} l
 ${branding.securityName ? `<p style="margin:0 0 20px;color:#555">${escapeHtml(branding.securityName)}${branding.securityTicker ? ` (${escapeHtml(branding.securityTicker)})` : ''}</p>` : ''}
 <h2 style="font-size:21px;margin:20px 0 8px;color:${ink}">Thank you for voting!</h2>
 <p>Your vote is confirmed on Polygon Amoy. You submitted selections for ${selections.length} of ${event.proposals.length} proposals. Confirmed votes cannot be changed.</p>
-<p>Your issuer-branded PDF voting receipt is attached. The selections and transaction details are also included below.</p>
+<p>Your voting receipt is attached. The selections and transaction details are also included below.</p>
 <table style="width:100%;border-collapse:collapse;margin:20px 0">${detailRows}</table>
 <h2 style="font-size:19px;color:${ink}">Your submitted selections</h2>
 <table style="width:100%;table-layout:fixed;border-collapse:collapse"><thead><tr style="background:#f1f1f1"><th align="left" scope="col" style="width:46%;padding:10px 12px">Proposal</th><th align="left" scope="col" style="width:27%;padding:10px 12px">Selected option</th><th align="left" scope="col" style="padding:10px 12px">Board recommendation</th></tr></thead><tbody>${selectionRows}</tbody></table>

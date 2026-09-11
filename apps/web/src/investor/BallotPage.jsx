@@ -8,6 +8,7 @@ import ResourceSkeleton from '../components/ResourceSkeleton.jsx';
 import { useInvestorData } from './InvestorData.jsx';
 import EventDocuments from './EventDocuments.jsx';
 import { useInvestorEvent } from './useInvestorEvent.js';
+import { useBallotColumns } from './useBallotColumns.js';
 import { useDeadlineClock } from '../data/useDeadlineClock.js';
 import { meetingLifecycle } from './meeting-utils.js';
 import { useInvestorSession } from './InvestorSession.jsx';
@@ -37,6 +38,8 @@ export default function BallotPage() {
     if (event?.vote && event.vote.status !== 'FAILED') navigate(`/vote/${eventId}/confirmation`, { replace: true });
   }, [event?.vote?.status, eventId, navigate]);
   const boardChoices = useMemo(() => boardRecommendedChoices(event?.proposals), [event?.proposals]);
+  const optionColumns = Math.max(0, ...(event?.proposals ?? []).map((proposal) => proposal.options.length));
+  const tableRef = useBallotColumns(event?.proposals);
   const canVote = Boolean(event?.metadataIntegrity && event?.contractReady && event?.eligibility?.eligible && !event?.eligibility?.hasVoted
     && now >= Date.parse(event.votingStartAt) && now <= Date.parse(event.votingEndAt)
     && (!event.vote || event.vote.status === 'FAILED'));
@@ -102,18 +105,25 @@ export default function BallotPage() {
             <span>Current tokens held: <strong>{holdings.loading ? 'Loading...' : holdings.error ? 'Unavailable' : `${displayHolding(holdings.data?.rawBalance, event.tokenDecimals)} ${event.tokenSymbol}`}</strong>
               {holdings.error && <button type="button" className="investor-text-button" onClick={() => void holdings.reload().catch(() => {})}>Retry</button>}</span>
           </div>
-          {event.proposals.map((proposal, proposalIndex) => <fieldset className="investor-proposal" key={`${event.metadataHash}-${proposalIndex}`} disabled={submitting || !canVote}>
-            <legend className="investor-sr-only">{proposalIndex + 1}. {proposal.title}</legend>
-            <div className="investor-proposal-row"><div className="investor-proposal-copy"><h3>{proposalIndex + 1}. {proposal.title}</h3>
+          <div className="investor-proposals-scroll" tabIndex={0} role="region" aria-label="Proposal voting options">
+          <table className="investor-proposals-table" aria-labelledby="proposal-heading" ref={tableRef}
+            style={{ '--ballot-option-columns': optionColumns }}>
+          <colgroup><col className="investor-proposal-column" />
+            {Array.from({ length: optionColumns }, (_, index) => <col className="investor-option-column" key={index} />)}
+          </colgroup><tbody>
+          {event.proposals.map((proposal, proposalIndex) => <tr className="investor-proposal" key={`${event.metadataHash}-${proposalIndex}`}>
+            <th scope="row" className="investor-proposal-copy"><h3 id={`proposal-title-${proposalIndex}`}>{proposalIndex + 1}. {proposal.title}</h3>
               <p>Board Recommendation: <strong>{Number.isInteger(proposal.recommendation) ? proposal.options[proposal.recommendation]?.text ?? 'None' : 'None'}</strong></p>
-              {proposal.description && <details><summary>More Details</summary><p>{proposal.description}</p></details>}</div>
-            <div className="investor-options" data-count={proposal.options.length}
-              tabIndex={0} role="group" aria-label={`Voting options for proposal ${proposalIndex + 1}`}>{proposal.options.map((option, optionIndex) => <label key={optionIndex}>
+              {proposal.description && <details><summary>More Details</summary><p>{proposal.description}</p></details>}</th>
+            {proposal.options.map((option, optionIndex) => <td className="investor-option-cell" key={optionIndex}><label className="investor-option-label">
               <input type="radio" name={`proposal-${proposalIndex}`} value={optionIndex} checked={choices[proposalIndex] === optionIndex}
+                disabled={submitting || !canVote} aria-describedby={`proposal-title-${proposalIndex}`}
                 onChange={() => setChoices((current) => current.map((value, index) => index === proposalIndex ? optionIndex : value))} />
               <span>{option.text}</span>
-            </label>)}</div></div>
-          </fieldset>)}
+            </label></td>)}
+            {Array.from({ length: optionColumns - proposal.options.length }, (_, index) => <td className="investor-option-cell investor-option-empty" key={`empty-${index}`} />)}
+          </tr>)}
+          </tbody></table></div>
         </section>
         <div className="investor-submit-row" ref={submitRowRef} tabIndex={-1}>
           <div className="investor-submit-meta">

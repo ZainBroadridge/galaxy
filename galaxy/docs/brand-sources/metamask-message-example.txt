@@ -1,0 +1,23 @@
+ILLUSTRATIVE SIGN-IN PAYLOAD - NOT A VALID LIVE CHALLENGE
+
+galaxy-api-ten.vercel.app requests your signature to sign in to ProxyVote.
+Wallet: 0x1111111111111111111111111111111111111111
+
+Welcome to the Broadridge ProxyVote tokenized-investment prototype.
+
+This is an experimental application on Polygon Amoy testnet. It is not a production proxy-voting service, an investment recommendation, or a guarantee of shareholder rights.
+
+By signing, I confirm that I control this wallet, have read this disclaimer, and agree to enter the prototype and review the voting opportunities associated with this wallet.
+
+This sign-in does not cast a vote, approve token spending, or transfer assets. A separate final-ballot signature is required to vote.
+
+I understand that confirmed votes are final in this prototype and that my wallet address and voting selections will be publicly visible on the blockchain.
+
+I will never provide my private key or seed phrase to this site.
+
+URI: https://galaxy-api-ten.vercel.app
+Chain ID: 80002
+Nonce: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+Issued At: 2026-09-08T12:00:00.000Z
+Expires At: 2026-09-08T12:10:00.000Z
+Disclaimer Version: 2026-09-08-v1

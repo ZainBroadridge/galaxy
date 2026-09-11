@@ -1,0 +1,550 @@
+import cors from 'cors';
+import express from 'express';
+import rateLimit from 'express-rate-limit';
+import { ZodError } from 'zod';
+import { authenticatedWallet, createIssuerSession, createNonce, optionalAuth, portalWallet, requireAuth, requireIssuer, requirePortal, revokeIssuerSession, revokeSession, verifyNonce } from './auth.js';
+import { currentInvestorHolding, investorMeetings } from './investor-events.js';
+import { readIssuerLogo, uploadIssuerLogo } from './issuer-logos.js';
+import {
+  draftCommunication,
+  draftTokenCommunication,
+  inbox,
+  markInboxRead,
+  publishCommunication,
+  publishPlatformCommunication,
+  publishPlatformTokenCommunication,
+  publishTokenCommunication,
+  saveSubscription,
+  subscriptions,
+} from './communications.js';
+import { assertConfig, config } from './config.js';
+import { db, query } from './db.js';
+import {
+  deleteEventDocument,
+  readEventDocument,
+  uploadEventDocument,
+} from './documents.js';
+import { publishReadyEventAnnouncements, triggerEventAnnouncement } from './event-announcements.js';
+import { closeEventStreams, openEventStream } from './event-stream.js';
+import { HttpError } from './errors.js';
+import {
+  createEvent,
+  eventResults,
+  eventView,
+  organiserDashboard,
+  organiserEventView,
+  resultsDashboard,
+  retryEvent,
+  votingDashboard,
+} from './events.js';
+import { logger } from './logger.js';
+import { createResultsReport, createVoteReceipt } from './reports.js';
+import { jobRunnerStatus, startJobRunner } from './runner.js';
+import { securityHeaders } from './security.js';
+import { inspectToken } from './tokens.js';
+import { tokenCatalogue } from './token-catalogue.js';
+import {
+  announcementTriggerInput,
+  browserPushSubscriptionInput,
+  browserPushUnsubscribeInput,
+  communicationDraftInput,
+  communicationPublishInput,
+  eventInput,
+  notificationReadInput,
+  platformCommunicationInput,
+  platformTokenCommunicationInput,
+  publicSubscriptionInput,
+  tokenCommunicationDraftInput,
+  tokenCommunicationPublishInput,
+  voteInput,
+} from './validation.js';
+import { ballot, submitVote } from './votes.js';
+import {
+  browserPushConfigured,
+  deleteBrowserPushSubscription,
+  queueBrowserPush,
+  saveBrowserPushSubscription,
+} from './web-push.js';
+
+assertConfig();
+export const app = express();
+app.set('trust proxy', 1);
+app.use(securityHeaders);
+app.use(cors((request, callback) => {
+  const origin = request.get('origin');
+  const snapInboxRequest = origin === 'null'
+    && request.path === '/v1/communications/inbox';
+
+  if (snapInboxRequest) {
+    return callback(null, {
+      origin: 'null',
+      methods: ['GET', 'OPTIONS'],
+      allowedHeaders: ['Accept'],
+      maxAge: 86_400,
+    });
+  }
+
+  if (!origin || config.corsOrigins.includes(origin)) {
+    return callback(null, { origin: true });
+  }
+
+  return callback(new HttpError(403, 'Origin is not allowed.', 'CORS_DENIED'));
+}));
+app.use(express.json({ limit: '256kb' }));
+app.use(optionalAuth);
+
+const limiter = (limit, keyGenerator = undefined) => rateLimit({
+  windowMs: 60_000,
+  limit,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  ...(keyGenerator ? { keyGenerator } : {}),
+  handler(_request, response, _next, options) {
+    response.status(429).json({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many write requests. Retry after a short pause.',
+      },
+      retryAfterMs: options.windowMs,
+    });
+  },
+});
+const authIpLimiter = limiter(120);
+const issuerLoginLimiter = limiter(6);
+const authWalletLimiter = limiter(
+  12,
+  (request) => String(request.body?.walletAddress ?? 'invalid-wallet').toLowerCase(),
+);
+const writeLimiter = limiter(40, (request) => request.auth?.wallet_address ?? 'anonymous');
+const publicWriteLimiter = limiter(40, (request) => String(
+  request.body?.creatorAddress
+    ?? request.body?.publisherAddress
+    ?? request.body?.walletAddress
+    ?? request.query?.wallet
+    ?? request.get('x-wallet-address')
+    ?? request.ip
+    ?? 'anonymous',
+).toLowerCase());
+const voteLimiter = limiter(
+  20,
+  (request) => String(request.body?.voterAddress ?? 'invalid-voter').toLowerCase(),
+);
+const pdfBody = express.raw({
+  type: ['application/pdf', 'application/octet-stream'],
+  limit: '10mb',
+});
+const parse = (schema, value) => schema.parse(value);
+const announcementSweepIntervalMs = 30_000;
+let announcementSweepTimer = null;
+let announcementSweepRunning = false;
+let announcementSweepStatus = {
+  lastCheckedAt: null,
+  lastPublished: 0,
+  lastError: null,
+};
+
+async function sweepReadyAnnouncements() {
+  if (announcementSweepRunning) return;
+  announcementSweepRunning = true;
+  try {
+    const result = await publishReadyEventAnnouncements();
+    announcementSweepStatus = {
+      lastCheckedAt: new Date().toISOString(),
+      lastPublished: result.published,
+      lastError: result.failures.length ? result.failures[0].message : null,
+    };
+    result.messages.forEach(queueBrowserPush);
+    if (result.failures.length) {
+      logger.warn({ failures: result.failures }, 'Some automatic announcements still need a retry');
+    }
+  } catch (error) {
+    announcementSweepStatus = {
+      lastCheckedAt: new Date().toISOString(),
+      lastPublished: 0,
+      lastError: error?.message ?? String(error),
+    };
+    logger.warn({ err: error }, 'Automatic announcement recovery sweep failed');
+  } finally {
+    announcementSweepRunning = false;
+  }
+}
+
+function startAnnouncementSweep() {
+  queueMicrotask(() => sweepReadyAnnouncements());
+  announcementSweepTimer = setInterval(sweepReadyAnnouncements, announcementSweepIntervalMs);
+  announcementSweepTimer.unref?.();
+}
+
+
+function sendPdf(response, report) {
+  response.set({
+    'Content-Type': 'application/pdf',
+    'Content-Length': String(report.bytes.length),
+    'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(report.filename)}`,
+    'Cache-Control': 'private, no-store',
+  });
+  response.send(report.bytes);
+}
+
+app.get('/health', async (_request, response, next) => {
+  try {
+    await query('SELECT 1');
+    response.json({
+      ok: true,
+      service: 'mini-galaxy-pv-v2',
+      chainId: config.chainId,
+      jobs: jobRunnerStatus(),
+      notifications: {
+        ...announcementSweepStatus,
+        browserPushConfigured: browserPushConfigured(),
+      },
+      time: new Date().toISOString(),
+    });
+  } catch (error) { next(error); }
+});
+
+app.post('/v1/auth/nonce', authIpLimiter, authWalletLimiter, async (request, response, next) => {
+  try { response.set('Cache-Control', 'no-store').json(await createNonce(request.body?.walletAddress, request.get('origin'))); } catch (error) { next(error); }
+});
+app.post('/v1/auth/verify', authIpLimiter, authWalletLimiter, async (request, response, next) => {
+  try { response.set('Cache-Control', 'no-store').json(await verifyNonce(request.body?.walletAddress, request.body?.signature, request.body?.challengeId, request.get('origin'))); } catch (error) { next(error); }
+});
+app.post('/v1/auth/logout', writeLimiter, async (request, response, next) => {
+  try { await revokeSession(request); response.status(204).end(); } catch (error) { next(error); }
+});
+
+app.get('/v1/auth/session', requireAuth, (request, response) => {
+  response.set('Cache-Control', 'no-store');
+  response.json({ walletAddress: request.auth.wallet_address, expiresAt: request.auth.expires_at });
+});
+app.post('/v1/issuer/login', issuerLoginLimiter, async (request, response, next) => {
+  try { response.set('Cache-Control', 'no-store').json(await createIssuerSession(request.body?.password, request.get('origin'))); }
+  catch (error) { next(error); }
+});
+app.get('/v1/issuer/session', requireIssuer, (request, response) => {
+  response.set('Cache-Control', 'no-store').json({ expiresAt: request.issuer.expires_at, demo: true });
+});
+app.post('/v1/issuer/logout', async (request, response, next) => {
+  try { await revokeIssuerSession(request); response.status(204).end(); } catch (error) { next(error); }
+});
+app.get('/v1/issuer/token-catalogue', requireIssuer, (_request, response, next) => {
+  try { response.set('Cache-Control', 'private, no-store').json(tokenCatalogue(config.chainId)); }
+  catch (error) { next(error); }
+});
+app.post('/v1/issuer/logos', requireIssuer, publicWriteLimiter,
+  express.raw({ type: ['image/png', 'image/jpeg'], limit: '512kb' }), async (request, response, next) => {
+    try { response.status(201).json(await uploadIssuerLogo(request.get('x-wallet-address'), request.body)); }
+    catch (error) { next(error); }
+  });
+app.get('/v1/issuer-logos/:id', async (request, response, next) => {
+  try {
+    const logo = await readIssuerLogo(request.params.id);
+    response.set({ 'Content-Type': logo.mimeType, 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' });
+    response.send(logo.bytes);
+  } catch (error) { next(error); }
+});
+
+app.use('/v1/investor', requireAuth, (_request, response, next) => {
+  response.set('Cache-Control', 'private, no-store'); next();
+});
+app.get('/v1/investor/meetings', async (request, response, next) => {
+  try { response.json(await investorMeetings(authenticatedWallet(request))); } catch (error) { next(error); }
+});
+app.get('/v1/investor/events/:id', async (request, response, next) => {
+  try { response.json(await eventView(request.params.id, authenticatedWallet(request))); } catch (error) { next(error); }
+});
+app.get('/v1/investor/events/:id/holding', async (request, response, next) => {
+  try { response.json(await currentInvestorHolding(request.params.id, authenticatedWallet(request))); } catch (error) { next(error); }
+});
+app.get('/v1/investor/events/:id/ballot', async (request, response, next) => {
+  try { response.json(await ballot(request.params.id, authenticatedWallet(request))); } catch (error) { next(error); }
+});
+app.post('/v1/investor/events/:id/votes', voteLimiter, async (request, response, next) => {
+  try {
+    const input = parse(voteInput, request.body);
+    const wallet = authenticatedWallet(request, input.voterAddress);
+    response.status(202).json(await submitVote(request.params.id, wallet, input.choices, input.signature));
+  } catch (error) { next(error); }
+});
+app.get('/v1/investor/events/:id/receipt', async (request, response, next) => {
+  try { sendPdf(response, await createVoteReceipt(request.params.id, authenticatedWallet(request))); } catch (error) { next(error); }
+});
+
+app.post('/v1/tokens/inspect', requireIssuer, publicWriteLimiter, async (request, response, next) => {
+  try { response.json(await inspectToken(request.body?.tokenAddress)); } catch (error) { next(error); }
+});
+app.post('/v1/events', requireIssuer, publicWriteLimiter, async (request, response, next) => {
+  try {
+    const creator = parse(announcementTriggerInput, {
+      publisherAddress: request.body?.creatorAddress,
+    }).publisherAddress;
+    response.status(201).json(await createEvent(creator, parse(eventInput, request.body)));
+  } catch (error) { next(error); }
+});
+app.get('/v1/events/:id/view', requireAuth, async (request, response, next) => {
+  try { response.json(await eventView(request.params.id, authenticatedWallet(request, request.query.wallet))); } catch (error) { next(error); }
+});
+app.get('/v1/events/:id/organiser-view', requireIssuer, async (request, response, next) => {
+  try { response.json(await organiserEventView(request.params.id, request.query.wallet)); } catch (error) { next(error); }
+});
+app.get('/v1/events/:id/stream', openEventStream);
+app.post('/v1/events/:id/retry', requireIssuer, publicWriteLimiter, async (request, response, next) => {
+  try {
+    const publisher = parse(announcementTriggerInput, request.body).publisherAddress;
+    response.json(await retryEvent(request.params.id, publisher));
+  } catch (error) { next(error); }
+});
+app.get('/v1/events/:id/results', requirePortal, async (request, response, next) => {
+  try { response.json(await eventResults(request.params.id, portalWallet(request, request.query.wallet))); } catch (error) { next(error); }
+});
+
+app.post('/v1/events/:id/announcement', requireIssuer, publicWriteLimiter, async (request, response, next) => {
+  try {
+    const input = parse(announcementTriggerInput, request.body);
+    const result = await triggerEventAnnouncement(request.params.id, input.publisherAddress);
+    if (result.message) queueBrowserPush(result.message);
+    response.json(result);
+  } catch (error) { next(error); }
+});
+// Backwards-compatible alias for earlier frontend packages. No wallet signature is required.
+app.put('/v1/events/:id/announcement', requireIssuer, publicWriteLimiter, async (request, response, next) => {
+  try {
+    const input = parse(announcementTriggerInput, request.body);
+    const result = await triggerEventAnnouncement(request.params.id, input.publisherAddress);
+    if (result.message) queueBrowserPush(result.message);
+    response.json(result);
+  } catch (error) { next(error); }
+});
+
+app.post('/v1/events/:id/documents', requireIssuer, publicWriteLimiter, pdfBody, async (request, response, next) => {
+  try {
+    const publisher = parse(announcementTriggerInput, {
+      publisherAddress: request.query.wallet || request.get('x-wallet-address'),
+    }).publisherAddress;
+    response.status(201).json(await uploadEventDocument(
+      request.params.id,
+      publisher,
+      request.get('x-file-name'),
+      request.body,
+    ));
+  } catch (error) { next(error); }
+});
+app.delete('/v1/events/:id/documents/:documentId', requireIssuer, publicWriteLimiter, async (request, response, next) => {
+  try {
+    const publisher = parse(announcementTriggerInput, {
+      publisherAddress: request.query.wallet || request.get('x-wallet-address'),
+    }).publisherAddress;
+    await deleteEventDocument(
+      request.params.id,
+      request.params.documentId,
+      publisher,
+    );
+    response.status(204).end();
+  } catch (error) { next(error); }
+});
+app.get('/v1/events/:id/documents/:documentId', async (request, response, next) => {
+  try {
+    const document = await readEventDocument(request.params.id, request.params.documentId);
+    const disposition = request.query.download === '1' ? 'attachment' : 'inline';
+    response.set({
+      'Content-Type': 'application/pdf',
+      'Content-Length': String(document.bytes.length),
+      'Content-Disposition': `${disposition}; filename*=UTF-8''${encodeURIComponent(document.fileName)}`,
+      'Cache-Control': 'private, max-age=300',
+    });
+    response.send(document.bytes);
+  } catch (error) { next(error); }
+});
+app.get('/v1/events/:id/reports/results', requirePortal, async (request, response, next) => {
+  try {
+    const wallet = request.query.wallet ?? request.auth?.wallet_address;
+    if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
+    sendPdf(response, await createResultsReport(request.params.id, portalWallet(request, wallet)));
+  } catch (error) { next(error); }
+});
+app.get('/v1/events/:id/reports/receipt', requireAuth, async (request, response, next) => {
+  try {
+    const wallet = request.query.wallet ?? request.auth?.wallet_address;
+    if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
+    sendPdf(response, await createVoteReceipt(request.params.id, authenticatedWallet(request, wallet)));
+  } catch (error) { next(error); }
+});
+
+app.get('/v1/dashboard/voting', requireAuth, async (request, response, next) => {
+  try { response.json(await votingDashboard(authenticatedWallet(request, request.query.wallet))); } catch (error) { next(error); }
+});
+app.get('/v1/dashboard/results', requirePortal, async (request, response, next) => {
+  try { response.json(await resultsDashboard(portalWallet(request, request.query.wallet))); } catch (error) { next(error); }
+});
+app.get('/v1/dashboard/organiser', requireIssuer, async (request, response, next) => {
+  try {
+    const wallet = request.query.wallet ?? request.auth?.wallet_address;
+    if (!wallet) return response.json([]);
+    return response.json(await organiserDashboard(wallet));
+  } catch (error) { return next(error); }
+});
+
+app.get('/v1/events/:id/ballot', requireAuth, async (request, response, next) => {
+  try { response.json(await ballot(request.params.id, authenticatedWallet(request, request.query.wallet))); } catch (error) { next(error); }
+});
+app.post('/v1/events/:id/votes', requireAuth, voteLimiter, async (request, response, next) => {
+  try {
+    const input = parse(voteInput, request.body);
+    response.status(202).json(await submitVote(
+      request.params.id,
+      authenticatedWallet(request, input.voterAddress),
+      input.choices,
+      input.signature,
+    ));
+  } catch (error) { next(error); }
+});
+
+app.get('/v1/communications/portal', requireIssuer, async (request, response, next) => {
+  try {
+    const wallet = request.query.wallet ?? request.auth?.wallet_address;
+    if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
+    const [savedSubscriptions, organisedEvents] = await Promise.all([
+      subscriptions(wallet),
+      organiserDashboard(wallet),
+    ]);
+    response.json({ subscriptions: savedSubscriptions, organisedEvents });
+  } catch (error) { next(error); }
+});
+app.get('/v1/communications/subscriptions', async (request, response, next) => {
+  try {
+    const wallet = request.query.wallet ?? request.auth?.wallet_address;
+    if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
+    response.json(await subscriptions(wallet));
+  } catch (error) { next(error); }
+});
+app.put('/v1/communications/subscriptions', publicWriteLimiter, async (request, response, next) => {
+  try {
+    const input = parse(publicSubscriptionInput, request.body);
+    response.json(await saveSubscription(input.walletAddress, input));
+  } catch (error) { next(error); }
+});
+app.put('/v1/communications/push-subscription', publicWriteLimiter, async (request, response, next) => {
+  try {
+    const input = parse(browserPushSubscriptionInput, request.body);
+    response.json(await saveBrowserPushSubscription(input.walletAddress, input));
+  } catch (error) { next(error); }
+});
+app.delete('/v1/communications/push-subscription', publicWriteLimiter, async (request, response, next) => {
+  try {
+    const input = parse(browserPushUnsubscribeInput, request.body);
+    response.json(await deleteBrowserPushSubscription(input.walletAddress, input.endpoint));
+  } catch (error) { next(error); }
+});
+app.get('/v1/communications/inbox', async (request, response, next) => {
+  try {
+    const wallet = request.query.wallet ?? request.auth?.wallet_address;
+    if (!wallet) throw new HttpError(400, 'A wallet address is required.', 'WALLET_REQUIRED');
+    response.set('Cache-Control', 'private, no-store');
+    response.json(await inbox(wallet));
+  } catch (error) { next(error); }
+});
+app.put('/v1/communications/inbox/read', publicWriteLimiter, async (request, response, next) => {
+  try {
+    const input = parse(notificationReadInput, request.body);
+    response.json(await markInboxRead(input.walletAddress));
+  } catch (error) { next(error); }
+});
+app.post('/v1/communications/token/draft', requireIssuer, requireAuth, writeLimiter, async (request, response, next) => {
+  try {
+    response.json(await draftTokenCommunication(
+      request.auth.wallet_address,
+      parse(tokenCommunicationDraftInput, request.body),
+    ));
+  } catch (error) { next(error); }
+});
+app.post('/v1/communications/token', requireIssuer, requireAuth, writeLimiter, async (request, response, next) => {
+  try {
+    const message = await publishTokenCommunication(
+      request.auth.wallet_address,
+      parse(tokenCommunicationPublishInput, request.body),
+    );
+    queueBrowserPush(message);
+    response.status(201).json(message);
+  } catch (error) { next(error); }
+});
+app.post('/v1/communications/token/platform', requireIssuer, publicWriteLimiter, async (request, response, next) => {
+  try {
+    const message = await publishPlatformTokenCommunication(
+      parse(platformTokenCommunicationInput, request.body),
+    );
+    queueBrowserPush(message);
+    response.status(201).json(message);
+  } catch (error) { next(error); }
+});
+
+app.post('/v1/events/:id/communications/platform', requireIssuer, publicWriteLimiter, async (request, response, next) => {
+  try {
+    const message = await publishPlatformCommunication(
+      request.params.id,
+      parse(platformCommunicationInput, request.body),
+    );
+    queueBrowserPush(message);
+    response.status(201).json(message);
+  } catch (error) { next(error); }
+});
+
+app.post('/v1/events/:id/communications/draft', requireIssuer, requireAuth, writeLimiter, async (request, response, next) => {
+  try {
+    response.json(await draftCommunication(
+      request.params.id,
+      request.auth.wallet_address,
+      parse(communicationDraftInput, request.body),
+    ));
+  } catch (error) { next(error); }
+});
+app.post('/v1/events/:id/communications', requireIssuer, requireAuth, writeLimiter, async (request, response, next) => {
+  try {
+    const message = await publishCommunication(
+      request.params.id,
+      request.auth.wallet_address,
+      parse(communicationPublishInput, request.body),
+    );
+    queueBrowserPush(message);
+    response.status(201).json(message);
+  } catch (error) { next(error); }
+});
+
+app.use((_request, _response, next) => next(new HttpError(404, 'Route not found.', 'NOT_FOUND')));
+app.use((error, request, response, _next) => {
+  if (error instanceof ZodError) {
+    return response.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: error.issues[0]?.message ?? 'Invalid request.',
+        details: error.issues,
+      },
+    });
+  }
+  const status = error.status ?? 500;
+  if (status >= 500) logger.error({ err: error, method: request.method, path: request.path }, 'Request failed');
+  return response.status(status).json({
+    error: {
+      code: error.code ?? 'INTERNAL_ERROR',
+      message: status >= 500 ? 'The service could not complete the request.' : error.message,
+      ...(error.details ? { details: error.details } : {}),
+    },
+  });
+});
+
+const server = app.listen(config.port, '0.0.0.0', () => {
+  logger.info({ port: config.port, chainId: config.chainId }, 'API and durable job runner started');
+  startJobRunner(logger).catch((error) => logger.error({ err: error }, 'Job runner startup failed'));
+  startAnnouncementSweep();
+});
+
+async function shutdown(signal) {
+  logger.info({ signal }, 'Shutting down');
+  if (announcementSweepTimer) clearInterval(announcementSweepTimer);
+  closeEventStreams();
+  server.close(async () => {
+    await db.end();
+    process.exit(0);
+  });
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

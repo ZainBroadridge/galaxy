@@ -1,0 +1,1229 @@
+{
+  "desktop": {
+    "reference": {
+      "metrics": {
+        "band": {
+          "x": 0,
+          "y": 0,
+          "width": 1440,
+          "height": 108,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "oklch(0.145 0 0)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "lockup": {
+          "x": 80,
+          "y": 0,
+          "width": 1280,
+          "height": 108,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "oklch(0.145 0 0)",
+          "padding": "0px 16px",
+          "margin": "0px 80px"
+        },
+        "panel": {
+          "x": 352.5,
+          "y": 207.625,
+          "width": 735,
+          "height": 692.75,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "oklch(0.145 0 0)",
+          "padding": "40px 48px",
+          "margin": "0px"
+        },
+        "intro": {
+          "x": 400.5,
+          "y": 247.625,
+          "width": 639,
+          "height": 106.75,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "oklch(0.145 0 0)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "eyebrow": {
+          "x": 400.5,
+          "y": 247.625,
+          "width": 639,
+          "height": 16,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "16px",
+          "weight": "600",
+          "color": "oklab(0.999994 0.0000455677 0.0000200868 / 0.8)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "heading": {
+          "x": 400.5,
+          "y": 275.625,
+          "width": 639,
+          "height": 37.5,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "30px",
+          "lineHeight": "37.5px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "lead": {
+          "x": 400.5,
+          "y": 325.125,
+          "width": 639,
+          "height": 29.25,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "18px",
+          "lineHeight": "29.25px",
+          "weight": "400",
+          "color": "oklab(0.999994 0.0000455678 0.0000200868 / 0.9)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "steps": {
+          "x": 400.5,
+          "y": 386.375,
+          "width": 639,
+          "height": 242,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(255, 255, 255)",
+          "padding": "24px 32px",
+          "margin": "0px"
+        },
+        "button": {
+          "x": 400.5,
+          "y": 652.375,
+          "width": 639,
+          "height": 52,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "14px 24px",
+          "margin": "24px 0px 0px"
+        },
+        "assurance": {
+          "x": 400.5,
+          "y": 720.375,
+          "width": 639,
+          "height": 20,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "20px",
+          "weight": "400",
+          "color": "oklab(0.999994 0.0000455678 0.0000200868 / 0.75)",
+          "padding": "0px",
+          "margin": "16px 0px 0px"
+        },
+        "help": {
+          "x": 620.140625,
+          "y": 780.375,
+          "width": 199.703125,
+          "height": 28,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "18px",
+          "lineHeight": "28px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "footnote": {
+          "x": 400.5,
+          "y": 820.375,
+          "width": 639,
+          "height": 40,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "19.5px",
+          "weight": "400",
+          "color": "oklab(0.999994 0.0000455678 0.0000200868 / 0.85)",
+          "padding": "0px",
+          "margin": "0px"
+        }
+      },
+      "overflow": false,
+      "errors": [],
+      "text": "Proxy\nVote\nPOWERED BY\n\nSHAREHOLDER VOTING\n\nVote Your Tokenized Investments\n\nConnect your wallet to securely access your eligible voting opportunities.\n\nAuthenticate your wallet\n1\nConnect your wallet\nConnect the wallet holding your tokenized investments.\n2\nConfirm your connection\nApprove the request in your wallet to securely continue.\n3\nStart voting\nView your eligible voting opportunities and submit your votes.\nAuthenticate with your wallet\n\nYour connection is secure. We'll never ask for your private keys or seed phrase.\n\nWhat is a proxy vote?\n\n* The voting capabilities of tokenholders referenced herein are rights to express preferences to the token minter regarding voting of the shares that the issuer beneficially owns."
+    },
+    "application": {
+      "metrics": {
+        "band": {
+          "x": 0,
+          "y": 0,
+          "width": 1440,
+          "height": 108,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(17, 17, 17)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "lockup": {
+          "x": 80,
+          "y": 0,
+          "width": 1280,
+          "height": 108,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(17, 17, 17)",
+          "padding": "0px 16px",
+          "margin": "0px 80px"
+        },
+        "panel": {
+          "x": 352.5,
+          "y": 207.625,
+          "width": 735,
+          "height": 692.75,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(255, 255, 255)",
+          "padding": "40px 48px",
+          "margin": "0px"
+        },
+        "intro": {
+          "x": 400.5,
+          "y": 247.625,
+          "width": 639,
+          "height": 106.75,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(255, 255, 255)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "eyebrow": {
+          "x": 400.5,
+          "y": 247.625,
+          "width": 639,
+          "height": 16,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "16px",
+          "weight": "600",
+          "color": "rgba(255, 255, 255, 0.8)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "heading": {
+          "x": 400.5,
+          "y": 275.625,
+          "width": 639,
+          "height": 37.5,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "30px",
+          "lineHeight": "37.5px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "lead": {
+          "x": 400.5,
+          "y": 325.125,
+          "width": 639,
+          "height": 29.25,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "18px",
+          "lineHeight": "29.25px",
+          "weight": "400",
+          "color": "rgba(255, 255, 255, 0.9)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "steps": {
+          "x": 400.5,
+          "y": 386.375,
+          "width": 639,
+          "height": 242,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(255, 255, 255)",
+          "padding": "24px 32px",
+          "margin": "0px"
+        },
+        "button": {
+          "x": 400.5,
+          "y": 652.375,
+          "width": 639,
+          "height": 52,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "14px 24px",
+          "margin": "24px 0px 0px"
+        },
+        "assurance": {
+          "x": 400.5,
+          "y": 720.375,
+          "width": 639,
+          "height": 20,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "20px",
+          "weight": "400",
+          "color": "rgba(255, 255, 255, 0.75)",
+          "padding": "0px",
+          "margin": "16px 0px 0px"
+        },
+        "help": {
+          "x": 620.140625,
+          "y": 780.375,
+          "width": 199.703125,
+          "height": 28,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "18px",
+          "lineHeight": "28px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "footnote": {
+          "x": 400.5,
+          "y": 820.375,
+          "width": 639,
+          "height": 40,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "19.5px",
+          "weight": "400",
+          "color": "rgba(255, 255, 255, 0.85)",
+          "padding": "0px",
+          "margin": "0px"
+        }
+      },
+      "overflow": false,
+      "errors": [],
+      "text": "Proxy\nVote\nPOWERED BY\nIssuer\n\nSHAREHOLDER VOTING\n\nVote Your Tokenized Investments\n\nConnect your wallet to securely access your eligible voting opportunities.\n\nAuthenticate your wallet\n1\nConnect your wallet\nConnect the wallet holding your tokenized investments.\n2\nConfirm your connection\nApprove the request in your wallet to securely continue.\n3\nStart voting\nView your eligible voting opportunities and submit your votes.\nAuthenticate with your wallet\n\nYour connection is secure. We'll never ask for your private keys or seed phrase.\n\nWhat is a proxy vote?\n\n* The voting capabilities of tokenholders referenced herein are rights to express preferences to the token minter regarding voting of the shares that the issuer beneficially owns."
+    },
+    "deltas": {
+      "band": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "lockup": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "panel": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0.0
+      },
+      "intro": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0.0
+      },
+      "eyebrow": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0
+      },
+      "heading": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0.0
+      },
+      "lead": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0.0
+      },
+      "steps": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0
+      },
+      "button": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0
+      },
+      "assurance": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0
+      },
+      "help": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0.0,
+        "height": 0
+      },
+      "footnote": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0
+      }
+    },
+    "pixelComparison": {
+      "maskedRegion": "Issuer link: top-right 140 x 50 pixels",
+      "pixelsDifferent": 11165,
+      "pixelsAbove8": 0,
+      "meanAbsoluteChannelDifference": 0.00424866247964643,
+      "pixelsTested": 1433000
+    }
+  },
+  "mobile": {
+    "reference": {
+      "metrics": {
+        "band": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 108,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "oklch(0.145 0 0)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "lockup": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 108,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "oklch(0.145 0 0)",
+          "padding": "0px 16px",
+          "margin": "0px"
+        },
+        "panel": {
+          "x": 16,
+          "y": 140,
+          "width": 358,
+          "height": 841,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "oklch(0.145 0 0)",
+          "padding": "32px 20px",
+          "margin": "0px"
+        },
+        "intro": {
+          "x": 36,
+          "y": 172,
+          "width": 318,
+          "height": 152,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "oklch(0.145 0 0)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "eyebrow": {
+          "x": 36,
+          "y": 172,
+          "width": 318,
+          "height": 16,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "16px",
+          "weight": "600",
+          "color": "oklab(0.999994 0.0000455677 0.0000200868 / 0.8)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "heading": {
+          "x": 36,
+          "y": 200,
+          "width": 318,
+          "height": 60,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "24px",
+          "lineHeight": "30px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "lead": {
+          "x": 36,
+          "y": 272,
+          "width": 318,
+          "height": 52,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "26px",
+          "weight": "400",
+          "color": "oklab(0.999994 0.0000455678 0.0000200868 / 0.9)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "steps": {
+          "x": 36,
+          "y": 356,
+          "width": 318,
+          "height": 302,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(255, 255, 255)",
+          "padding": "24px 20px",
+          "margin": "0px"
+        },
+        "button": {
+          "x": 36,
+          "y": 682,
+          "width": 318,
+          "height": 52,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "14px 24px",
+          "margin": "24px 0px 0px"
+        },
+        "assurance": {
+          "x": 36,
+          "y": 750,
+          "width": 318,
+          "height": 40,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "20px",
+          "weight": "400",
+          "color": "oklab(0.999994 0.0000455678 0.0000200868 / 0.75)",
+          "padding": "0px",
+          "margin": "16px 0px 0px"
+        },
+        "help": {
+          "x": 95.140625,
+          "y": 830,
+          "width": 199.703125,
+          "height": 28,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "18px",
+          "lineHeight": "28px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "footnote": {
+          "x": 36,
+          "y": 870,
+          "width": 318,
+          "height": 79,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "19.5px",
+          "weight": "400",
+          "color": "oklab(0.999994 0.0000455678 0.0000200868 / 0.85)",
+          "padding": "0px",
+          "margin": "0px"
+        }
+      },
+      "overflow": false,
+      "errors": [],
+      "text": "Proxy\nVote\nPOWERED BY\n\nSHAREHOLDER VOTING\n\nVote Your Tokenized Investments\n\nConnect your wallet to securely access your eligible voting opportunities.\n\nAuthenticate your wallet\n1\nConnect your wallet\nConnect the wallet holding your tokenized investments.\n2\nConfirm your connection\nApprove the request in your wallet to securely continue.\n3\nStart voting\nView your eligible voting opportunities and submit your votes.\nAuthenticate with your wallet\n\nYour connection is secure. We'll never ask for your private keys or seed phrase.\n\nWhat is a proxy vote?\n\n* The voting capabilities of tokenholders referenced herein are rights to express preferences to the token minter regarding voting of the shares that the issuer beneficially owns."
+    },
+    "application": {
+      "metrics": {
+        "band": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 108,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(17, 17, 17)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "lockup": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 108,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(17, 17, 17)",
+          "padding": "0px 16px",
+          "margin": "0px"
+        },
+        "panel": {
+          "x": 16,
+          "y": 140,
+          "width": 358,
+          "height": 841,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(255, 255, 255)",
+          "padding": "32px 20px",
+          "margin": "0px"
+        },
+        "intro": {
+          "x": 36,
+          "y": 172,
+          "width": 318,
+          "height": 152,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(255, 255, 255)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "eyebrow": {
+          "x": 36,
+          "y": 172,
+          "width": 318,
+          "height": 16,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "16px",
+          "weight": "600",
+          "color": "rgba(255, 255, 255, 0.8)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "heading": {
+          "x": 36,
+          "y": 200,
+          "width": 318,
+          "height": 60,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "24px",
+          "lineHeight": "30px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "lead": {
+          "x": 36,
+          "y": 272,
+          "width": 318,
+          "height": 52,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "26px",
+          "weight": "400",
+          "color": "rgba(255, 255, 255, 0.9)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "steps": {
+          "x": 36,
+          "y": 356,
+          "width": 318,
+          "height": 302,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(255, 255, 255)",
+          "padding": "24px 20px",
+          "margin": "0px"
+        },
+        "button": {
+          "x": 36,
+          "y": 682,
+          "width": 318,
+          "height": 52,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "14px 24px",
+          "margin": "24px 0px 0px"
+        },
+        "assurance": {
+          "x": 36,
+          "y": 750,
+          "width": 318,
+          "height": 40,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "20px",
+          "weight": "400",
+          "color": "rgba(255, 255, 255, 0.75)",
+          "padding": "0px",
+          "margin": "16px 0px 0px"
+        },
+        "help": {
+          "x": 95.140625,
+          "y": 830,
+          "width": 199.703125,
+          "height": 28,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "18px",
+          "lineHeight": "28px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "footnote": {
+          "x": 36,
+          "y": 870,
+          "width": 318,
+          "height": 79,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "19.5px",
+          "weight": "400",
+          "color": "rgba(255, 255, 255, 0.85)",
+          "padding": "0px",
+          "margin": "0px"
+        }
+      },
+      "overflow": false,
+      "errors": [],
+      "text": "Proxy\nVote\nPOWERED BY\nIssuer\n\nSHAREHOLDER VOTING\n\nVote Your Tokenized Investments\n\nConnect your wallet to securely access your eligible voting opportunities.\n\nAuthenticate your wallet\n1\nConnect your wallet\nConnect the wallet holding your tokenized investments.\n2\nConfirm your connection\nApprove the request in your wallet to securely continue.\n3\nStart voting\nView your eligible voting opportunities and submit your votes.\nAuthenticate with your wallet\n\nYour connection is secure. We'll never ask for your private keys or seed phrase.\n\nWhat is a proxy vote?\n\n* The voting capabilities of tokenholders referenced herein are rights to express preferences to the token minter regarding voting of the shares that the issuer beneficially owns."
+    },
+    "deltas": {
+      "band": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "lockup": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "panel": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "intro": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "eyebrow": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "heading": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "lead": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "steps": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "button": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "assurance": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "help": {
+        "x": 0.0,
+        "y": 0,
+        "width": 0.0,
+        "height": 0
+      },
+      "footnote": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      }
+    },
+    "pixelComparison": {
+      "maskedRegion": "Issuer link: top-right 140 x 50 pixels",
+      "pixelsDifferent": 10794,
+      "pixelsAbove8": 0,
+      "meanAbsoluteChannelDifference": 0.01562175208939968,
+      "pixelsTested": 388070
+    }
+  },
+  "compact": {
+    "reference": {
+      "metrics": {
+        "band": {
+          "x": 0,
+          "y": 0,
+          "width": 768,
+          "height": 108,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "oklch(0.145 0 0)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "lockup": {
+          "x": 0,
+          "y": 0,
+          "width": 768,
+          "height": 108,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "oklch(0.145 0 0)",
+          "padding": "0px 16px",
+          "margin": "0px"
+        },
+        "panel": {
+          "x": 16.5,
+          "y": 219.625,
+          "width": 735,
+          "height": 692.75,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "oklch(0.145 0 0)",
+          "padding": "40px 48px",
+          "margin": "0px"
+        },
+        "intro": {
+          "x": 64.5,
+          "y": 259.625,
+          "width": 639,
+          "height": 106.75,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "oklch(0.145 0 0)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "eyebrow": {
+          "x": 64.5,
+          "y": 259.625,
+          "width": 639,
+          "height": 16,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "16px",
+          "weight": "600",
+          "color": "oklab(0.999994 0.0000455677 0.0000200868 / 0.8)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "heading": {
+          "x": 64.5,
+          "y": 287.625,
+          "width": 639,
+          "height": 37.5,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "30px",
+          "lineHeight": "37.5px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "lead": {
+          "x": 64.5,
+          "y": 337.125,
+          "width": 639,
+          "height": 29.25,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "18px",
+          "lineHeight": "29.25px",
+          "weight": "400",
+          "color": "oklab(0.999994 0.0000455678 0.0000200868 / 0.9)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "steps": {
+          "x": 64.5,
+          "y": 398.375,
+          "width": 639,
+          "height": 242,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(255, 255, 255)",
+          "padding": "24px 32px",
+          "margin": "0px"
+        },
+        "button": {
+          "x": 64.5,
+          "y": 664.375,
+          "width": 639,
+          "height": 52,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "14px 24px",
+          "margin": "24px 0px 0px"
+        },
+        "assurance": {
+          "x": 64.5,
+          "y": 732.375,
+          "width": 639,
+          "height": 20,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "20px",
+          "weight": "400",
+          "color": "oklab(0.999994 0.0000455678 0.0000200868 / 0.75)",
+          "padding": "0px",
+          "margin": "16px 0px 0px"
+        },
+        "help": {
+          "x": 284.140625,
+          "y": 792.375,
+          "width": 199.703125,
+          "height": 28,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "18px",
+          "lineHeight": "28px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "footnote": {
+          "x": 64.5,
+          "y": 832.375,
+          "width": 639,
+          "height": 40,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "19.5px",
+          "weight": "400",
+          "color": "oklab(0.999994 0.0000455678 0.0000200868 / 0.85)",
+          "padding": "0px",
+          "margin": "0px"
+        }
+      },
+      "overflow": false,
+      "errors": [],
+      "text": "Proxy\nVote\nPOWERED BY\n\nSHAREHOLDER VOTING\n\nVote Your Tokenized Investments\n\nConnect your wallet to securely access your eligible voting opportunities.\n\nAuthenticate your wallet\n1\nConnect your wallet\nConnect the wallet holding your tokenized investments.\n2\nConfirm your connection\nApprove the request in your wallet to securely continue.\n3\nStart voting\nView your eligible voting opportunities and submit your votes.\nAuthenticate with your wallet\n\nYour connection is secure. We'll never ask for your private keys or seed phrase.\n\nWhat is a proxy vote?\n\n* The voting capabilities of tokenholders referenced herein are rights to express preferences to the token minter regarding voting of the shares that the issuer beneficially owns."
+    },
+    "application": {
+      "metrics": {
+        "band": {
+          "x": 0,
+          "y": 0,
+          "width": 768,
+          "height": 108,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(17, 17, 17)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "lockup": {
+          "x": 0,
+          "y": 0,
+          "width": 768,
+          "height": 108,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(17, 17, 17)",
+          "padding": "0px 16px",
+          "margin": "0px"
+        },
+        "panel": {
+          "x": 16.5,
+          "y": 219.625,
+          "width": 735,
+          "height": 692.75,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(255, 255, 255)",
+          "padding": "40px 48px",
+          "margin": "0px"
+        },
+        "intro": {
+          "x": 64.5,
+          "y": 259.625,
+          "width": 639,
+          "height": 106.75,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(255, 255, 255)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "eyebrow": {
+          "x": 64.5,
+          "y": 259.625,
+          "width": 639,
+          "height": 16,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "16px",
+          "weight": "600",
+          "color": "rgba(255, 255, 255, 0.8)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "heading": {
+          "x": 64.5,
+          "y": 287.625,
+          "width": 639,
+          "height": 37.5,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "30px",
+          "lineHeight": "37.5px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "lead": {
+          "x": 64.5,
+          "y": 337.125,
+          "width": 639,
+          "height": 29.25,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "18px",
+          "lineHeight": "29.25px",
+          "weight": "400",
+          "color": "rgba(255, 255, 255, 0.9)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "steps": {
+          "x": 64.5,
+          "y": 398.375,
+          "width": 639,
+          "height": 242,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "400",
+          "color": "rgb(255, 255, 255)",
+          "padding": "24px 32px",
+          "margin": "0px"
+        },
+        "button": {
+          "x": 64.5,
+          "y": 664.375,
+          "width": 639,
+          "height": 52,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "16px",
+          "lineHeight": "24px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "14px 24px",
+          "margin": "24px 0px 0px"
+        },
+        "assurance": {
+          "x": 64.5,
+          "y": 732.375,
+          "width": 639,
+          "height": 20,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "20px",
+          "weight": "400",
+          "color": "rgba(255, 255, 255, 0.75)",
+          "padding": "0px",
+          "margin": "16px 0px 0px"
+        },
+        "help": {
+          "x": 284.140625,
+          "y": 792.375,
+          "width": 199.703125,
+          "height": 28,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "18px",
+          "lineHeight": "28px",
+          "weight": "700",
+          "color": "rgb(255, 255, 255)",
+          "padding": "0px",
+          "margin": "0px"
+        },
+        "footnote": {
+          "x": 64.5,
+          "y": 832.375,
+          "width": 639,
+          "height": 40,
+          "font": "Roboto, \"Roboto Fallback\", ui-sans-serif, system-ui, sans-serif",
+          "size": "12px",
+          "lineHeight": "19.5px",
+          "weight": "400",
+          "color": "rgba(255, 255, 255, 0.85)",
+          "padding": "0px",
+          "margin": "0px"
+        }
+      },
+      "overflow": false,
+      "errors": [],
+      "text": "Proxy\nVote\nPOWERED BY\nIssuer\n\nSHAREHOLDER VOTING\n\nVote Your Tokenized Investments\n\nConnect your wallet to securely access your eligible voting opportunities.\n\nAuthenticate your wallet\n1\nConnect your wallet\nConnect the wallet holding your tokenized investments.\n2\nConfirm your connection\nApprove the request in your wallet to securely continue.\n3\nStart voting\nView your eligible voting opportunities and submit your votes.\nAuthenticate with your wallet\n\nYour connection is secure. We'll never ask for your private keys or seed phrase.\n\nWhat is a proxy vote?\n\n* The voting capabilities of tokenholders referenced herein are rights to express preferences to the token minter regarding voting of the shares that the issuer beneficially owns."
+    },
+    "deltas": {
+      "band": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "lockup": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "panel": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0.0
+      },
+      "intro": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0.0
+      },
+      "eyebrow": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0
+      },
+      "heading": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0.0
+      },
+      "lead": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0.0
+      },
+      "steps": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0
+      },
+      "button": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0
+      },
+      "assurance": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0
+      },
+      "help": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0.0,
+        "height": 0
+      },
+      "footnote": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 0,
+        "height": 0
+      }
+    },
+    "pixelComparison": {
+      "maskedRegion": "Issuer link: top-right 140 x 50 pixels",
+      "pixelsDifferent": 11277,
+      "pixelsAbove8": 0,
+      "meanAbsoluteChannelDifference": 0.007862563165655674,
+      "pixelsTested": 779432
+    }
+  }
+}

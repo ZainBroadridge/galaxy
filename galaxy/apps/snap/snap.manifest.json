@@ -1,0 +1,43 @@
+{
+  "version": "0.4.2",
+  "description": "Verified investor communications with background polling and MetaMask in-app alerts.",
+  "proposedName": "PV Investor Communications",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ZainBroadridge/galaxy.git"
+  },
+  "source": {
+    "shasum": "r7zJVH3i/HXEYkkXFiTcgenvjjGkFub1f1S6537tXL8=",
+    "location": {
+      "npm": {
+        "filePath": "dist/bundle.js",
+        "packageName": "@zainbroadridge/pv-communications-snap",
+        "registry": "https://registry.npmjs.org/"
+      }
+    }
+  },
+  "initialConnections": {
+    "https://galaxy-api-ten.vercel.app": {}
+  },
+  "initialPermissions": {
+    "endowment:rpc": {
+      "allowedOrigins": ["https://galaxy-api-ten.vercel.app"]
+    },
+    "endowment:cronjob": {
+      "jobs": [
+        {
+          "expression": "* * * * *",
+          "request": {
+            "method": "pollCommunications"
+          }
+        }
+      ]
+    },
+    "endowment:network-access": {},
+    "snap_manageState": {},
+    "snap_notify": {},
+    "endowment:page-home": {}
+  },
+  "platformVersion": "6.24.0",
+  "manifestVersion": "0.1"
+}
