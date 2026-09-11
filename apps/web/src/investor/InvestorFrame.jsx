@@ -41,7 +41,7 @@ export function BrandBand({ event, inverse = false }) {
     <BrandLockup inverse={inverse} className="investor-brand-lockup">
       {presentation.header === 'platform' ? <PlatformLogo presentation={presentation} />
         : presentation.header === 'issuer' ? <IssuerLogo event={event} className="investor-brand-issuer-logo" showNameFallback />
-          : <ProxyVoteMark inverse={inverse} variant="investor" />}
+          : <ProxyVoteMark inverse={inverse} />}
     </BrandLockup>
   </div>;
 }
@@ -89,7 +89,7 @@ export function SecurityIdentity({ event }) {
     {event.cusip && <p className="investor-cusip">Demo CUSIP: {event.cusip}</p>}
   </>;
 }
-export function MeetingIdentity({ event, showTags = true }) {
+export function MeetingIdentity({ event, showTags = false }) {
   const presentation = meetingPresentation(event);
   return <header className="investor-meeting-identity">
     <div className="investor-title-row">
@@ -102,7 +102,7 @@ export function MeetingIdentity({ event, showTags = true }) {
   </header>;
 }
 
-export function MeetingPageHeader({ event, showTags = true }) {
+export function MeetingPageHeader({ event, showTags = false }) {
   return <div className="investor-detail-heading">
     <BackLink to="/meetings?tab=active">Back to my meetings</BackLink>
     {event && <MeetingIdentity event={event} showTags={showTags} />}

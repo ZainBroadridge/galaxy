@@ -8,6 +8,7 @@ import { deployedBallotVersion } from './ballot-protocol.js';
 import { serializeVote } from './serializers.js';
 import { getEventRow } from './events.js';
 import { kickJobRunner } from './runner.js';
+import { queueReceiptEmail } from './mail/queue.js';
 
 async function votingContext(eventId, walletInput) {
   const wallet = normalizeAddress(walletInput);
@@ -81,6 +82,7 @@ export async function submitVote(eventId, walletInput, choices, signature) {
       vote = inserted.rows[0];
     }
     const job = await enqueueJob({ eventId, voterAddress: wallet, type: 'RELAY_VOTE', dedupeKey: `vote:${eventId}:${wallet}`, message: 'Gasless vote queued', client });
+    await queueReceiptEmail(vote, client);
     return { vote, job };
   });
   kickJobRunner();

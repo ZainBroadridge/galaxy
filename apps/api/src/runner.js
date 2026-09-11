@@ -4,6 +4,7 @@ import { buildSnapshot } from './snapshot.js';
 import { deployEvent } from './deploy.js';
 import { relayVote } from './relay-vote.js';
 import { verifyContract } from './verify.js';
+import { sendVoteReceiptEmail } from './mail/send-receipt.js';
 import { claimJob, completeJob, failJob, recoverJobs } from './jobs.js';
 
 let running = false;
@@ -17,6 +18,7 @@ const handlers = {
   DEPLOY_EVENT: deployEvent,
   RELAY_VOTE: relayVote,
   VERIFY_CONTRACT: verifyContract,
+  SEND_VOTE_RECEIPT: sendVoteReceiptEmail,
 };
 
 async function nextDelay() {

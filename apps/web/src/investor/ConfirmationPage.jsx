@@ -24,7 +24,7 @@ export default function ConfirmationPage() {
     finally { setBusy(false); }
   }
   return <InvestorFrame event={event} hideNavigation><div className="investor-confirmation investor-page-width">
-    <MeetingPageHeader event={event} />
+    <MeetingPageHeader event={event} showTags={false} />
     <ErrorMessage error={view.error} />{view.loading && <ResourceSkeleton label="Loading vote status" rows={2} />}
     {event && <>
       {!successful ? <section className="investor-confirmation-message">

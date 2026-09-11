@@ -1,8 +1,7 @@
-export function ProxyVoteMark({ inverse = false, variant = 'default' }) {
-  const src = inverse ? '/proxyvote-landing-mark.svg'
-    : variant === 'investor' ? '/proxyvote-voter-mask.svg' : '/proxyvote-mark.svg';
-  return <span className="proxyvote-artwork" role="img" aria-label="ProxyVote"
-    style={{ '--proxyvote-source': `url("${src}")` }} />;
+export function ProxyVoteMark({ inverse = false }) {
+  return <img className="proxyvote-artwork"
+    src={inverse ? '/proxyvote-brand-white.png' : '/proxyvote-brand-blue.png'}
+    width="158" height="58" alt="ProxyVote" />;
 }
 
 export default function BrandLockup({ children, inverse = false, className = '' }) {

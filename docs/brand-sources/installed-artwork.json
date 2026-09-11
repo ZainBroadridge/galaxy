@@ -24,12 +24,6 @@
     "sha256": "191800698a49adf10a567fec230ce76f464708ce97f9b7ab84d59013227fc03e"
   },
   {
-    "id": "disney",
-    "filename": "disney-brand-v2.png",
-    "source": "https://commons.wikimedia.org/wiki/File:The_Walt_Disney_Company_Logo.svg",
-    "sha256": "65eac958ddf3f3b1ad7bf6e4b63fa0e82f9dd3c61102d58304507f9793d7cac5"
-  },
-  {
     "id": "spacex",
     "filename": "spacex-brand-v2.png",
     "source": "https://commons.wikimedia.org/wiki/File:SpaceX_logo_black.svg",
