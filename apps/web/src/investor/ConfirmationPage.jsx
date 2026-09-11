@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import ResourceSkeleton from '../components/ResourceSkeleton.jsx';
 import { apiBlob, saveBlob } from '../api.js';
-import { EventDocuments, useInvestorEvent } from './BallotPage.jsx';
+import EventDocuments from './EventDocuments.jsx';
+import { useInvestorEvent } from './useInvestorEvent.js';
 import { ArrowIcon, ErrorMessage, InvestorFrame, MeetingPageHeader, LoadingIndicator, PrintIcon } from './InvestorFrame.jsx';
 import { displayDate } from './meeting-utils.js';
 
@@ -36,8 +37,7 @@ export default function ConfirmationPage() {
           <h2 className={vote.status === 'CONFIRMED' ? 'confirmed' : ''}>{vote.status === 'CONFIRMED' ? 'Voted' : 'Vote submitted'}</h2>
           <h3>Thank you for voting!</h3>
           <p>You submitted selections for {vote.choices.length} of {event.proposals.length} proposals on {displayDate(vote.createdAt)}.</p>
-          <p>{vote.status === 'CONFIRMED' ? 'Your vote is confirmed on Polygon Amoy. Confirmed votes cannot be changed.'
-            : 'The relayer is processing your signed ballot. This page updates automatically; confirmation is not complete yet.'}</p>
+          {vote.status !== 'CONFIRMED' && <p>The relayer is processing your signed ballot. This page updates automatically; confirmation is not complete yet.</p>}
         </section>
         <section className="investor-transaction-card" aria-label="Vote transaction details">
           <dl><div><dt>Voting power</dt><dd>{vote.votingPower}</dd></div>
@@ -53,7 +53,7 @@ export default function ConfirmationPage() {
         <div className="investor-confirmation-actions"><Link className="inv-button" to="/meetings?tab=active">Return to My Meetings<ArrowIcon /></Link>
           <button type="button" className="inv-button secondary" onClick={downloadReceipt} disabled={busy} title="Generate a branded PDF receipt to save or print">
             <PrintIcon />{busy ? 'Generating receipt...' : 'Print / download receipt'}</button></div>
-        <ErrorMessage error={error} /><EventDocuments event={event} />
+        <ErrorMessage error={error} /><EventDocuments event={event} heading="Meeting documents" />
       </>}
     </>}
   </div></InvestorFrame>;

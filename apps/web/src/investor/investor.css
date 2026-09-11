@@ -166,15 +166,19 @@
 .investor-cusip { color: #667085; font-size: 12px; }
 .investor-empty { margin: 32px 0 !important; color: #627383; font-size: 14px; width: 100%; text-align: center; }
 /* Ballot and web confirmation retain the service-provider palette. */
-.investor-ballot-page, .investor-confirmation { padding-top: 24px; padding-bottom: 24px; }
+.investor-ballot-page, .investor-confirmation { max-width: 1280px; padding-top: 12px; padding-bottom: 24px; }
 .investor-back { font-size: 14px; }
 .investor-detail-heading { display: grid; grid-template-columns: 64px minmax(0,1fr) 64px; align-items: start; gap: 16px; }
-.investor-detail-heading > .portal-back { margin: 4px 0 0; }
+.investor-app .investor-detail-heading > .portal-back { align-self: start; margin: 0; min-height: 28px; padding: 0; text-decoration: none; }
+.investor-app .investor-detail-heading > .portal-back:hover,
+.investor-app .investor-detail-heading > .portal-back:focus-visible { text-decoration: none; }
 .investor-meeting-identity { text-align: center; padding: 0 0 16px; min-width: 0; }
 .investor-detail-heading .investor-meeting-identity { grid-column: 2; }
 .investor-title-row { display: flex; align-items: center; justify-content: center; gap: 20px; min-width: 0; }
 .investor-title-row h1 { min-width: 0; max-width: 780px; color: #111; font-size: clamp(24px,2.5vw,32px); line-height: 1.25; font-weight: 700; overflow-wrap: anywhere; text-wrap: balance; }
 .investor-title-row .investor-issuer-logo { width: 90px; max-height: 68px; object-fit: contain; flex: 0 0 90px; }
+.investor-title-row .issuer-name-fallback { width: auto; max-width: 160px; max-height: none; flex: 0 1 160px; font-size: 18px; }
+.investor-meeting-title .issuer-name-fallback { width: auto; max-width: 140px; max-height: none; font-size: 16px; }
 .investor-meeting-identity p { margin-top: 8px; font-size: 14px; }
 .investor-meeting-identity .investor-tags { justify-content: center; margin: 10px 0 0; }
 .investor-ballot-status { text-align: center; margin: 4px 0 24px; }
@@ -186,12 +190,16 @@
 .investor-app a.investor-help-link { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 22px; background: #101010; border-radius: 50%; color: #fff; width: 22px; height: 22px; padding: 0; line-height: 1; text-decoration: none; vertical-align: middle; margin-left: 0; }
 .investor-help-link svg { display: block; width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.8; fill: none; }
 .investor-help-link circle { fill: currentColor; stroke: none; }
-.investor-document-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); border: 1px solid var(--inv-line); border-radius: 6px; max-width: 720px; margin-inline: auto; overflow: hidden; }
-.investor-document-grid[data-count='1'] { grid-template-columns: minmax(0,1fr); max-width: 420px; }
-.investor-document-grid[data-count='2'] { grid-template-columns: repeat(2,minmax(0,1fr)); max-width: 640px; }
-.investor-app .investor-document-grid a { min-width: 0; display: grid; grid-template-columns: 32px minmax(0,1fr) 14px; align-items: center; gap: 12px; padding: 18px 20px; font-size: 14px; font-weight: 600; color: var(--inv-doc-red); }
+/* One centred attachment card; three documents use the full meeting width. */
+.investor-document-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); align-items: stretch; width: 100%; border: 1px solid var(--inv-line); border-radius: 6px; margin-inline: auto; overflow: hidden; }
+.investor-document-grid[data-count='1'] { grid-template-columns: minmax(0,1fr); max-width: 560px; }
+.investor-document-grid[data-count='2'] { grid-template-columns: repeat(2,minmax(0,1fr)); max-width: 960px; }
+.investor-app .investor-document-grid a { min-width: 0; min-height: 116px; display: grid; grid-template-columns: 32px minmax(0,1fr) 14px; align-items: center; gap: 16px; padding: 20px; font-size: 14px; font-weight: 600; color: var(--inv-doc-red); text-decoration: none; }
+.investor-document-grid a + a { border-left: 1px solid var(--inv-line); }
 .investor-app .investor-document-grid a:hover { color: #99002b; background: #fff8fa; }
-.investor-document-grid a > span { min-width: 0; overflow-wrap: anywhere; }
+.investor-document-grid a:focus-visible { outline-offset: -3px; }
+.investor-document-copy { min-width: 0; }
+.investor-document-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; min-height: 3em; line-height: 1.5; overflow-wrap: anywhere; text-decoration: underline; text-underline-offset: 3px; }
 .investor-document-grid small { display: block; color: #667085; font-size: 12px; font-weight: 400; margin-top: 4px; }
 .investor-document-grid a > svg:first-child { width: 32px; height: 40px; }
 .investor-document-grid a > svg:last-child { width: 14px; height: 14px; }
@@ -204,7 +212,7 @@
 .investor-holdings > span { overflow-wrap: anywhere; }
 .investor-holdings small { flex-basis: 100%; text-align: right; color: var(--inv-muted); font-size: 12px; }
 .investor-proposal { display: block; min-inline-size: 0; min-width: 0; padding: 24px; margin: 0; border: 0; border-bottom: 1px solid var(--inv-line); background: #fff; }
-/* The full-width choice matrix uses the same tracks for every proposal. */
+/* Each row fills the ballot using its actual choices, with no unused track. */
 .investor-proposal-row { display: grid; grid-template-columns: minmax(0,1fr); gap: 16px; }
 .investor-proposal:last-child { border-bottom: 0; }
 .investor-proposal-copy { min-width: 0; }
@@ -213,13 +221,14 @@
 .investor-proposal details { margin-top: 8px; }
 .investor-proposal summary { color: var(--inv-blue); cursor: pointer; text-decoration: underline; font-size: 14px; width: fit-content; }
 .investor-proposal details p { color: #4e5963; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
-.investor-options { display: grid; grid-template-columns: repeat(var(--ballot-option-columns,4),minmax(0,1fr)); align-items: stretch; gap: 8px 12px; min-width: 0; width: 100%; }
-.investor-options label { color: #111; display: grid; grid-template-columns: 18px minmax(0,1fr); align-items: center; gap: 10px; font-size: 14px; line-height: 20px; cursor: pointer; min-height: 48px; min-width: 0; margin: 0; padding: 10px 12px; border: 1px solid #dce5ec; border-radius: 3px; background: #fff; }
+.investor-options { display: grid; grid-template-columns: repeat(var(--proposal-option-columns,1),minmax(0,1fr)); grid-auto-rows: 1fr; align-items: stretch; gap: 12px; min-width: 0; width: 100%; }
+.investor-options label { color: #111; display: grid; grid-template-columns: 18px minmax(0,1fr); align-items: center; gap: 12px; font-size: 14px; font-weight: 400; line-height: 20px; cursor: pointer; min-height: 52px; min-width: 0; width: 100%; margin: 0; padding: 12px 16px; border: 1px solid #dce5ec; border-radius: 3px; background: #fff; }
 .investor-options label:has(input:checked) { background: #eef6fb; border-color: var(--pv-blue); }
 .investor-options label:has(input:focus-visible) { outline: 2px solid var(--pv-blue); outline-offset: 2px; }
 .investor-options label span { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
 .investor-options input[type='radio'] { appearance: auto; -webkit-appearance: radio; width: 17px; height: 17px; margin: 0; padding: 0; min-height: 0; flex: 0 0 17px; accent-color: var(--pv-blue); box-shadow: none; }
 .investor-proposal:disabled .investor-options { opacity: .6; }
+.investor-proposal:disabled .investor-options label { cursor: not-allowed; }
 .investor-submit-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 24px 0 12px; scroll-margin: 32px; font-size: 14px; }
 .investor-submit-row > div { display: flex; flex-wrap: wrap; gap: 16px; }
 .investor-submit-row .inv-button.secondary { min-width: 135px; }
@@ -255,8 +264,15 @@
   .investor-holdings { justify-content: flex-start; }
   .investor-holdings small { text-align: left; }
 }
+@media (max-width: 1099px) {
+  .investor-options[data-count='4'] { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 899px) {
+  .investor-document-grid[data-count] { grid-template-columns: minmax(0,1fr); max-width: 640px; }
+  .investor-document-grid a + a { border-left: 0; border-top: 1px solid var(--inv-line); }
+}
 @media (max-width: 767px) {
-  .investor-options { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .investor-options[data-count='3'] { grid-template-columns: minmax(0,1fr); }
 }
 @media (max-width: 639px) {
   .investor-meetings { padding-top: 20px; padding-bottom: 40px; }
@@ -270,13 +286,14 @@
   .investor-detail-heading .investor-meeting-identity { grid-column: 1; }
   .investor-title-row { flex-direction: column; gap: 12px; }
   .investor-title-row .investor-issuer-logo { flex-basis: auto; width: 80px; max-height: 56px; }
+  .investor-title-row .issuer-name-fallback { width: auto; max-height: none; flex-basis: auto; }
   .investor-brand-issuer-logo { max-width: 125px; max-height: 40px; }
   .investor-platform-logo { width: 110px; height: 40px; }
   .investor-platform-name, .issuer-name-fallback { font-size: 19px; max-width: 145px; }
   .investor-ballot-heading { align-items: flex-start; flex-wrap: wrap; padding: 16px; }
   .investor-holdings, .investor-proposal { padding: 16px; }
   .investor-documents h2 { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 20px; }
-  .investor-document-grid, .investor-document-grid[data-count='2'] { grid-template-columns: minmax(0,1fr); max-width: 420px; }
+  .investor-app .investor-document-grid a { padding: 16px; gap: 12px; }
   .investor-submit-row > div { width: 100%; }
   .investor-submit-row .inv-button { flex: 1; min-width: 0; padding: 12px; }
   .investor-transaction-card { padding: 12px 16px; }
@@ -291,7 +308,7 @@
 .investor-notifications { padding-block: 24px; }
 
 @media (max-width: 479px) {
-  .investor-options { grid-template-columns: minmax(0,1fr); }
+  .investor-options[data-count] { grid-template-columns: minmax(0,1fr); }
 }
 @media print {
   .portal-root:has(.investor-ballot-page),
@@ -300,6 +317,6 @@
   .investor-ballot-page .investor-submit-row { break-inside: avoid; }
   .investor-ballot-heading { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .investor-proposal { break-inside: avoid; padding: 16px; }
-  .investor-options { grid-template-columns: repeat(var(--ballot-option-columns,4),minmax(0,1fr)); gap: 8px; }
+  .investor-options[data-count] { grid-template-columns: repeat(var(--proposal-option-columns,1),minmax(0,1fr)); gap: 8px; }
   .investor-options label { padding: 8px; font-size: 12px; gap: 6px; }
 }
