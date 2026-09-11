@@ -36,3 +36,25 @@ export function selectedCatalogueEntry(catalogue, form) {
   return ['issuerName', 'platform', 'tokenAddress', 'cusip', 'securityName', 'securityTicker']
     .every((field) => key(entry[field]) === key(form[field])) ? entry : null;
 }
+
+/** Editing a prefill creates independent event metadata, never a catalogue mutation. */
+export function editTokenIdentity(form, patch) {
+  return { ...form, ...patch, tokenCatalogueId: '' };
+}
+
+export function changeTokenIssuer(form, catalogue, value) {
+  const entry = catalogueEntry(catalogue, value, form.platform);
+  if (entry) return applyCatalogueEntry(form, entry);
+  return form.tokenCatalogueId
+    ? clearCatalogueEntry(form, { issuerName: value })
+    : editTokenIdentity(form, { issuerName: value });
+}
+
+export function changeTokenPlatform(form, catalogue, value) {
+  if (key(form.platform) === key(value)) return { ...form, platform: value };
+  const entry = catalogueEntry(catalogue, form.issuerName, value);
+  if (entry) return applyCatalogueEntry(form, entry);
+  return form.tokenCatalogueId
+    ? clearCatalogueEntry(form, { platform: value })
+    : editTokenIdentity(form, { platform: value });
+}
