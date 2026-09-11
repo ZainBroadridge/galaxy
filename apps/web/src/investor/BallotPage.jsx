@@ -81,7 +81,7 @@ export default function BallotPage() {
   }
 
   return <InvestorFrame event={event} hideNavigation><div className="investor-page-width investor-ballot-page">
-    <MeetingPageHeader event={event} showTags={false} />
+    <MeetingPageHeader event={event} showTags={false} showCusip={false} />
     <ErrorMessage error={view.error} />
     {view.loading && <ResourceSkeleton label="Loading meeting" rows={2} />}
     {event && <>
@@ -116,7 +116,10 @@ export default function BallotPage() {
           </fieldset>)}
         </section>
         <div className="investor-submit-row" ref={submitRowRef} tabIndex={-1}>
-          <span className="investor-muted">{choices.filter(Number.isInteger).length} of {event.proposals.length} proposals selected</span>
+          <div className="investor-submit-meta">
+            {event.cusip && <p className="investor-ballot-cusip">CUSIP: <strong>{event.cusip}</strong></p>}
+            <span className="investor-muted">{choices.filter(Number.isInteger).length} of {event.proposals.length} proposals selected</span>
+          </div>
           <div><button type="button" className="inv-button secondary" disabled={submitting || !canVote}
             onClick={() => { setChoices(event.proposals.map(() => null)); setError(null); }}>Reset All</button>
             <button className="inv-button investor-submit-button" type="submit" disabled={!complete || !canVote || submitting}>

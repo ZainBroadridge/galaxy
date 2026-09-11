@@ -74,7 +74,7 @@ export function MeetingTags({ platform, children }) {
   return <div className="investor-tags">{platform?.trim() && <span className="investor-tag">{platform.trim()}</span>}{children}</div>;
 }
 
-export function SecurityIdentity({ event }) {
+export function SecurityIdentity({ event, showCusip = true }) {
   const brand = eventIssuerBranding(event);
   const explorer = (import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://amoy.polygonscan.com').replace(/\/+$/u, '');
   const tokenLabel = `${event.tokenName}${event.tokenSymbol ? ` (${event.tokenSymbol})` : ''}`;
@@ -86,25 +86,25 @@ export function SecurityIdentity({ event }) {
         title={event.tokenAddress} target="_blank" rel="noopener noreferrer"
         aria-label={`View token contract for ${tokenLabel}: ${event.tokenAddress}`}>{tokenLabel}</a>
         : <span>{tokenLabel}</span>}</p>
-    {event.cusip && <p className="investor-cusip">Demo CUSIP: {event.cusip}</p>}
+    {showCusip && event.cusip && <p className="investor-cusip">Demo CUSIP: {event.cusip}</p>}
   </>;
 }
-export function MeetingIdentity({ event, showTags = false }) {
+export function MeetingIdentity({ event, showTags = true, showCusip = true }) {
   const presentation = meetingPresentation(event);
   return <header className="investor-meeting-identity">
     <div className="investor-title-row">
       {presentation.showIssuerByTitle && <IssuerLogo event={event} className="investor-issuer-logo" />}
       <h1>{event.title}</h1>
     </div>
-    <SecurityIdentity event={event} />
+    <SecurityIdentity event={event} showCusip={showCusip} />
     {showTags && <MeetingTags platform={presentation.platform} />}
     <p className="investor-muted">Voting deadline: {displayDate(event.votingEndAt)}</p>
   </header>;
 }
 
-export function MeetingPageHeader({ event, showTags = false }) {
+export function MeetingPageHeader({ event, showTags = false, showCusip = true }) {
   return <div className="investor-detail-heading">
     <BackLink to="/meetings?tab=active">Back to my meetings</BackLink>
-    {event && <MeetingIdentity event={event} showTags={showTags} />}
+    {event && <MeetingIdentity event={event} showTags={showTags} showCusip={showCusip} />}
   </div>;
 }

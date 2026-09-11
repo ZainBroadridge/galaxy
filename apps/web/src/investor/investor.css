@@ -167,6 +167,7 @@
 .investor-empty { margin: 32px 0 !important; color: #627383; font-size: 14px; width: 100%; text-align: center; }
 /* Ballot and web confirmation retain the service-provider palette. */
 .investor-ballot-page, .investor-confirmation { max-width: 1280px; padding-top: 12px; padding-bottom: 24px; }
+.investor-ballot-page { max-width: 1024px; }
 .investor-back { font-size: 14px; }
 .investor-detail-heading { display: grid; grid-template-columns: 64px minmax(0,1fr) 64px; align-items: start; gap: 16px; }
 .investor-app .investor-detail-heading > .portal-back { align-self: start; margin: 0; min-height: 28px; padding: 0; text-decoration: none; }
@@ -212,18 +213,19 @@
 .investor-holdings > span { overflow-wrap: anywhere; }
 .investor-holdings small { flex-basis: 100%; text-align: right; color: var(--inv-muted); font-size: 12px; }
 .investor-proposal { display: block; min-inline-size: 0; min-width: 0; padding: 24px; margin: 0; border: 0; border-bottom: 1px solid var(--inv-line); background: #fff; }
-/* Each row fills the ballot using its actual choices, with no unused track. */
-.investor-proposal-row { display: grid; grid-template-columns: minmax(0,1fr); gap: 16px; }
+/* Proposal copy on the left; one compact row of choices on the right. */
+.investor-proposal-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(340px,38%); align-items: center; gap: 24px; }
 .investor-proposal:last-child { border-bottom: 0; }
 .investor-proposal-copy { min-width: 0; }
-.investor-proposal h3 { font-size: 16px; font-weight: 500; line-height: 24px; overflow-wrap: anywhere; }
+.investor-proposal h3 { font-size: 15px; font-weight: 500; line-height: 22px; overflow-wrap: anywhere; }
 .investor-proposal p { margin-top: 8px; font-size: 14px; }
 .investor-proposal details { margin-top: 8px; }
 .investor-proposal summary { color: var(--inv-blue); cursor: pointer; text-decoration: underline; font-size: 14px; width: fit-content; }
 .investor-proposal details p { color: #4e5963; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
-.investor-options { display: grid; grid-template-columns: repeat(var(--proposal-option-columns,1),minmax(0,1fr)); grid-auto-rows: 1fr; align-items: stretch; gap: 12px; min-width: 0; width: 100%; }
-.investor-options label { color: #111; display: grid; grid-template-columns: 18px minmax(0,1fr); align-items: center; gap: 12px; font-size: 14px; font-weight: 400; line-height: 20px; cursor: pointer; min-height: 52px; min-width: 0; width: 100%; margin: 0; padding: 12px 16px; border: 1px solid #dce5ec; border-radius: 3px; background: #fff; }
-.investor-options label:has(input:checked) { background: #eef6fb; border-color: var(--pv-blue); }
+.investor-options { display: grid; grid-template-columns: repeat(var(--proposal-option-columns,1),minmax(0,1fr)); align-items: stretch; gap: 8px; min-width: 0; width: 100%; }
+.investor-options label { color: #111; display: grid; grid-template-columns: 17px minmax(0,1fr); align-items: center; gap: 8px; font-size: 14px; font-weight: 400; line-height: 20px; cursor: pointer; min-height: 44px; min-width: 0; width: 100%; margin: 0; padding: 4px 0; border: 0; border-radius: 2px; background: transparent; }
+.investor-proposal:not(:disabled) .investor-options label:hover { color: var(--pv-blue); }
+.investor-options label:has(input:checked) { color: var(--pv-blue); }
 .investor-options label:has(input:focus-visible) { outline: 2px solid var(--pv-blue); outline-offset: 2px; }
 .investor-options label span { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
 .investor-options input[type='radio'] { appearance: auto; -webkit-appearance: radio; width: 17px; height: 17px; margin: 0; padding: 0; min-height: 0; flex: 0 0 17px; accent-color: var(--pv-blue); box-shadow: none; }
@@ -231,6 +233,8 @@
 .investor-proposal:disabled .investor-options label { cursor: not-allowed; }
 .investor-submit-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 24px 0 12px; scroll-margin: 32px; font-size: 14px; }
 .investor-submit-row > div { display: flex; flex-wrap: wrap; gap: 16px; }
+.investor-submit-row > .investor-submit-meta { display: grid; gap: 4px; }
+.investor-ballot-cusip { margin: 0; color: #111; font-size: 16px; line-height: 24px; }
 .investor-submit-row .inv-button.secondary { min-width: 135px; }
 .investor-submit-row .investor-submit-button { min-width: 182px; gap: 16px; }
 .investor-confirmation .investor-meeting-identity { border-bottom: 1px solid var(--inv-line); padding-bottom: 24px; }
@@ -264,15 +268,13 @@
   .investor-holdings { justify-content: flex-start; }
   .investor-holdings small { text-align: left; }
 }
-@media (max-width: 1099px) {
-  .investor-options[data-count='4'] { grid-template-columns: repeat(2,minmax(0,1fr)); }
-}
 @media (max-width: 899px) {
   .investor-document-grid[data-count] { grid-template-columns: minmax(0,1fr); max-width: 640px; }
   .investor-document-grid a + a { border-left: 0; border-top: 1px solid var(--inv-line); }
 }
 @media (max-width: 767px) {
-  .investor-options[data-count='3'] { grid-template-columns: minmax(0,1fr); }
+  .investor-proposal-row { grid-template-columns: minmax(0,1fr); gap: 12px; }
+  .investor-options { max-width: 380px; justify-self: end; }
 }
 @media (max-width: 639px) {
   .investor-meetings { padding-top: 20px; padding-bottom: 40px; }
@@ -308,7 +310,8 @@
 .investor-notifications { padding-block: 24px; }
 
 @media (max-width: 479px) {
-  .investor-options[data-count] { grid-template-columns: minmax(0,1fr); }
+  .investor-options { gap: 6px; }
+  .investor-options label { gap: 6px; font-size: 13px; }
 }
 @media print {
   .portal-root:has(.investor-ballot-page),
@@ -318,5 +321,5 @@
   .investor-ballot-heading { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .investor-proposal { break-inside: avoid; padding: 16px; }
   .investor-options[data-count] { grid-template-columns: repeat(var(--proposal-option-columns,1),minmax(0,1fr)); gap: 8px; }
-  .investor-options label { padding: 8px; font-size: 12px; gap: 6px; }
+  .investor-options label { padding: 4px 0; font-size: 12px; gap: 6px; }
 }
