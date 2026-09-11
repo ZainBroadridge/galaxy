@@ -108,7 +108,7 @@ export default function BallotPage() {
               <p>Board Recommendation: <strong>{Number.isInteger(proposal.recommendation) ? proposal.options[proposal.recommendation]?.text ?? 'None' : 'None'}</strong></p>
               {proposal.description && <details><summary>More Details</summary><p>{proposal.description}</p></details>}</div>
             <div className="investor-options" data-count={proposal.options.length}
-              style={{ '--proposal-option-columns': proposal.options.length }}>{proposal.options.map((option, optionIndex) => <label key={optionIndex}>
+              tabIndex={0} role="group" aria-label={`Voting options for proposal ${proposalIndex + 1}`}>{proposal.options.map((option, optionIndex) => <label key={optionIndex}>
               <input type="radio" name={`proposal-${proposalIndex}`} value={optionIndex} checked={choices[proposalIndex] === optionIndex}
                 onChange={() => setChoices((current) => current.map((value, index) => index === proposalIndex ? optionIndex : value))} />
               <span>{option.text}</span>

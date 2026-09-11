@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MAX_OPTION_LABEL_LENGTH } from '@pv/shared';
+import { MAX_OPTION_LABEL_LENGTH, MAX_PROPOSAL_TITLE_LENGTH, proposalTextIssues } from '@pv/shared';
 import BackLink from '../components/BackLink.jsx';
 import { useDeadlineClock } from '../data/useDeadlineClock.js';
 import { meetingLifecycle } from '../investor/meeting-utils.js';
@@ -23,7 +23,7 @@ import {
 } from '../token-address.js';
 import { useWallet } from '../wallet.jsx';
 import IssuerBrandingFields from '../issuer/IssuerBrandingFields.jsx';
-import { applyCatalogueEntry, clearCatalogueEntry, selectedCatalogueEntry } from '../issuer/catalogue-form.js';
+import { applyCatalogueEntry, clearCatalogueEntry, editTokenIdentity, selectedCatalogueEntry } from '../issuer/catalogue-form.js';
 import RequiredMark from '../components/RequiredMark.jsx';
 import { eventProgress } from '../issuer/event-progress.js';
 import { scheduleCreationLimitNotice, visibleCreationNotice } from '../issuer/notice-state.js';
@@ -162,11 +162,13 @@ function ProposalEditor({ proposals, onChange }) {
         >Remove</button>}
       </div>
       <label><span className="field-label">Proposal title<RequiredMark /></span><input
-        maxLength={220}
+        maxLength={MAX_PROPOSAL_TITLE_LENGTH}
+        aria-describedby={`proposal-title-help-${proposalIndex}`}
+        aria-invalid={proposal.title.trim().length > MAX_PROPOSAL_TITLE_LENGTH}
         value={proposal.title}
         onChange={(event) => update(proposalIndex, { title: event.target.value })}
         required
-      /></label>
+      /><small id={`proposal-title-help-${proposalIndex}`} className="muted">{proposal.title.length}/{MAX_PROPOSAL_TITLE_LENGTH} characters. Put full details in Supporting text.</small></label>
       <label>Supporting text<textarea
         maxLength={5000}
         value={proposal.description}
@@ -179,6 +181,8 @@ function ProposalEditor({ proposals, onChange }) {
             maxLength={MAX_OPTION_LABEL_LENGTH}
             title={`Option label: maximum ${MAX_OPTION_LABEL_LENGTH} characters`}
             aria-label={`Option ${optionIndex + 1}`}
+            aria-describedby={`proposal-option-help-${proposalIndex}-${optionIndex}`}
+            aria-invalid={option.trim().length > MAX_OPTION_LABEL_LENGTH}
             value={option}
             onChange={(event) => update(proposalIndex, {
               options: proposal.options.map((value, index) => (
@@ -186,7 +190,7 @@ function ProposalEditor({ proposals, onChange }) {
               )),
             })}
             required
-          /></label>
+          /><small id={`proposal-option-help-${proposalIndex}-${optionIndex}`} className="muted">{option.length}/{MAX_OPTION_LABEL_LENGTH} characters</small></label>
           {proposal.options.length > 2 && <button
             type="button"
             className="icon-button"
@@ -243,6 +247,8 @@ export default function OrganiserDashboard() {
   const catalogue = useLoad(() => creating
     ? api('/v1/issuer/token-catalogue', { auth: false }) : Promise.resolve(null), [creating]);
   const selection = selectedCatalogueEntry(catalogue.data, form);
+  const mappedSelection = Boolean(form.tokenCatalogueId);
+  const canInspectToken = !mappedSelection || Boolean(selection?.configured);
   const [documents, setDocuments] = useState([]);
   const [issuerLogoFile, setIssuerLogoFile] = useState(null);
   const [token, setToken] = useState(null);
@@ -261,6 +267,7 @@ export default function OrganiserDashboard() {
     try {
       const latest = await catalogue.reload();
       setForm((current) => {
+        if (!current.tokenCatalogueId) return current;
         const entry = latest.entries.find((item) => item.id === current.tokenCatalogueId);
         return entry ? applyCatalogueEntry(current, entry) : clearCatalogueEntry(current);
       });
@@ -275,7 +282,7 @@ export default function OrganiserDashboard() {
   }
 
   const inspectTokenAddress = useCallback(async (rawValue) => {
-    if (!selection?.configured) return null;
+    if (!canInspectToken) return null;
     const validation = validateTokenAddressInput(rawValue);
     const requestId = inspectRequestRef.current + 1;
     inspectRequestRef.current = requestId;
@@ -305,7 +312,7 @@ export default function OrganiserDashboard() {
     } finally {
       if (inspectRequestRef.current === requestId) setInspectBusy(false);
     }
-  }, [selection]);
+  }, [canInspectToken]);
 
   useEffect(() => {
     if (automaticInspectTimerRef.current !== null) {
@@ -318,7 +325,7 @@ export default function OrganiserDashboard() {
     setToken(null);
     setInspectError(null);
 
-    if (!creating || !selection?.configured || !form.tokenAddress.trim()) return undefined;
+    if (!creating || !canInspectToken || !validateTokenAddressInput(form.tokenAddress).valid) return undefined;
 
     automaticInspectTimerRef.current = window.setTimeout(() => {
       automaticInspectTimerRef.current = null;
@@ -331,7 +338,7 @@ export default function OrganiserDashboard() {
         automaticInspectTimerRef.current = null;
       }
     };
-  }, [creating, form.tokenAddress, selection, inspectTokenAddress]);
+  }, [creating, form.tokenAddress, canInspectToken, inspectTokenAddress]);
 
   function inspect() {
     if (automaticInspectTimerRef.current !== null) {
@@ -360,7 +367,13 @@ export default function OrganiserDashboard() {
     setBusyStage('Creating event…');
     setError(null);
     try {
-      if (!selection?.configured) throw new Error('Select a configured token mapping before creating an event.');
+      const proposalIssues = proposalTextIssues(form.proposals);
+      if (proposalIssues.length) throw new Error(proposalIssues[0].message);
+      if (!canInspectToken) throw new Error('Select a configured mapping or enter custom token details.');
+      if (!form.issuerName.trim()) throw new Error('Enter the issuer name.');
+      if (!/^[A-Z0-9]{1,9}$/u.test(form.cusip.trim().toUpperCase())) {
+        throw new Error('Enter a demo CUSIP using up to 9 letters or digits.');
+      }
       const tokenAddress = validateTokenAddressInput(form.tokenAddress);
       if (!tokenAddress.valid) throw new Error(tokenAddress.message);
 
@@ -381,6 +394,8 @@ export default function OrganiserDashboard() {
         body: {
           creatorAddress: wallet.account,
           ...form,
+          tokenCatalogueId: form.tokenCatalogueId || null,
+          cusip: form.cusip.trim().toUpperCase(),
           issuerLogoId,
           tokenAddress: tokenAddress.tokenAddress,
           recordDateAt: iso(form.recordDateAt),
@@ -498,9 +513,10 @@ export default function OrganiserDashboard() {
             <label className="create-token-address-field"><span className="field-label">ERC-20 token address<RequiredMark /></span><div className="create-token-input">
               <input
                 value={form.tokenAddress}
-                readOnly
-                aria-label="ERC-20 token address from selected catalogue mapping"
-                placeholder="Select an issuer and platform above"
+                onChange={(event) => setForm((current) => editTokenIdentity(current, { tokenAddress: event.target.value }))}
+                disabled={Boolean(busyStage)}
+                aria-label="ERC-20 token address"
+                placeholder="Select a preset or enter an ERC-20 address"
                 autoCapitalize="none"
                 autoComplete="off"
                 autoCorrect="off"
@@ -511,7 +527,7 @@ export default function OrganiserDashboard() {
                 type="button"
                 className="create-token-inspect-button"
                 onClick={inspect}
-                disabled={!selection?.configured || inspectBusy}
+                disabled={!canInspectToken || inspectBusy || Boolean(busyStage)}
                 aria-busy={inspectBusy}
                 aria-label="Inspect ERC-20 token"
                 title="Inspect ERC-20 token"

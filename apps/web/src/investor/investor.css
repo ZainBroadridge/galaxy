@@ -214,7 +214,7 @@
 .investor-holdings small { flex-basis: 100%; text-align: right; color: var(--inv-muted); font-size: 12px; }
 .investor-proposal { display: block; min-inline-size: 0; min-width: 0; padding: 24px; margin: 0; border: 0; border-bottom: 1px solid var(--inv-line); background: #fff; }
 /* Proposal copy on the left; one compact row of choices on the right. */
-.investor-proposal-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(340px,38%); align-items: center; gap: 24px; }
+.investor-proposal-row { display: grid; grid-template-columns: minmax(0,45fr) minmax(0,55fr); align-items: center; gap: 20px; }
 .investor-proposal:last-child { border-bottom: 0; }
 .investor-proposal-copy { min-width: 0; }
 .investor-proposal h3 { font-size: 15px; font-weight: 500; line-height: 22px; overflow-wrap: anywhere; }
@@ -222,12 +222,14 @@
 .investor-proposal details { margin-top: 8px; }
 .investor-proposal summary { color: var(--inv-blue); cursor: pointer; text-decoration: underline; font-size: 14px; width: fit-content; }
 .investor-proposal details p { color: #4e5963; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
-.investor-options { display: grid; grid-template-columns: repeat(var(--proposal-option-columns,1),minmax(0,1fr)); align-items: stretch; gap: 8px; min-width: 0; width: 100%; }
-.investor-options label { color: #111; display: grid; grid-template-columns: 17px minmax(0,1fr); align-items: center; gap: 8px; font-size: 14px; font-weight: 400; line-height: 20px; cursor: pointer; min-height: 44px; min-width: 0; width: 100%; margin: 0; padding: 4px 0; border: 0; border-radius: 2px; background: transparent; }
+/* Natural label widths prevent long choices being squeezed into equal cells.
+   Narrow screens and older long labels can scroll without hiding vote text. */
+.investor-options { display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 18px; min-width: 0; width: 100%; overflow-x: auto; padding: 4px; overscroll-behavior-x: contain; }
+.investor-options label { color: #111; display: inline-flex; flex: 0 0 auto; align-items: center; gap: 8px; font-size: 14px; font-weight: 400; line-height: 20px; white-space: nowrap; cursor: pointer; min-height: 44px; width: auto; margin: 0; padding: 4px 0; border: 0; border-radius: 2px; background: transparent; }
 .investor-proposal:not(:disabled) .investor-options label:hover { color: var(--pv-blue); }
 .investor-options label:has(input:checked) { color: var(--pv-blue); }
 .investor-options label:has(input:focus-visible) { outline: 2px solid var(--pv-blue); outline-offset: 2px; }
-.investor-options label span { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+.investor-options label span { overflow-wrap: normal; word-break: normal; white-space: nowrap; }
 .investor-options input[type='radio'] { appearance: auto; -webkit-appearance: radio; width: 17px; height: 17px; margin: 0; padding: 0; min-height: 0; flex: 0 0 17px; accent-color: var(--pv-blue); box-shadow: none; }
 .investor-proposal:disabled .investor-options { opacity: .6; }
 .investor-proposal:disabled .investor-options label { cursor: not-allowed; }
@@ -272,9 +274,9 @@
   .investor-document-grid[data-count] { grid-template-columns: minmax(0,1fr); max-width: 640px; }
   .investor-document-grid a + a { border-left: 0; border-top: 1px solid var(--inv-line); }
 }
-@media (max-width: 767px) {
+@media (max-width: 899px) {
   .investor-proposal-row { grid-template-columns: minmax(0,1fr); gap: 12px; }
-  .investor-options { max-width: 380px; justify-self: end; }
+  .investor-options { justify-self: stretch; }
 }
 @media (max-width: 639px) {
   .investor-meetings { padding-top: 20px; padding-bottom: 40px; }
@@ -310,7 +312,7 @@
 .investor-notifications { padding-block: 24px; }
 
 @media (max-width: 479px) {
-  .investor-options { gap: 6px; }
+  .investor-options { gap: 14px; }
   .investor-options label { gap: 6px; font-size: 13px; }
 }
 @media print {
@@ -320,6 +322,8 @@
   .investor-ballot-page .investor-submit-row { break-inside: avoid; }
   .investor-ballot-heading { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .investor-proposal { break-inside: avoid; padding: 16px; }
-  .investor-options[data-count] { grid-template-columns: repeat(var(--proposal-option-columns,1),minmax(0,1fr)); gap: 8px; }
-  .investor-options label { padding: 4px 0; font-size: 12px; gap: 6px; }
+  .investor-proposal-row { grid-template-columns: minmax(0,1fr); }
+  .investor-options { flex-wrap: wrap; overflow: visible; justify-content: flex-start; gap: 8px 18px; }
+  .investor-options label { flex: 0 1 auto; min-width: 0; padding: 4px 0; font-size: 12px; gap: 6px; }
+  .investor-options label span { white-space: normal; overflow-wrap: anywhere; }
 }

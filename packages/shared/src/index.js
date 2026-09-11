@@ -5,6 +5,7 @@ export * from './communication.js';
 export * from './constants.js';
 export * from './merkle.js';
 export * from './proposal-config.js';
+export * from './proposal-text.js';
 export * from './token.js';
 export * from './typed-data.js';
 export * from './ballot-labels.js';
