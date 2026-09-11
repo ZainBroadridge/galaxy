@@ -5,7 +5,7 @@ import { eventProgress } from '../../web/src/issuer/event-progress.js';
 import { visibleCreationNotice } from '../../web/src/issuer/notice-state.js';
 import { searchIssuers } from '../../web/src/issuer/issuer-search.js';
 import { meetingPresentation } from '../../web/src/investor/presentation.js';
-import { ISSUER_PRESETS, issuerPreset } from '../../../packages/shared/src/issuer-branding.js';
+import { ISSUER_PRESETS } from '../../../packages/shared/src/issuer-branding.js';
 
 const read = (path) => readFile(new URL(`../../../${path}`, import.meta.url), 'utf8');
 const now = Date.parse('2026-09-09T10:00:00Z');
@@ -40,8 +40,7 @@ test('fuzzy suggestions handle common typos, aliases and tickers without mutatin
   }
   assert.equal(searchIssuers(ISSUER_PRESETS, 'zzzzzzzzzz').length, 0);
   assert.equal(searchIssuers(ISSUER_PRESETS, '').length, 6);
-  assert.equal(searchIssuers(ISSUER_PRESETS, 'disney').length, 0);
-  assert.equal(issuerPreset('Disney').id, 'disney', 'historical reports retain their catalog');
+  assert.deepEqual(searchIssuers(ISSUER_PRESETS, ''), [...ISSUER_PRESETS]);
 });
 test('platform branding uses one header logo and shows the issuer by the title only when needed', () => {
   for (const platform of ['', '   ', undefined]) {

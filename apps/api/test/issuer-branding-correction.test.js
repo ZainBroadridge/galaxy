@@ -15,7 +15,7 @@ test('legal issuer names normalize exact aliases without guessing token affiliat
   assert.equal(issuerBranding({ issuerName: 'Apple' }).issuerName, 'Apple Inc.');
   assert.equal(issuerPreset('  Tesla, Inc. ').name, 'Tesla, Inc.');
   assert.equal(issuerPreset('NVIDIA').name, 'NVIDIA Corporation');
-  assert.equal(issuerPreset('Disney').name, 'The Walt Disney Company');
+  assert.equal(issuerPreset('Oracle').name, 'Oracle Corporation');
   assert.equal(issuerPreset('AAPL.d'), null);
   assert.equal(issuerPreset('Suspicious Apple Fund'), null);
 });

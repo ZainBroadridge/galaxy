@@ -47,7 +47,7 @@ export async function syncArtwork({ fromDirectory = null, fetcher = fetch } = {}
     }
     pending.push({ item, bytes });
   }
-  // Decode all seven using the existing PDF library before any files are written.
+  // Decode every configured logo before any files are written.
   // This also verifies that the same bytes will work in the receipt writer.
   const { PDFDocument } = await import('pdf-lib');
   for (const { item, bytes } of pending) {
@@ -63,7 +63,7 @@ export async function syncArtwork({ fromDirectory = null, fetcher = fetch } = {}
   }
   const report = pending.map(({ item, bytes }) => ({ id: item.id, filename: item.filename, source: item.source, sha256: sha256(bytes) }));
   await writeFile(path.join(root, 'docs/brand-sources/installed-artwork.json'), `${JSON.stringify(report, null, 2)}\n`);
-  console.log('All seven issuer logos installed identically for browser and PDF. No runtime hotlinks.');
+  console.log(`All ${pending.length} issuer logos installed identically for browser and PDF. No runtime hotlinks.`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -73,7 +73,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   } else {
     syncArtwork({ fromDirectory: args[1] ? path.resolve(args[1]) : null }).catch((error) => {
       console.error(`Artwork import stopped: ${error.message}`);
-      console.error('Do not deploy missing artwork. Use your approved network or --from-dir with tesla.png, alphabet.png, disney.png, spacex.png, oracle.png. No placeholder is substituted.');
+      const names = manifest.filter((item) => item.downloadUrl).map((item) => `${item.id}.png`).join(', ');
+      console.error(`Do not deploy missing artwork. Use your approved network or --from-dir with ${names}. No placeholder is substituted.`);
       process.exitCode = 1;
     });
   }

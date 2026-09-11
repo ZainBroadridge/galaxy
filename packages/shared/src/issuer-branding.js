@@ -14,7 +14,6 @@ export const ISSUER_PRESETS = Object.freeze([
   preset('alphabet', 'Alphabet Inc.', ['alphabet', 'alphabet inc', 'google'], '#ed1c24', '#b41920', [
     ['GOOGL', 'Class A Common Stock'], ['GOOG', 'Class C Capital Stock'],
   ]),
-  preset('disney', 'The Walt Disney Company', ['walt disney', 'the walt disney company', 'walt disney company', 'disney'], '#111111', '#111111', [['DIS', 'Common Stock']]),
   preset('spacex', 'Space Exploration Technologies Corp.', ['spacex', 'space exploration technologies', 'space exploration technologies corp'], '#111111', '#111111', [['SPCX', 'Class A Common Stock']]),
   preset('oracle', 'Oracle Corporation', ['oracle', 'oracle corporation', 'oracle corp'], '#c74634', '#aa3627', [['ORCL', 'Common Stock']]),
 ]);

@@ -28,8 +28,7 @@ import RequiredMark from '../components/RequiredMark.jsx';
 import { eventProgress } from '../issuer/event-progress.js';
 import { scheduleCreationLimitNotice, visibleCreationNotice } from '../issuer/notice-state.js';
 
-const MAX_DOCUMENTS = 3;
-const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+import { appendPdfSelection, MAX_DOCUMENTS } from '../issuer/document-selection.js';
 const localDate = (date) => new Date(
   date.getTime() - date.getTimezoneOffset() * 60_000,
 ).toISOString().slice(0, 16);
@@ -59,7 +58,7 @@ const initialForm = () => ({
   }],
 });
 
-const DEMO_RECORD_AGE_MS = 2 * 60 * 60_000;
+const DEMO_RECORD_AGE_MS = 24 * 60 * 60_000;
 const DEMO_START_DELAY_MS = 5 * 60_000;
 const DEMO_END_DELAY_MS = 60 * 60_000;
 
@@ -115,23 +114,6 @@ function demoForm(current) {
   };
 }
 
-function validateDocuments(files, existingCount = 0) {
-  const selected = [...files];
-  if (existingCount + selected.length > MAX_DOCUMENTS) {
-    throw new Error(`An event can contain at most ${MAX_DOCUMENTS} PDF documents.`);
-  }
-  selected.forEach((file) => {
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      throw new Error(`${file.name} is not a PDF.`);
-    }
-    if (file.size === 0 || file.size > MAX_DOCUMENT_BYTES) {
-      throw new Error(`${file.name} must be no larger than 10 MB.`);
-    }
-  });
-  return selected;
-}
-
-
 function DocumentIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M6.5 3.5h7l4 4v13H6.5z" />
@@ -152,13 +134,13 @@ function SearchIcon() {
   </svg>;
 }
 
-function DocumentSelection({ files, onRemove }) {
+function DocumentSelection({ files, onRemove, disabled = false }) {
   if (!files.length) return null;
   return <div className="selected-documents">
-    {files.map((file, index) => <div key={`${file.name}-${file.size}`}>
+    {files.map((file, index) => <div key={JSON.stringify([file.name, file.size, file.lastModified ?? 0])}>
       <span>{file.name}</span>
       <small>{(file.size / 1024 / 1024).toFixed(2)} MB</small>
-      <button type="button" className="text-button danger" onClick={() => onRemove(index)}>Remove</button>
+      <button type="button" className="text-button danger" disabled={disabled} onClick={() => onRemove(index)}>Remove</button>
     </div>)}
   </div>;
 }
@@ -360,12 +342,14 @@ export default function OrganiserDashboard() {
   }
 
   function chooseDocuments(event) {
+    const input = event.currentTarget;
+    const selected = Array.from(input.files ?? []);
+    input.value = '';
+    if (!selected.length) return;
     try {
-      setDocuments(validateDocuments(event.target.files));
+      setDocuments(appendPdfSelection(documents, selected));
       setError(null);
     } catch (value) {
-      event.target.value = '';
-      setDocuments([]);
       setError(value);
     }
   }
@@ -612,11 +596,12 @@ export default function OrganiserDashboard() {
             </div>
             <label className="button secondary file-button">
               {documents.length ? `${documents.length} PDF${documents.length === 1 ? '' : 's'} selected` : 'Select PDFs'}
-              <input type="file" accept="application/pdf,.pdf" multiple onChange={chooseDocuments} />
+              <input type="file" accept="application/pdf,.pdf" multiple onChange={chooseDocuments} disabled={Boolean(busyStage)} />
             </label>
           </div>
           <DocumentSelection
             files={documents}
+            disabled={Boolean(busyStage)}
             onRemove={(index) => setDocuments((current) => current.filter((_file, position) => position !== index))}
           />
           <div className={`automatic-notice-row${announcementEnabled ? '' : ' is-disabled'}`}>
@@ -729,12 +714,14 @@ export function OrganiserEventPage() {
   }
 
   function chooseAdditionalDocuments(event) {
+    const input = event.currentTarget;
+    const selected = Array.from(input.files ?? []);
+    input.value = '';
+    if (!selected.length) return;
     try {
-      setDocumentFiles(validateDocuments(event.target.files, view.data?.documents?.length ?? 0));
+      setDocumentFiles(appendPdfSelection(documentFiles, selected, view.data?.documents?.length ?? 0));
       setDocumentFeedback(null);
     } catch (value) {
-      event.target.value = '';
-      setDocumentFiles([]);
       setDocumentFeedback({ tone: 'error', message: value.message });
     }
   }
@@ -745,11 +732,14 @@ export function OrganiserEventPage() {
     setDocumentFeedback(null);
     try {
       if (!wallet.account) throw new Error('Connect the event creator wallet first.');
-      for (const file of documentFiles) await uploadEventPdf(eventId, file, wallet.account);
-      setDocumentFiles([]);
+      for (const file of documentFiles) {
+        await uploadEventPdf(eventId, file, wallet.account);
+        setDocumentFiles((current) => current.filter((item) => item !== file));
+      }
       await view.reload();
       setDocumentFeedback({ tone: 'success', message: 'Proxy voting documents uploaded successfully.' });
     } catch (error) {
+      await view.reload().catch(() => {});
       setDocumentFeedback({ tone: 'error', message: error.message });
     } finally {
       setDocumentBusy(false);
@@ -929,11 +919,12 @@ export function OrganiserEventPage() {
         </div>
         <label className="button secondary compact file-button">
           Select PDF{documentSlots > 1 ? 's' : ''}
-          <input type="file" accept="application/pdf,.pdf" multiple={documentSlots > 1} onChange={chooseAdditionalDocuments} />
+          <input type="file" accept="application/pdf,.pdf" multiple={documentSlots > 1} onChange={chooseAdditionalDocuments} disabled={documentBusy} />
         </label>
       </div>}
       <DocumentSelection
         files={documentFiles}
+        disabled={documentBusy}
         onRemove={(index) => setDocumentFiles((current) => current.filter((_file, position) => position !== index))}
       />
       {documentFiles.length > 0 && <button className="button" onClick={uploadDocuments} disabled={documentBusy}>

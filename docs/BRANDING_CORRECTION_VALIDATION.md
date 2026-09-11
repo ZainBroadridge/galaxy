@@ -24,7 +24,7 @@
 
 The full API command ran 97 tests: 94 passed, 3 failed. Two could not import the
 uninstalled workspace/dependency packages (`@pv/shared` and `zod`). The third is
-intentionally the seven-logo test: the remaining five PNGs are not installed in
+intentionally the configured-artwork test: required PNGs were not installed in
 this container. It was NOT disabled or weakened to manufacture a green suite.
 
 The asset release gate correctly fails for the five unimported logo files and
@@ -37,7 +37,7 @@ but the original redesign still requires its v4 compilation if not done earlier.
 ## Required before release
 
 1. Restore dependencies with the repository's locked versions and approved registry.
-2. Import and review all seven logos and self-hosted fonts; pass the asset gate.
+2. Import and review all configured logos and self-hosted fonts; pass the asset gate.
 3. Apply additive migration 007 to staging (006 must already be applied).
 4. Run the full API suite and production web build with no failures.
 5. Create an Apple event and an NVIDIA event; then exercise the other five presets.

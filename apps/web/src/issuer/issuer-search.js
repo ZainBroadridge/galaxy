@@ -43,8 +43,7 @@ function rank(catalog, value, termsFor, limit) {
 
 /** Search is a presentation aid, never proof of an issuer's identity. */
 export function searchIssuers(catalog, value, limit = 6) {
-  // Preserve historical Disney branding; omit it only from new-event suggestions.
-  return rank(catalog.filter((issuer) => issuer.id !== 'disney'), value, (issuer) => [
+  return rank(catalog, value, (issuer) => [
     issuer.id, issuer.name, ...(issuer.aliases ?? []), ...(issuer.securities ?? []).map((security) => security.ticker),
   ], limit);
 }

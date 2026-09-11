@@ -32,7 +32,7 @@
 .investor-info-note { background: #f3f7fa; border-left: 3px solid var(--inv-blue); padding: 16px 20px; font-size: 14px; margin: 24px 0; }
 .investor-skip { position: fixed; top: -80px; left: 16px; z-index: 999; padding: 12px; background: #fff; }
 .investor-skip:focus { top: 12px; }
-.investor-utility { background: linear-gradient(to right,#0076b0,#0067a0 50%,#00588f); color: #fff; }
+.investor-utility { background: var(--pv-blue-band); color: #fff; }
 .investor-utility-inner { max-width: 1280px; margin-inline: auto; padding: 8px 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; font: 14px/1.5 Calibri, Carlito, 'Segoe UI', sans-serif; }
 .investor-utility button { background: none; border: 0; color: #fff; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
 .investor-brand-band { background: #f6f5f1; padding: 28px 16px; }
@@ -158,10 +158,13 @@
 .investor-tag.muted { color: #536472; background: #f4f6f8; border-color: #d5dce2; }
 .investor-security-name { font-weight: 600; }
 .investor-token-name { color: #636363; display: flex; align-items: baseline; justify-content: inherit; flex-wrap: wrap; column-gap: 10px; row-gap: 4px; }
-.investor-token-address { font-size: 12px; overflow-wrap: anywhere; word-break: break-word; }
+.investor-app .investor-token-link,
+.investor-app .investor-token-link:hover,
+.investor-app .investor-token-link:focus,
+.investor-app .investor-token-link:visited { text-decoration: none; overflow-wrap: anywhere; }
 .investor-meeting-identity .investor-token-name { justify-content: center; }
 .investor-cusip { color: #667085; font-size: 12px; }
-.investor-empty { margin: 32px 0 !important; color: #627383; font-size: 14px; }
+.investor-empty { margin: 32px 0 !important; color: #627383; font-size: 14px; width: 100%; text-align: center; }
 /* Ballot and web confirmation retain the service-provider palette. */
 .investor-ballot-page, .investor-confirmation { padding-top: 24px; padding-bottom: 24px; }
 .investor-back { font-size: 14px; }
@@ -193,7 +196,7 @@
 .investor-document-grid a > svg:first-child { width: 32px; height: 40px; }
 .investor-document-grid a > svg:last-child { width: 14px; height: 14px; }
 .investor-ballot { border: 1px solid var(--inv-line); border-radius: 6px; overflow: hidden; }
-.investor-ballot-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; background: var(--inv-navy); padding: 16px 24px; color: #fff; }
+.investor-ballot-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; background: var(--pv-blue-band); padding: 16px 24px; color: #fff; }
 .investor-ballot-heading > div { min-width: 0; }
 .investor-ballot-heading h2 { font-size: 20px; line-height: 28px; color: #fff; }
 .investor-ballot-heading p { font-size: 14px; line-height: 21px; margin-top: 4px; color: #edf2f7; }
@@ -201,8 +204,8 @@
 .investor-holdings > span { overflow-wrap: anywhere; }
 .investor-holdings small { flex-basis: 100%; text-align: right; color: var(--inv-muted); font-size: 12px; }
 .investor-proposal { display: block; min-inline-size: 0; min-width: 0; padding: 24px; margin: 0; border: 0; border-bottom: 1px solid var(--inv-line); background: #fff; }
-.investor-proposal-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 55%); align-items: center; gap: 24px; }
-.investor-proposal-row[data-expanded='true'] { grid-template-columns: minmax(0,1fr); gap: 12px; }
+/* The full-width choice matrix uses the same tracks for every proposal. */
+.investor-proposal-row { display: grid; grid-template-columns: minmax(0,1fr); gap: 16px; }
 .investor-proposal:last-child { border-bottom: 0; }
 .investor-proposal-copy { min-width: 0; }
 .investor-proposal h3 { font-size: 16px; font-weight: 500; line-height: 24px; overflow-wrap: anywhere; }
@@ -210,10 +213,12 @@
 .investor-proposal details { margin-top: 8px; }
 .investor-proposal summary { color: var(--inv-blue); cursor: pointer; text-decoration: underline; font-size: 14px; width: fit-content; }
 .investor-proposal details p { color: #4e5963; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
-.investor-options { display: grid; grid-template-columns: repeat(var(--option-count,3),minmax(0,1fr)); align-items: center; gap: 12px 20px; min-width: 0; }
-.investor-options label { color: #111; display: flex; align-items: center; gap: 10px; font-size: 14px; line-height: 20px; cursor: pointer; min-height: 40px; min-width: 0; margin: 0; padding: 6px 0; }
+.investor-options { display: grid; grid-template-columns: repeat(var(--ballot-option-columns,4),minmax(0,1fr)); align-items: stretch; gap: 8px 12px; min-width: 0; width: 100%; }
+.investor-options label { color: #111; display: grid; grid-template-columns: 18px minmax(0,1fr); align-items: center; gap: 10px; font-size: 14px; line-height: 20px; cursor: pointer; min-height: 48px; min-width: 0; margin: 0; padding: 10px 12px; border: 1px solid #dce5ec; border-radius: 3px; background: #fff; }
+.investor-options label:has(input:checked) { background: #eef6fb; border-color: var(--pv-blue); }
+.investor-options label:has(input:focus-visible) { outline: 2px solid var(--pv-blue); outline-offset: 2px; }
 .investor-options label span { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
-.investor-options input[type='radio'] { appearance: auto; -webkit-appearance: radio; width: 17px; height: 17px; margin: 0; padding: 0; min-height: 0; flex: 0 0 17px; accent-color: var(--inv-blue); box-shadow: none; }
+.investor-options input[type='radio'] { appearance: auto; -webkit-appearance: radio; width: 17px; height: 17px; margin: 0; padding: 0; min-height: 0; flex: 0 0 17px; accent-color: var(--pv-blue); box-shadow: none; }
 .investor-proposal:disabled .investor-options { opacity: .6; }
 .investor-submit-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 24px 0 12px; scroll-margin: 32px; font-size: 14px; }
 .investor-submit-row > div { display: flex; flex-wrap: wrap; gap: 16px; }
@@ -246,11 +251,12 @@
 .investor-proxy-help-positioner .investor-proxy-help-arrow { position: absolute; left: var(--help-arrow-left,50%); bottom: -11px; width: 22px; height: 11px; fill: #fff; stroke: none; }
 .investor-proxy-help-positioner[data-side='bottom'] .investor-proxy-help-arrow { top: -11px; bottom: auto; transform: rotate(180deg); }
 @media (max-width: 820px) {
-  .investor-proposal-row { grid-template-columns: minmax(0,1fr); gap: 12px; }
-  .investor-options { grid-template-columns: repeat(2,minmax(0,1fr)); width: 100%; }
   .investor-navigation { gap: 4px 32px; }
   .investor-holdings { justify-content: flex-start; }
   .investor-holdings small { text-align: left; }
+}
+@media (max-width: 767px) {
+  .investor-options { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 @media (max-width: 639px) {
   .investor-meetings { padding-top: 20px; padding-bottom: 40px; }
@@ -271,7 +277,6 @@
   .investor-holdings, .investor-proposal { padding: 16px; }
   .investor-documents h2 { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 20px; }
   .investor-document-grid, .investor-document-grid[data-count='2'] { grid-template-columns: minmax(0,1fr); max-width: 420px; }
-  .investor-options { grid-template-columns: minmax(0,1fr); }
   .investor-submit-row > div { width: 100%; }
   .investor-submit-row .inv-button { flex: 1; min-width: 0; padding: 12px; }
   .investor-transaction-card { padding: 12px 16px; }
@@ -284,3 +289,17 @@
 }
 
 .investor-notifications { padding-block: 24px; }
+
+@media (max-width: 479px) {
+  .investor-options { grid-template-columns: minmax(0,1fr); }
+}
+@media print {
+  .portal-root:has(.investor-ballot-page),
+  .investor-app:has(.investor-ballot-page) { display: block; min-height: 0; }
+  .portal-root:has(.investor-ballot-page) .portal-footer { margin-top: 20px; break-inside: avoid; }
+  .investor-ballot-page .investor-submit-row { break-inside: avoid; }
+  .investor-ballot-heading { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .investor-proposal { break-inside: avoid; padding: 16px; }
+  .investor-options { grid-template-columns: repeat(var(--ballot-option-columns,4),minmax(0,1fr)); gap: 8px; }
+  .investor-options label { padding: 8px; font-size: 12px; gap: 6px; }
+}

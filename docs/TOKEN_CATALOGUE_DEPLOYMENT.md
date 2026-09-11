@@ -128,7 +128,7 @@ Check:
   or created. Configured token inspection still runs normally.
 - Dummy agenda contains no Galaxy/company-specific copy and does not reset mapping.
 - New event row contains token_catalogue_id and cusip. Older events still render.
-- Ballot shows tokenised stock plus its full address; Back is aligned and not underlined.
+- Ballot shows a linked token name with its address on hover and no platform tag; Back is aligned and not underlined.
 - Completed creation shows success, no progress bar; voting lifecycle stays separate.
 - Results headings are centered; PDF downloads retain their existing design.
 

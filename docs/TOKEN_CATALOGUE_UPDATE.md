@@ -111,8 +111,9 @@ regression fixtures as part of that reviewed change; do not weaken mismatch guar
   lose their redundant welcome/home links. Login-gate Back still returns to investors.
 - Ballot and confirmation share a centered identity/header with a left-side Back.
   The repeated deadline is removed. Scheduled meetings still show their opening time.
-- Tokenised stock is labeled explicitly, with the full clickable token contract
-  address beside the token name. Demo CUSIP appears for catalogue-created events.
+- Tokenised stock is labeled explicitly. Its name links to the token contract,
+  with the full address in its hover tooltip rather than printed beside it.
+  Demo CUSIP appears for catalogue-created events.
 - New option labels are limited to 24 characters and one line in the creation API
   and form. Equal-width choice columns use extra horizontal room for long/4-option
   rows, then stack at narrow breakpoints. Old signed/deployed option text is never

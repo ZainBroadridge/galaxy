@@ -29,20 +29,24 @@ test('investor headers select the supplied mark in normal and inverse variants',
     read('apps/web/src/investor/LandingPage.jsx'),
   ]);
   assert.match(brand, /function ProxyVoteMark\(\{ inverse = false, variant = 'default' \}\)/u);
-  assert.match(brand, /inverse \? '\/proxyvote-landing-mark\.svg'\s*: variant === 'investor' \? '\/proxyvote-voter-mark\.svg' : '\/proxyvote-mark\.svg'/u);
+  assert.match(brand, /inverse \? '\/proxyvote-landing-mark\.svg'\s*: variant === 'investor' \? '\/proxyvote-voter-mask\.svg' : '\/proxyvote-mark\.svg'/u);
   assert.match(brand, /children \?\? <ProxyVoteMark inverse=\{inverse\} \/>/u);
   assert.match(frame, /<ProxyVoteMark inverse=\{inverse\} variant="investor" \/>/u);
   assert.match(landing, /<BrandBand inverse \/>/u);
   assert.match(frame, /<BrandBand event=\{event\} \/>/u);
 });
 
-test('logo dimensions and the existing white-on-blue treatment remain intact', async () => {
+test('logo dimensions remain intact while service blue and inverse white use the same artwork mask', async () => {
   const [brand, css] = await Promise.all([
     read('apps/web/src/components/BrandLockup.jsx'),
     read('apps/web/src/components/brand.css'),
   ]);
-  assert.match(brand, /className="proxyvote-artwork" src=\{src\} alt="ProxyVote" width="158" height="58"/u);
-  assert.match(css, /\.brand-lockup\.inverse \.proxyvote-artwork \{ filter: brightness\(0\) invert\(1\); \}/u);
+  assert.match(brand, /className="proxyvote-artwork" role="img" aria-label="ProxyVote"/u);
+  assert.match(brand, /'--proxyvote-source': `url\("\$\{src\}"\)`/u);
+  assert.match(css, /\.brand-lockup\.inverse \.proxyvote-artwork \{ background: #fff; \}/u);
+  assert.match(css, /width: 158px; height: 58px; aspect-ratio: 158 \/ 58/u);
+  assert.match(css, /mask-mode: alpha/u);
+  assert.match(css, /mask-image: var\(--proxyvote-source\)/u);
   assert.match(css, /object-fit: contain/u);
 });
 
@@ -79,4 +83,15 @@ test('generic voter pages share the corrected header while event and issuer bran
     const source = await read(`apps/web/src/issuer/${page}.jsx`);
     assert.doesNotMatch(source, /variant="investor"|proxyvote-voter-mark/u, page);
   }
+});
+
+
+test('blue mask derives smooth coverage from the supplied artwork without changing the original image', async () => {
+  const mask = await read('apps/web/public/proxyvote-voter-mask.svg');
+  const original = await read('apps/web/public/proxyvote-voter-mark.svg');
+  const imagePattern = /href="data:image\/png;base64,([A-Za-z0-9+/=]+)"/u;
+  assert.equal(mask.match(imagePattern)[1], original.match(imagePattern)[1]);
+  assert.match(mask, /color-interpolation-filters="sRGB"/u);
+  assert.match(mask, /<feComposite in2="SourceGraphic" operator="in"/u);
+  assert.doesNotMatch(mask, /<script|<foreignObject|<text|<path|href="https?:/u);
 });

@@ -94,7 +94,7 @@ test('server-accepted participation immediately updates meeting categories witho
 
 test('issuer and supported-platform suggestions share typo-tolerant matching', () => {
   assert.equal(searchIssuers(ISSUER_PRESETS, 'tesal')[0].id, 'tesla');
-  assert.equal(searchIssuers(ISSUER_PRESETS, 'disney').length, 0);
+  assert.deepEqual(searchIssuers(ISSUER_PRESETS, ''), [...ISSUER_PRESETS]);
   assert.equal(searchPlatforms(TOKEN_PLATFORMS, 'coinbsae')[0], 'Coinbase');
   assert.equal(searchPlatforms(TOKEN_PLATFORMS, 'dinrai')[0], 'Dinari');
   assert.equal(searchPlatforms(TOKEN_PLATFORMS, 'krakn').length, 0);
@@ -139,7 +139,9 @@ test('layout uses a single shared footer and accessible fieldset inner grids', a
   assert.equal((app.match(/<SiteFooter \/>/gu) ?? []).length, 1);
   assert.doesNotMatch(frame, /<footer|<InvestorFooter/u); assert.doesNotMatch(issuer, /<footer/u);
   assert.match(footer, /All rights reserved/u);
-  assert.match(ballot, /<div className="investor-proposal-row" data-expanded=/u);
+  assert.match(ballot, /<div className="investor-proposal-row">/u);
+  assert.doesNotMatch(ballot, /data-expanded|'--option-count'/u);
+  assert.match(ballot, /'--ballot-option-columns': optionColumns/u);
   assert.match(css, /\.investor-proposal-row \{ display: grid/u);
   assert.match(css, /background: #f6f5f1/u);
   assert.doesNotMatch(ballot, /Meeting Agenda|Current holdings do not change|Reconnect your investor wallet/u);

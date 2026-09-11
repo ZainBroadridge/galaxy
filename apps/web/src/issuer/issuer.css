@@ -33,6 +33,7 @@
 
 .issuer-branding-fields .field-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; align-items: start; }
 .issuer-branding-fields label { min-width: 0; }
+.issuer-branding-fields .issuer-logo-field { grid-column: 1; }
 .issuer-branding-fields small { display: block; color: #667085; font-size: 12px; line-height: 1.5; margin-top: 8px; }
 .issuer-branding-fields input[type='file'] { max-width: 100%; }
 .issuer-logo-preview { min-height: 112px; padding: 16px; border: 1px dashed #cbd3df; border-radius: 8px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: center; color: #667085; }
@@ -94,7 +95,6 @@
 .issuer-results-identity > div { grid-column: 2; text-align: center; min-width: 0; }
 .issuer-results-identity h1 { margin: 0; font-size: 24px; line-height: 1.3; overflow-wrap: anywhere; text-wrap: balance; }
 .issuer-results-identity p { margin: 8px 0 0; text-align: center; color: #667085; }
-.catalogue-identifier-note { align-self: center; }
 .issuer-branding-fields input[readonly], .create-token-input input[readonly] { background: #f8fafc; color: #304862; }
 @media (max-width: 700px) {
   .issuer-results-identity { grid-template-columns: minmax(0,1fr); gap: 12px; }

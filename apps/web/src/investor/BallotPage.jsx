@@ -58,6 +58,8 @@ export default function BallotPage() {
     && now >= Date.parse(event.votingStartAt) && now <= Date.parse(event.votingEndAt)
     && (!event.vote || event.vote.status === 'FAILED'));
   const complete = completeChoices(event?.proposals, choices);
+  // One column count for the whole ballot: option positions never depend on a row's text.
+  const optionColumns = Math.max(2, ...(event?.proposals ?? []).map((proposal) => proposal.options.length));
 
   function voteWithBoard() {
     if (!boardChoices || !canVote || submitting) return;
@@ -98,7 +100,7 @@ export default function BallotPage() {
   }
 
   return <InvestorFrame event={event} hideNavigation><div className="investor-page-width investor-ballot-page">
-    <MeetingPageHeader event={event} />
+    <MeetingPageHeader event={event} showTags={false} />
     <ErrorMessage error={view.error} />
     {view.loading && <ResourceSkeleton label="Loading meeting" rows={2} />}
     {event && <>
@@ -109,7 +111,7 @@ export default function BallotPage() {
       {!event.metadataIntegrity && <ErrorMessage error={new Error('The proposal details failed their integrity check. Voting is disabled.')} />}
       {event.vote?.status === 'FAILED' && <ErrorMessage error={new Error(event.vote.failureReason || 'The last vote attempt failed. Review and submit again.')} />}
       <form onSubmit={submit}>
-        <section className="investor-ballot" aria-labelledby="proposal-heading">
+        <section className="investor-ballot" aria-labelledby="proposal-heading" style={{ '--ballot-option-columns': optionColumns }}>
           <header className="investor-ballot-heading"><div><h2 id="proposal-heading">Proposal(s)</h2>
             <p>For holders as of {displayDate(event.recordDateAt)}. Confirmed votes cannot be changed.</p></div>
             {boardChoices && canVote && <button type="button" className="inv-button light investor-board-button" disabled={submitting} onClick={voteWithBoard}>Vote with Board</button>}
@@ -121,10 +123,10 @@ export default function BallotPage() {
           </div>
           {event.proposals.map((proposal, proposalIndex) => <fieldset className="investor-proposal" key={`${event.metadataHash}-${proposalIndex}`} disabled={submitting || !canVote}>
             <legend className="investor-sr-only">{proposalIndex + 1}. {proposal.title}</legend>
-            <div className="investor-proposal-row" data-expanded={proposal.options.length > 3 || proposal.options.some((option) => option.text.length > 16)}><div className="investor-proposal-copy"><h3>{proposalIndex + 1}. {proposal.title}</h3>
+            <div className="investor-proposal-row"><div className="investor-proposal-copy"><h3>{proposalIndex + 1}. {proposal.title}</h3>
               <p>Board Recommendation: <strong>{Number.isInteger(proposal.recommendation) ? proposal.options[proposal.recommendation]?.text ?? 'None' : 'None'}</strong></p>
               {proposal.description && <details><summary>More Details</summary><p>{proposal.description}</p></details>}</div>
-            <div className="investor-options" data-count={proposal.options.length} style={{ '--option-count': proposal.options.length }}>{proposal.options.map((option, optionIndex) => <label key={optionIndex}>
+            <div className="investor-options">{proposal.options.map((option, optionIndex) => <label key={optionIndex}>
               <input type="radio" name={`proposal-${proposalIndex}`} value={optionIndex} checked={choices[proposalIndex] === optionIndex}
                 onChange={() => setChoices((current) => current.map((value, index) => index === proposalIndex ? optionIndex : value))} />
               <span>{option.text}</span>

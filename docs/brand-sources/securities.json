@@ -28,13 +28,6 @@
     "checkedOn": "2026-09-08"
   },
   {
-    "issuer": "The Walt Disney Company",
-    "ticker": "DIS",
-    "securityClass": "Common Stock",
-    "source": "https://www.sec.gov/Archives/edgar/data/1744489/000174448926000057/dis-20260627.htm",
-    "checkedOn": "2026-09-08"
-  },
-  {
     "issuer": "Space Exploration Technologies Corp.",
     "ticker": "SPCX",
     "securityClass": "Class A Common Stock",

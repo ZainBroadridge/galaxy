@@ -73,8 +73,7 @@ export default function IssuerBrandingFields({ form, setForm, file, setFile, dis
         disabled={locked} options={cusipOptions} maxLength={80} placeholder="Search a CUSIP or issuer" />
       <label>Underlying security<input value={form.securityName || ''} readOnly disabled={locked} placeholder="Filled from the selected mapping" /></label>
       <label>Trading symbol<input value={form.securityTicker || ''} readOnly disabled={locked} placeholder="Filled where applicable" /></label>
-      <div className="catalogue-identifier-note"><small>These CUSIPs are fictitious demo identifiers, not assigned securities identifiers.</small></div>
-      <label>Issuer logo (optional override)<input type="file" accept="image/png,image/jpeg" onChange={chooseLogo} disabled={disabled} />
+      <label className="issuer-logo-field">Issuer logo (optional override)<input type="file" accept="image/png,image/jpeg" onChange={chooseLogo} disabled={disabled} />
         <small>PNG/JPEG, maximum 512 KB and 2048 x 2048 pixels. A custom upload takes precedence over the preset.</small></label>
       <div className="issuer-logo-preview" aria-live="polite">
         {logoUrl ? <img src={logoUrl} alt={`${selectedIssuer?.name || form.issuerName || 'Issuer'} preview`}

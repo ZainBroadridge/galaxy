@@ -85,7 +85,7 @@ test('issuer presets use exact aliases, never infer affiliation from a token tic
   assert.equal(issuerPreset('Google').id, 'alphabet');
   assert.equal(issuerPreset('AAPL.d'), null);
   assert.equal(issuerPreset('Fake Apple investment'), null);
-  assert.equal(ISSUER_PRESETS.length, 7);
+  assert.equal(ISSUER_PRESETS.length, 6);
   assert.equal(issuerBranding({ issuerName: 'Tesla', platform: 'Ondo' }).platform, 'Ondo');
 });
 

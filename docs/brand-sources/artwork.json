@@ -30,13 +30,6 @@
     "checkedOn": "2026-09-08"
   },
   {
-    "id": "disney",
-    "filename": "disney-brand-v2.png",
-    "source": "https://commons.wikimedia.org/wiki/File:The_Walt_Disney_Company_Logo.svg",
-    "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/The_Walt_Disney_Company_Logo.svg/1024px-The_Walt_Disney_Company_Logo.svg.png",
-    "checkedOn": "2026-09-08"
-  },
-  {
     "id": "spacex",
     "filename": "spacex-brand-v2.png",
     "source": "https://commons.wikimedia.org/wiki/File:SpaceX_logo_black.svg",

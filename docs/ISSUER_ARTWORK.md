@@ -12,7 +12,7 @@ transparency and colors; the browser and PDF copies are byte-identical. SHA-256
 values are pinned in `artwork.json` and tested. No public SVG upload endpoint was
 added; issuer uploads remain validated PNG/JPEG.
 
-The other five logos were located and visually checked on the web. Binary downloads
+The other four logos were located and visually checked on the web. Binary downloads
 into this editing container were unavailable. They are NOT silently replaced with
 newly drawn marks and are NOT included as if already downloaded. Import them once:
 
@@ -32,7 +32,7 @@ An approved-network/offline alternative is:
 node scripts/sync-issuer-artwork.mjs --from-dir "C:\approved-issuer-logos"
 ```
 
-That folder should contain `tesla.png`, `alphabet.png`, `disney.png`, `spacex.png`,
+That folder should contain `tesla.png`, `alphabet.png`, `spacex.png`,
 and `oracle.png`. The two supplied, pinned images are reused. Every PNG must be at
 most 512 KiB and within the existing image dimension limits. Review the images
 before committing them. Public availability is not authorization for production
@@ -44,7 +44,7 @@ Apple and NVIDIA: the user-supplied SVGs. Remaining downloadable sources and exa
 PNG URLs: `docs/brand-sources/artwork.json`. They are Wikimedia Commons copies
 whose source records link to issuer materials, not an assertion that Wikimedia is
 the brand owner. Relevant issuer source sites include the Tesla gallery,
-Alphabet's investor materials, Disney's annual reports, SpaceX, and Oracle's brand
+Alphabet's investor materials, SpaceX, and Oracle's brand
 resources. Preserve the original mark; do not typeset the issuer name as its logo.
 
 ## Names and share classes
@@ -61,7 +61,6 @@ backing, issuer affiliation, or statutory voting rights.
 | Tesla, Inc. | TSLA | Common Stock |
 | NVIDIA Corporation | NVDA | Common Stock |
 | Alphabet Inc. | GOOGL / GOOG | Class A Common Stock / Class C Capital Stock |
-| The Walt Disney Company | DIS | Common Stock |
 | Space Exploration Technologies Corp. | SPCX | Class A Common Stock |
 | Oracle Corporation | ORCL | Common Stock |
 

@@ -51,7 +51,7 @@ uncommitted work before replacing full files.
 - Combined brand lockup and decorative particle background on the password gate.
 - Centered navigation and a red icon-style issuer exit control.
 - Field-width, keyboard-accessible fuzzy issuer autocomplete.
-- Disney removed from creation suggestions, not from historical event branding.
+- Creation suggestions use the supported issuer catalogue.
 - Autofill placed in the Event details heading; required fields marked.
 - The completed snapshot-start notice no longer remains displayed.
 

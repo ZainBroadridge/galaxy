@@ -1,10 +1,15 @@
+/* Service-provider blue is shared by the wallet bar, ballot heading and mark. */
+:root {
+  --pv-blue: #0067a0;
+  --pv-blue-band: linear-gradient(to right,#0076b0,#0067a0 50%,#00588f);
+}
 .brand-lockup { display: flex; align-items: center; justify-content: center; gap: 24px; min-width: 0; }
 .brand-lockup-divider { flex: 0 0 1px; width: 1px; height: 48px; background: #dedede; }
 .brand-lockup-credit { display: inline-flex; align-items: center; gap: 8px; color: #103660; flex: 0 0 auto; }
 .brand-lockup-credit small { font: 500 12px/1.5 Roboto, 'Segoe UI', Arial, sans-serif; letter-spacing: .1em; white-space: nowrap; }
 .brand-lockup-credit img { display: block; width: auto; height: 24px; max-width: 180px; object-fit: contain; }
-.proxyvote-artwork { display: block; width: 158px; height: 58px; object-fit: contain; flex: 0 0 auto; }
-.brand-lockup.inverse .proxyvote-artwork { filter: brightness(0) invert(1); }
+.proxyvote-artwork { display: block; width: 158px; height: 58px; aspect-ratio: 158 / 58; flex: 0 0 auto; background: var(--pv-blue-band); -webkit-mask-image: var(--proxyvote-source); mask-image: var(--proxyvote-source); -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; mask-mode: alpha; }
+.brand-lockup.inverse .proxyvote-artwork { background: #fff; }
 .brand-lockup.inverse .brand-lockup-credit { color: #fff; }
 .brand-lockup.inverse .brand-lockup-divider { background: rgba(255,255,255,.45); }
 @media (max-width: 639px) {

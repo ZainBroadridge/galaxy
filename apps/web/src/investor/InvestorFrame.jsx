@@ -76,17 +76,20 @@ export function MeetingTags({ platform, children }) {
 
 export function SecurityIdentity({ event }) {
   const brand = eventIssuerBranding(event);
-  const explorer = import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://amoy.polygonscan.com';
+  const explorer = (import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://amoy.polygonscan.com').replace(/\/+$/u, '');
+  const tokenLabel = `${event.tokenName}${event.tokenSymbol ? ` (${event.tokenSymbol})` : ''}`;
   return <>
     <p className="investor-security-name">{brand.securityName || brand.issuerName}
       {brand.securityTicker ? ` (${brand.securityTicker})` : ''}</p>
-    <p className="investor-token-name"><span>Tokenised stock: {event.tokenName}{event.tokenSymbol ? ` (${event.tokenSymbol})` : ''}</span>
-      {event.tokenAddress && <a className="investor-token-address" href={`${explorer}/address/${event.tokenAddress}`}
-        target="_blank" rel="noopener noreferrer" aria-label={`Token contract ${event.tokenAddress}`}>{event.tokenAddress}</a>}</p>
+    <p className="investor-token-name"><span>Tokenised stock:</span>
+      {event.tokenAddress ? <a className="investor-token-link" href={`${explorer}/address/${event.tokenAddress}`}
+        title={event.tokenAddress} target="_blank" rel="noopener noreferrer"
+        aria-label={`View token contract for ${tokenLabel}: ${event.tokenAddress}`}>{tokenLabel}</a>
+        : <span>{tokenLabel}</span>}</p>
     {event.cusip && <p className="investor-cusip">Demo CUSIP: {event.cusip}</p>}
   </>;
 }
-export function MeetingIdentity({ event }) {
+export function MeetingIdentity({ event, showTags = true }) {
   const presentation = meetingPresentation(event);
   return <header className="investor-meeting-identity">
     <div className="investor-title-row">
@@ -94,14 +97,14 @@ export function MeetingIdentity({ event }) {
       <h1>{event.title}</h1>
     </div>
     <SecurityIdentity event={event} />
-    <MeetingTags platform={presentation.platform} />
+    {showTags && <MeetingTags platform={presentation.platform} />}
     <p className="investor-muted">Voting deadline: {displayDate(event.votingEndAt)}</p>
   </header>;
 }
 
-export function MeetingPageHeader({ event }) {
+export function MeetingPageHeader({ event, showTags = true }) {
   return <div className="investor-detail-heading">
     <BackLink to="/meetings?tab=active">Back to my meetings</BackLink>
-    {event && <MeetingIdentity event={event} />}
+    {event && <MeetingIdentity event={event} showTags={showTags} />}
   </div>;
 }

@@ -11,7 +11,7 @@ const read = (file) => readFile(new URL(`../../../${file}`, import.meta.url), 'u
 
 test('neutral autofill runs unchanged across all token mappings and preserves identity and record-date schedule', async () => {
   const source = await read('apps/web/src/pages/OrganiserDashboard.jsx');
-  const sample = source.slice(source.indexOf('function demoProposals()'), source.indexOf('function validateDocuments('));
+  const sample = source.slice(source.indexOf('function demoProposals()'), source.indexOf('function DocumentIcon('));
   const demoForm = vm.runInNewContext(sample + '\ndemoForm;', { demoSchedule: () => ({ recordDateAt: 'record', votingStartAt: 'start', votingEndAt: 'end' }) });
   assert.doesNotMatch(sample, /Galaxy|Zenith|Apple|Tesla|NVIDIA|Oracle|SpaceX|Alphabet/iu);
   for (const entry of tokenCatalogue().entries) {
@@ -86,8 +86,10 @@ test('ballot and confirmation share one header and deadline, while signed choice
   assert.doesNotMatch(ballot, /Vote by \$\{/u);
   assert.doesNotMatch(confirmation, /<p>Voting deadline:/u);
   assert.match(frame, /Voting deadline: \{displayDate\(event.votingEndAt\)\}/u);
-  assert.match(frame, /Tokenised stock: \{event.tokenName\}/u);
-  assert.match(frame, /className="investor-token-address"/u);
+  assert.match(frame, /Tokenised stock:/u);
+  assert.match(frame, /className="investor-token-link"/u);
+  assert.match(frame, /title=\{event.tokenAddress\}/u);
+  assert.doesNotMatch(frame, />\{event.tokenAddress\}<\/a>/u);
   assert.match(ballot, /<span>\{option.text\}<\/span>/u);
   assert.doesNotMatch(ballot, /option.text.(?:slice|substring)/u);
   assert.match(ballot, /wallet.signBallot\(typed\)/u);
