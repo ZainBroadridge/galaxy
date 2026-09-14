@@ -19,7 +19,7 @@
 .issuer-shell .pv-topbar-inner { grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); column-gap: 20px; padding: 0 24px; grid-template-rows: auto; }
 .issuer-shell .pv-brand-lockup { grid-column: 1; grid-row: 1; justify-self: start; }
 .issuer-shell .pv-brand-lockup .brand-lockup { gap: 16px; }
-.issuer-shell .pv-brand-lockup .proxyvote-artwork { width: 118px; height: auto; }
+.issuer-shell .pv-brand-lockup .issuer-proxyvote-logo { display: block; width: 118px; height: auto; aspect-ratio: 158 / 58; flex: 0 0 auto; object-fit: contain; background: transparent; }
 .issuer-shell .pv-brand-lockup .brand-lockup-credit { flex-direction: column; align-items: flex-start; gap: 4px; }
 .issuer-shell .pv-brand-lockup .brand-lockup-credit img { height: 25px; max-width: 150px; }
 .issuer-shell .pv-brand-lockup .brand-lockup-credit small { font-size: 10px; }
@@ -68,7 +68,7 @@
   .issuer-login-card { padding: 26px; }
   .issuer-shell .pv-topbar-inner { padding: 0 12px; column-gap: 12px; }
   .issuer-shell .pv-brand-lockup .brand-lockup { gap: 10px; }
-  .issuer-shell .pv-brand-lockup .proxyvote-artwork { width: 80px; }
+  .issuer-shell .pv-brand-lockup .issuer-proxyvote-logo { width: 80px; }
   .issuer-shell .pv-brand-lockup .brand-lockup-divider { height: 30px; }
   .issuer-shell .pv-brand-lockup .brand-lockup-credit img { height: 17px; max-width: 96px; }
   .issuer-shell .pv-brand-lockup .brand-lockup-credit small { font-size: 8px; }

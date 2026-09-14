@@ -2,7 +2,8 @@ import {
   Link, NavLink, Outlet, useLocation,
 } from 'react-router-dom';
 import { reownConfigured } from '../appkit.js';
-import BrandLockup, { ProxyVoteMark } from '../components/BrandLockup.jsx';
+import BrandLockup from '../components/BrandLockup.jsx';
+import proxyVoteLogo from '../assets/proxyvote-blue.png';
 import { Notice } from '../components/UI.jsx';
 import { useNotifications } from '../notifications.jsx';
 import { useWallet } from '../wallet.jsx';
@@ -70,7 +71,9 @@ export default function IssuerLayout() {
     <header className="topbar pv-topbar">
       <div className="pv-topbar-inner">
         <Link className="pv-brand-lockup" to="/issuer/home" aria-label="ProxyVote home">
-          <BrandLockup><ProxyVoteMark stacked /></BrandLockup>
+          <BrandLockup>
+            <img className="issuer-proxyvote-logo" src={proxyVoteLogo} width="158" height="58" alt="ProxyVote" />
+          </BrandLockup>
         </Link>
 
         <nav className="pv-primary-nav" aria-label="Primary navigation">

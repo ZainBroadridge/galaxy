@@ -73,7 +73,7 @@ async function renderBallot(input = event) {
   return { render, state, calls: () => ({ apiCalls, signatures }) };
 }
 
-test('mixed-length and mixed-count proposals share equal columns with empty cells for absent options', async () => {
+test('mixed-length and mixed-count proposals end in the same rightmost column', async () => {
   const fixture = await renderBallot();
   const tree = fixture.render(); const rendered = nodes(tree);
   const tables = rendered.filter((node) => node.type === 'table');
@@ -91,14 +91,17 @@ test('mixed-length and mixed-count proposals share equal columns with empty cell
     assert.ok(text(heading).includes(event.proposals[index].title));
     const radios = nodes(row).filter((node) => node.type === 'input');
     assert.equal(radios.length, event.proposals[index].options.length);
+    const firstOptionColumn = cells.length - radios.length;
     radios.forEach((radio, option) => {
       assert.equal(radio.props.type, 'radio'); assert.equal(radio.props.name, `proposal-${index}`);
       assert.equal(radio.props.value, option);
       assert.equal(radio.props['aria-describedby'], `proposal-title-${index}`);
       assert.equal(radio.props.disabled, false);
-      assert.equal(text(cells[option]), event.proposals[index].options[option].text);
+      assert.equal(text(cells[firstOptionColumn + option]), event.proposals[index].options[option].text);
     });
-    for (const cell of cells.slice(radios.length)) {
+    assert.equal(text(cells.at(-1)), event.proposals[index].options.at(-1).text,
+      'The final choice must occupy the rightmost column in every row.');
+    for (const cell of cells.slice(0, firstOptionColumn)) {
       assert.equal(nodes(cell).filter((node) => node.type === 'input').length, 0);
       assert.equal(text(cell), '', 'Padding cells must not introduce fake choices.');
     }

@@ -115,13 +115,14 @@ export default function BallotPage() {
             <th scope="row" className="investor-proposal-copy"><h3 id={`proposal-title-${proposalIndex}`}>{proposalIndex + 1}. {proposal.title}</h3>
               <p>Board Recommendation: <strong>{Number.isInteger(proposal.recommendation) ? proposal.options[proposal.recommendation]?.text ?? 'None' : 'None'}</strong></p>
               {proposal.description && <details><summary>More Details</summary><p>{proposal.description}</p></details>}</th>
+            {/* Keep shorter option lists in the rightmost shared columns. */}
+            {Array.from({ length: optionColumns - proposal.options.length }, (_, index) => <td className="investor-option-cell investor-option-empty" key={`empty-${index}`} />)}
             {proposal.options.map((option, optionIndex) => <td className="investor-option-cell" key={optionIndex}><label className="investor-option-label">
               <input type="radio" name={`proposal-${proposalIndex}`} value={optionIndex} checked={choices[proposalIndex] === optionIndex}
                 disabled={submitting || !canVote} aria-describedby={`proposal-title-${proposalIndex}`}
                 onChange={() => setChoices((current) => current.map((value, index) => index === proposalIndex ? optionIndex : value))} />
               <span>{option.text}</span>
             </label></td>)}
-            {Array.from({ length: optionColumns - proposal.options.length }, (_, index) => <td className="investor-option-cell investor-option-empty" key={`empty-${index}`} />)}
           </tr>)}
           </tbody></table></div>
         </section>
