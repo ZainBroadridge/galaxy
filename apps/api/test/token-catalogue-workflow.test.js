@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { resolveTokenSelection, tokenCatalogue, TokenCatalogueError } from '../src/token-catalogue.js';
-import { issuerBranding, eventIssuerBranding } from '../../../packages/shared/src/issuer-branding.js';
+import { CATALOGUE_CHAIN_ID, resolveTokenSelection, tokenCatalogue, TokenCatalogueError } from '../src/token-catalogue.js';
+import { issuerBranding, eventIssuerBranding, TOKEN_PLATFORMS } from '../../../packages/shared/src/issuer-branding.js';
 import { applyCatalogueEntry } from '../../web/src/issuer/catalogue-form.js';
 
 const source = (name) => readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8')
@@ -23,7 +23,7 @@ function fixture({ used = 0, chainId = 80002 } = {}) {
     return { rows: [inserted], rowCount: 1 };
   };
   const context = vm.createContext({
-    HttpError, resolveTokenSelection, TokenCatalogueError, issuerBranding,
+    HttpError, resolveTokenSelection, TokenCatalogueError, issuerBranding, CATALOGUE_CHAIN_ID, TOKEN_PLATFORMS,
     config: { chainId, maxEventsPerWalletPerDay: 5 }, normalizeAddress: (value) => value.toLowerCase(),
     AUTHENTICITY_CLAIM: { ISSUER_AUTHORIZED: 'ISSUER_AUTHORIZED' },
     query, transaction: (fn) => fn({ query }),
@@ -35,6 +35,10 @@ function fixture({ used = 0, chainId = 80002 } = {}) {
     enqueueJob: async (args) => { jobs.push(args); return { id: 'snapshot-job', ...args }; },
     kickJobRunner: () => kicks.push(true), serializeEvent: (row) => row, serializeJob: (row) => row,
   });
+  // Run the actual event-selection resolver as well as createEvent. Only the
+  // address normalizer and external DB/RPC/signing boundaries are test doubles;
+  // checksum validation and chain execution are outside this orchestration test.
+  vm.runInContext(source('token-selection.js'), context);
   return { create: vm.runInContext(source('events.js') + '\ncreateEvent;', context), queries, inspected, jobs, kicks, inserted: () => inserted };
 }
 const form = (id = 'aapl-issuer') => applyCatalogueEntry({
@@ -72,6 +76,75 @@ test('daily creation limit remains enforced before external inspection for a val
   const f = fixture({ used: 5 });
   await assert.rejects(f.create(wallet, form()), { status: 429, code: 'EVENT_LIMIT' });
   assert.equal(f.queries.length, 1); assert.equal(f.inspected.length, 0); assert.equal(f.jobs.length, 0);
+});
+
+const customForm = (patch = {}) => ({ ...form(), tokenCatalogueId: null,
+  issuerName: 'Example Holdings', securityName: 'Example Common Stock', securityTicker: 'exm',
+  tokenAddress: `0x${'b'.repeat(40)}`, platform: 'dinari', cusip: ' custom01 ', ...patch });
+
+test('a manual event persists its own identity and queues exactly one snapshot without a catalogue binding', async () => {
+  for (const id of [undefined, null, '']) {
+    const f = fixture(); const input = customForm({ tokenCatalogueId: id });
+    await f.create(wallet, input);
+    const saved = f.inserted();
+    assert.equal(saved.token_catalogue_id, null);
+    assert.equal(saved.cusip, 'CUSTOM01');
+    assert.equal(saved.issuer_name, 'Example Holdings');
+    assert.equal(saved.security_name, 'Example Common Stock');
+    assert.equal(saved.security_ticker, 'EXM');
+    assert.equal(saved.token_platform, 'Dinari');
+    assert.equal(saved.authenticity_status, 'COMMUNITY');
+    assert.equal(saved.metadata_hash, 'immutable-hash');
+    assert.equal(saved.vote_unit, '2000000000000000000');
+    assert.deepEqual(f.inspected, [input.tokenAddress]);
+    assert.equal(f.jobs.length, 1); assert.equal(f.jobs[0].type, 'BUILD_SNAPSHOT');
+    assert.equal(f.kicks.length, 1);
+    assert.equal(input.securityTicker, 'exm', 'Normalizing persisted metadata cannot mutate the request.');
+  }
+});
+
+test('manual issuer-sponsored events retain fallback security names and never imply verified authority', async () => {
+  const f = fixture();
+  await f.create(wallet, customForm({ platform: '', securityName: '', securityTicker: '',
+    authenticityClaim: 'ISSUER_AUTHORIZED' }));
+  assert.equal(f.inserted().token_platform, '');
+  assert.equal(f.inserted().security_name, 'Example Holdings');
+  assert.equal(f.inserted().security_ticker, '');
+  assert.equal(f.inserted().authenticity_status, 'SELF_CLAIMED');
+});
+
+test('invalid manual identities and placeholder addresses cannot reach RPC, storage or the job queue', async () => {
+  const cases = [
+    [{ issuerName: '' }, 'INVALID_CUSTOM_TOKEN'],
+    [{ issuerName: 'x'.repeat(161) }, 'INVALID_CUSTOM_TOKEN'],
+    [{ issuerName: 'Example\nHoldings' }, 'INVALID_CUSTOM_TOKEN'],
+    [{ securityName: 'x'.repeat(241) }, 'INVALID_CUSTOM_TOKEN'],
+    [{ securityName: 'Example\tClass' }, 'INVALID_CUSTOM_TOKEN'],
+    [{ securityTicker: 'x'.repeat(25) }, 'INVALID_CUSTOM_TOKEN'],
+    [{ securityTicker: 'BAD SPACE' }, 'INVALID_CUSTOM_TOKEN'],
+    [{ cusip: '' }, 'INVALID_CUSTOM_TOKEN'],
+    [{ cusip: '1234567890' }, 'INVALID_CUSTOM_TOKEN'],
+    [{ cusip: 'BAD-CUSIP' }, 'INVALID_CUSTOM_TOKEN'],
+    [{ platform: 'Unlisted platform' }, 'INVALID_TOKEN_PLATFORM'],
+    [{ tokenAddress: `0x${'0'.repeat(40)}` }, 'TOKEN_MAPPING_NOT_CONFIGURED'],
+    [{ tokenAddress: `0x${'f'.repeat(40)}` }, 'TOKEN_MAPPING_NOT_CONFIGURED'],
+    [{ tokenCatalogueId: 'missing-mapping' }, 'TOKEN_SELECTION_REQUIRED'],
+  ];
+  for (const [patch, code] of cases) {
+    const f = fixture();
+    await assert.rejects(f.create(wallet, customForm(patch)), { code });
+    assert.equal(f.queries.length, 0); assert.equal(f.inspected.length, 0);
+    assert.equal(f.jobs.length, 0); assert.equal(f.kicks.length, 0);
+  }
+});
+
+test('manual events keep chain restrictions and daily limits ahead of external work', async () => {
+  const otherChain = fixture({ chainId: 1 });
+  await assert.rejects(otherChain.create(wallet, customForm()), { code: 'UNSUPPORTED_CHAIN' });
+  assert.equal(otherChain.queries.length, 0); assert.equal(otherChain.inspected.length, 0);
+  const limited = fixture({ used: 5 });
+  await assert.rejects(limited.create(wallet, customForm()), { status: 429, code: 'EVENT_LIMIT' });
+  assert.equal(limited.inspected.length, 0); assert.equal(limited.jobs.length, 0);
 });
 
 test('legacy and new event reads use stored identifiers rather than current catalogue entries', () => {

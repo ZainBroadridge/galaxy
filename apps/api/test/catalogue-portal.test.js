@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { MAX_OPTION_LABEL_LENGTH } from '../../../packages/shared/src/constants.js';
 import { tokenCatalogue } from '../src/token-catalogue.js';
-import { applyCatalogueEntry } from '../../web/src/issuer/catalogue-form.js';
+import { applyCatalogueEntry, editTokenIdentity, selectedCatalogueEntry } from '../../web/src/issuer/catalogue-form.js';
 import { eventProgress } from '../../web/src/issuer/event-progress.js';
 
 const read = (file) => readFile(new URL(`../../../${file}`, import.meta.url), 'utf8');
@@ -39,18 +39,48 @@ test('catalogue request is issuer-session gated and the migration only adds null
   assert.doesNotMatch(migration.split('CREATE INDEX')[0], /\bNOT NULL\b/iu);
 });
 
-test('all mapping fields use shared selection helpers and placeholders cannot be inspected or submitted by the form', async () => {
+test('configured mappings and custom drafts can be inspected while stale or placeholder mappings are blocked', async () => {
   const form = await read('apps/web/src/pages/OrganiserDashboard.jsx');
-  assert.match(form, /if \(!selection\?\.configured\) return null/u);
-  assert.match(form, /!creating \|\| !selection\?\.configured/u);
-  assert.match(form, /if \(!selection\?\.configured\) throw new Error/u);
-  assert.match(form, /disabled=\{Boolean\(busyStage\) \|\| !selection\?\.configured\}/u);
-  assert.match(form, /Refresh token mapping/u);
-  assert.match(form, /readOnly[\s\S]*?ERC-20 token address from selected catalogue mapping/u);
+  const guard = form.match(/const canInspectToken = ([^;]+);/u)?.[1];
+  assert.ok(guard, 'Token inspection must have an explicit eligibility guard.');
+  const catalogue = tokenCatalogue();
+  const configured = catalogue.entries.find((entry) => entry.configured);
+  const placeholder = catalogue.entries.find((entry) => !entry.configured);
+  assert.ok(configured && placeholder, 'Both supported and placeholder fixtures are required.');
+  const canInspect = (draft) => vm.runInNewContext(guard, {
+    mappedSelection: Boolean(draft.tokenCatalogueId), selection: selectedCatalogueEntry(catalogue, draft),
+  });
+  const mapped = applyCatalogueEntry({ title: 'Preserved event title' }, configured);
+  assert.equal(canInspect(mapped), true);
+  assert.equal(canInspect(applyCatalogueEntry({}, placeholder)), false);
+  assert.equal(canInspect({ ...mapped, cusip: 'STALE0001' }), false);
+  const edited = editTokenIdentity(mapped, { tokenAddress: `0x${'a'.repeat(40)}` });
+  assert.equal(edited.tokenCatalogueId, ''); assert.equal(canInspect(edited), true);
+  assert.equal(mapped.tokenAddress, configured.tokenAddress, 'Editing a draft cannot change a catalogue entry.');
+  assert.equal(edited.title, mapped.title);
+  const submitDisabled = form.match(/<button className="button" disabled=\{([^}]+)\}>\s*\{busyStage \|\| 'Create Event'\}/u)?.[1];
+  assert.ok(submitDisabled, 'The creation action must retain a disabled guard.');
+  const isDisabled = (draft, busyStage = '') => vm.runInNewContext(submitDisabled, {
+    busyStage, selection: selectedCatalogueEntry(catalogue, draft), canInspectToken: canInspect(draft),
+  });
+  assert.equal(isDisabled(mapped), false);
+  assert.equal(isDisabled(edited), false, 'A valid custom draft must be reachable through the Create Event button.');
+  assert.equal(isDisabled(edited, 'Creating event'), true);
+  assert.equal(isDisabled(mapped, 'Creating event'), true);
+  assert.equal(isDisabled(applyCatalogueEntry({}, placeholder)), true);
+  assert.equal(isDisabled({ ...mapped, cusip: 'STALE0001' }), true);
+  assert.match(form, /if \(!canInspectToken\) return null/u);
+  assert.match(form, /if \(!canInspectToken\) throw new Error/u);
+  assert.match(form, /if \(!creating \|\| !canInspectToken/u);
+  assert.match(form, /disabled=\{!canInspectToken \|\| inspectBusy \|\| Boolean\(busyStage\)\}/u);
+  const addressInput = form.match(/<input\s+value=\{form.tokenAddress\}[\s\S]*?\/>/u)?.[0];
+  assert.ok(addressInput, 'The form retains its ERC-20 address field.');
+  assert.match(addressInput, /editTokenIdentity/u); assert.doesNotMatch(addressInput, /readOnly/u);
   const fields = await read('apps/web/src/issuer/IssuerBrandingFields.jsx');
   assert.match(fields, /<IssuerAutocomplete/u); assert.match(fields, /<PlatformAutocomplete/u);
   assert.match(fields, /<FuzzyCombobox label="Demo CUSIP"/u);
-  assert.match(fields, /applyCatalogueEntry/u); assert.match(fields, /clearCatalogueEntry/u);
+  // The actual field edits are exercised in issuer-form-editing.test.js;
+  // this check does not require a particular helper name in the component.
   assert.match(fields, /setFile\(null\)/u);
 });
 

@@ -177,5 +177,5 @@ test('both file pickers append, reset the native input, and preserve state on re
     assert.doesNotMatch(handler, /setDocument(?:s|Files)\(\[\]\)/u);
   }
   assert.match(manage, /view.data\?\.documents\?\.length \?\? 0/u);
-  assert.match(source, /setDocumentFiles\(\(current\) => current.filter\(\(selected\) => selected !== file\)\)/u);
+  // Actual upload success/failure and retry behavior is exercised in document-selection.test.js.
 });

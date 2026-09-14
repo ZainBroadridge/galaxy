@@ -91,3 +91,42 @@ test('Manage Event callback shares the same cumulative rule and saved-document l
   select([third]);
   assert.equal(context.feedback.tone, 'error'); assert.equal(context.documentFiles.length, 2);
 });
+
+async function uploader({ busy = false, account = 'creator-wallet' } = {}) {
+  const source = await readFile(new URL('../../web/src/pages/OrganiserDashboard.jsx', import.meta.url), 'utf8');
+  const declaration = source.match(/  async function uploadDocuments\(\) \{[\s\S]*?\n  \}/u)?.[0];
+  assert.ok(declaration, 'The upload action must exist in the actual organiser page.');
+  const uploaded = []; let failName = second.name;
+  const context = { documentFiles: [first, second, third], documentBusy: busy, wallet: { account }, eventId: 'meeting-id',
+    feedback: null, view: { reload: async () => {} },
+    uploadEventPdf: async (eventId, file, creator) => {
+      assert.equal(eventId, 'meeting-id'); assert.equal(creator, account);
+      if (file.name === failName) throw new Error('Upload interrupted');
+      uploaded.push(file.name);
+    },
+  };
+  context.setDocumentFiles = (next) => { context.documentFiles = typeof next === 'function' ? next(context.documentFiles) : next; };
+  context.setDocumentBusy = (value) => { context.documentBusy = value; };
+  context.setDocumentFeedback = (value) => { context.feedback = value; };
+  return { context, uploaded, upload: vm.runInNewContext(`${declaration}; uploadDocuments;`, context),
+    allowAll: () => { failName = null; } };
+}
+
+test('only successful uploads leave the retry queue; retry never sends an already-uploaded PDF again', async () => {
+  const f = await uploader();
+  await f.upload();
+  assert.deepEqual(f.uploaded, ['first.pdf']);
+  assert.deepEqual(f.context.documentFiles.map((file) => file.name), ['second.pdf', 'third.pdf']);
+  assert.equal(f.context.feedback.tone, 'error'); assert.equal(f.context.documentBusy, false);
+  f.allowAll(); await f.upload();
+  assert.deepEqual(f.uploaded, ['first.pdf', 'second.pdf', 'third.pdf']);
+  assert.equal(f.context.documentFiles.length, 0); assert.equal(f.context.feedback.tone, 'success');
+});
+
+test('busy or disconnected upload actions cannot send files or clear the pending queue', async () => {
+  for (const options of [{ busy: true }, { account: null }]) {
+    const f = await uploader(options); await f.upload();
+    assert.deepEqual(f.uploaded, []);
+    assert.deepEqual(f.context.documentFiles, [first, second, third]);
+  }
+});

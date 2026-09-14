@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { tokenCatalogue, resolveTokenSelection, TOKEN_CATALOGUE, UNCONFIGURED_TOKEN_ADDRESS } from '../src/token-catalogue.js';
-import { catalogueIssuers, catalogueEntry, applyCatalogueEntry, clearCatalogueEntry, selectedCatalogueEntry } from '../../web/src/issuer/catalogue-form.js';
+import { catalogueIssuers, catalogueEntry, applyCatalogueEntry, clearCatalogueEntry, selectedCatalogueEntry, editTokenIdentity, changeTokenIssuer, changeTokenPlatform } from '../../web/src/issuer/catalogue-form.js';
 import { searchCusips, searchIssuers, searchPlatforms } from '../../web/src/issuer/issuer-search.js';
 import { meetingPresentation } from '../../web/src/investor/presentation.js';
 
@@ -126,4 +126,37 @@ test('new platform choices do not erase existing event branding', () => {
   assert.equal(meetingPresentation({ platform: 'Ondo' }).platformLogo, '/investor/ondo-logo.png');
   assert.equal(meetingPresentation({ platform: 'Kraken' }).platformLogo, '/investor/kraken-logo.png');
   assert.equal(meetingPresentation({ platform: '' }).header, 'issuer');
+});
+
+
+test('manual edits clear the catalogue binding while preserving unrelated draft fields and the original mapping', () => {
+  const catalogue = tokenCatalogue(); const selected = catalogue.entries.find((entry) => entry.configured);
+  const proposals = [{ title: 'Keep this proposal' }];
+  const mapped = applyCatalogueEntry({ title: 'Annual meeting', proposals, recordDateAt: 'record' }, selected);
+  const before = JSON.stringify(catalogue);
+  for (const [field, value] of Object.entries({ tokenAddress: `0x${'a'.repeat(40)}`, cusip: 'CUSTOM001',
+    issuerName: 'Custom issuer', securityName: 'Custom security', securityTicker: 'CUSTOM' })) {
+    const edited = editTokenIdentity(mapped, { [field]: value });
+    assert.equal(edited.tokenCatalogueId, ''); assert.equal(edited[field], value);
+    assert.equal(edited.title, mapped.title); assert.equal(edited.proposals, proposals);
+    assert.equal(edited.recordDateAt, mapped.recordDateAt);
+    assert.equal(selectedCatalogueEntry(catalogue, edited), null);
+    assert.equal(mapped.tokenCatalogueId, selected.id);
+  }
+  assert.equal(JSON.stringify(catalogue), before);
+});
+
+test('issuer and platform changes prefill matching mappings and clear stale mapped identities', () => {
+  const catalogue = tokenCatalogue();
+  const first = applyCatalogueEntry({ title: 'Keep event title' }, catalogue.entries.find((entry) => entry.id === 'aapl-issuer'));
+  const dinari = changeTokenPlatform(first, catalogue, 'Dinari');
+  assert.equal(selectedCatalogueEntry(catalogue, dinari).id, 'aapl-dinari');
+  const tesla = changeTokenIssuer(dinari, catalogue, 'Tesla');
+  assert.equal(selectedCatalogueEntry(catalogue, tesla).id, 'tsla-dinari');
+  const custom = changeTokenIssuer(tesla, catalogue, 'Independent issuer');
+  assert.equal(custom.tokenCatalogueId, ''); assert.equal(custom.tokenAddress, '');
+  assert.equal(custom.cusip, ''); assert.equal(custom.title, first.title);
+  const manual = editTokenIdentity(custom, { tokenAddress: `0x${'b'.repeat(40)}`, cusip: 'CUSTOM001' });
+  const renamed = changeTokenIssuer(manual, catalogue, 'Renamed independent issuer');
+  assert.equal(renamed.tokenAddress, manual.tokenAddress); assert.equal(renamed.cusip, manual.cusip);
 });

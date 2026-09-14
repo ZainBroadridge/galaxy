@@ -18,12 +18,13 @@ import { kickJobRunner } from './runner.js';
 import { serializeEvent, serializeJob, serializeVote } from './serializers.js';
 import { inspectToken } from './tokens.js';
 import { ensureOwnedIssuerLogo } from './issuer-logos.js';
-import { resolveTokenSelection, TokenCatalogueError } from './token-catalogue.js';
+import { TokenCatalogueError } from './token-catalogue.js';
+import { resolveEventTokenSelection } from './token-selection.js';
 
 export async function createEvent(wallet, input) {
   const creator = normalizeAddress(wallet);
   let selection;
-  try { selection = resolveTokenSelection(input, config.chainId); }
+  try { selection = resolveEventTokenSelection(input, config.chainId); }
   catch (error) {
     if (error instanceof TokenCatalogueError) throw new HttpError(error.status, error.message, error.code);
     throw error;

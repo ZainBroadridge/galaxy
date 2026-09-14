@@ -658,7 +658,7 @@ export default function OrganiserDashboard() {
               ? 'The event is saved now; snapshot processing starts automatically after the record date.'
               : 'Snapshot processing and deployment continue in the background.'}</span>
           </div>
-          <button className="button" disabled={Boolean(busyStage) || !selection?.configured}>
+          <button className="button" disabled={Boolean(busyStage) || !canInspectToken}>
             {busyStage || 'Create Event'}
           </button>
         </footer>
