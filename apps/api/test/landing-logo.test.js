@@ -50,15 +50,6 @@ function decodeRgbaPng(bytes) {
 const root = new URL('../../../', import.meta.url);
 const read = (path) => readFile(new URL(path, root), 'utf8');
 
-test('the bundled organiser logo preserves the original blue lettering and transparent pixels', async () => {
-  const [bundled, original] = await Promise.all([
-    readFile(new URL('apps/web/src/assets/proxyvote-blue.png', root)),
-    readFile(new URL('apps/web/public/proxyvote-brand-blue.png', root)),
-  ]);
-  assert.deepEqual(decodeRgbaPng(bundled), decodeRgbaPng(original),
-    'The dashboard must display the supplied artwork, including its transparent background.');
-});
-
 test('blue and white logos retain their dimensions, lettering silhouette and transparent background', async () => {
   const variants = await Promise.all(['blue', 'white'].map(async (name) => {
     const bytes = await readFile(new URL(`apps/web/public/proxyvote-brand-${name}.png`, root));

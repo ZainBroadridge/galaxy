@@ -30,14 +30,12 @@ function nodes(tree) {
   return [tree, ...nodes(tree.props.children)];
 }
 
-test('the organiser header renders the bundled logo as an image and retains its home link and Broadridge credit', async () => {
+test('the organiser header renders the original public PNG through ProxyVoteMark and retains its home link and Broadridge credit', async () => {
   const brand = await loadJsx('apps/web/src/components/BrandLockup.jsx');
-  const assetUrl = '/assets/proxyvote-blue.test.png';
   const layout = await loadJsx('apps/web/src/issuer/IssuerLayout.jsx', {
     'react-router-dom': { Link: 'a', NavLink: 'a', Outlet: nothing, useLocation: () => ({ pathname: '/organiser' }) },
     '../appkit.js': { reownConfigured: true },
     '../components/BrandLockup.jsx': brand,
-    '../assets/proxyvote-blue.png': { default: assetUrl },
     '../components/UI.jsx': { Notice: nothing },
     '../notifications.jsx': { useNotifications: () => ({ unreadCount: 0 }) },
     '../wallet.jsx': { useWallet: () => ({ connected: false, openWallet: nothing }) },
@@ -51,23 +49,27 @@ test('the organiser header renders the bundled logo as an image and retains its 
   assert.equal(images.length, 2);
   const logo = images.find((node) => node.props.alt === 'ProxyVote');
   assert.ok(logo);
-  assert.equal(logo.props.src, assetUrl, 'Use the imported build asset, not a mask or a public-path placeholder.');
-  assert.equal(logo.props.className, 'issuer-proxyvote-logo');
+  assert.equal(logo.props.src, '/proxyvote-brand-blue.png');
+  assert.equal(logo.props.className, 'proxyvote-artwork');
   assert.equal(logo.props.width, '158');
   assert.equal(logo.props.height, '58');
   assert.equal(images.find((node) => node.props.alt === 'Broadridge').props.src, '/investor/broadridge.png');
 });
 
 test('the organiser image keeps its aspect ratio and transparent background at desktop and mobile sizes', async () => {
-  const css = await read('apps/web/src/issuer/issuer.css');
-  const declarations = [...css.matchAll(/\.issuer-shell \.pv-brand-lockup \.issuer-proxyvote-logo\s*\{([^}]+)\}/gu)]
+  const [css, brandCss] = await Promise.all([
+    read('apps/web/src/issuer/issuer.css'), read('apps/web/src/components/brand.css'),
+  ]);
+  const declarations = [...css.matchAll(/\.issuer-shell \.pv-brand-lockup \.proxyvote-artwork\s*\{([^}]+)\}/gu)]
     .map((match) => match[1]);
   assert.equal(declarations.length, 2);
   assert.match(declarations[0], /width:\s*118px/u);
   assert.match(declarations[0], /height:\s*auto/u);
-  assert.match(declarations[0], /aspect-ratio:\s*158\s*\/\s*58/u);
-  assert.match(declarations[0], /object-fit:\s*contain/u);
-  assert.match(declarations[0], /background:\s*transparent/u);
+  const sharedImage = brandCss.match(/\.proxyvote-artwork\s*\{([^}]+)\}/u)?.[1];
+  assert.ok(sharedImage);
+  assert.match(sharedImage, /aspect-ratio:\s*158\s*\/\s*58/u);
+  assert.match(sharedImage, /object-fit:\s*contain/u);
+  assert.doesNotMatch(sharedImage, /mask|filter|background/u);
   assert.match(declarations[1], /width:\s*80px/u);
   for (const declaration of declarations) assert.doesNotMatch(declaration, /mask|filter|gradient/u);
 });
