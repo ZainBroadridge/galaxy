@@ -13,9 +13,10 @@
 .portal-titlebar { display: grid; grid-template-columns: 64px minmax(0,1fr) 64px; gap: 16px; align-items: start; margin-bottom: 20px; }
 .portal-titlebar > h1 { margin: 0; text-align: center; }
 .portal-titlebar > .portal-back { margin-top: 6px; }
-.investor-utility .portal-exit-button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px solid #e0abb0; border-radius: 8px; color: #b51f2b; background: #fff5f5; text-decoration: none; cursor: pointer; }
+.investor-utility .portal-exit-button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px solid rgba(255,255,255,.65); border-radius: 8px; color: #fff; background: transparent; text-decoration: none; cursor: pointer; }
 .portal-exit-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .portal-exit-button:hover { background: #fde9eb; }
+.investor-utility .portal-exit-button:hover { border-color: #fff; background: rgba(255,255,255,.12); }
 .portal-exit-button:focus-visible { outline: 2px solid white; outline-offset: 3px; }
 .portal-root .portal-comms-heading { display: grid; grid-template-columns: 64px minmax(0,1fr) auto; gap: 20px; align-items: start; }
 .portal-comms-heading > .portal-back { margin-top: 8px; }
