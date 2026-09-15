@@ -1,7 +1,7 @@
 // Add approved wallet-to-email mappings here. Keep this module backend-only.
 // An explicit wallet mapping takes precedence over the temporary demo recipient.
 export const WALLET_EMAILS = Object.freeze({
-  '0xca430770ACA59D44BbC4ae0abacBA52cb8E39867': 'zainn.qureshi18@gmail.com',
+  '0xca430770ACA59D44BbC4ae0abacBA52cb8E39867': 'zainnq18@gmail.com',
   '0x2222222222222222222222222222222222222222': 'voter.two@example.com',
 });
 
