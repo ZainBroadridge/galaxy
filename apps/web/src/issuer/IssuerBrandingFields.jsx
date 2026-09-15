@@ -5,7 +5,7 @@ import PlatformAutocomplete from './PlatformAutocomplete.jsx';
 import IssuerAutocomplete from './IssuerAutocomplete.jsx';
 import { searchCusips } from './issuer-search.js';
 import {
-  applyCatalogueEntry, catalogueIssuers, changeTokenIssuer, changeTokenPlatform,
+  applyCatalogueEntry, catalogueEntry, catalogueIssuers, changeTokenIssuer, changeTokenPlatform,
   editTokenIdentity, exactCatalogueIssuer,
 } from './catalogue-form.js';
 
@@ -36,6 +36,14 @@ export default function IssuerBrandingFields({ form, setForm, file, setFile, dis
   function changePlatform(value) {
     setForm((current) => changeTokenPlatform(current, catalogue, value));
   }
+  function selectIssuerSecurity(option) {
+    const entry = catalogueEntry(catalogue, option.issuerName, form.platform, option.securityTicker);
+    if (entry) { selectEntry(entry); return; }
+    if (exactCatalogueIssuer(catalogue, form.issuerName)?.id !== option.issuerId) setFile(null);
+    setForm((current) => editTokenIdentity(changeTokenIssuer(current, catalogue, option.issuerName), {
+      securityName: option.securityName, securityTicker: option.securityTicker,
+    }));
+  }
   function changeCusip(value) {
     const normalized = value.trim().toUpperCase();
     const exact = entries.find((entry) => entry.cusip === normalized);
@@ -62,7 +70,7 @@ export default function IssuerBrandingFields({ form, setForm, file, setFile, dis
       <p>Select a preset or enter your own issuer and token details. No platform means issuer-sponsored tokens.</p></header>
     <div className="field-grid">
       <IssuerAutocomplete value={form.issuerName} disabled={disabled} onChange={changeIssuer}
-        issuers={catalogueIssuers(catalogue)} />
+        onSelect={selectIssuerSecurity} issuers={catalogueIssuers(catalogue)} />
       <PlatformAutocomplete value={form.platform} disabled={disabled} onChange={changePlatform}
         platforms={catalogue?.platforms ?? TOKEN_PLATFORMS} />
       <FuzzyCombobox label="Demo CUSIP" required value={form.cusip || ''} onChange={changeCusip}

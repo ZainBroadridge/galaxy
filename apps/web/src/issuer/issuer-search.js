@@ -52,6 +52,25 @@ export function searchPlatforms(platforms, value, limit = 6) {
   return rank(platforms, value, (platform) => [platform], limit);
 }
 
+/** Dropdown choices represent individual securities while retaining the legal issuer. */
+export function searchIssuerSecurities(issuers, value, limit = 12) {
+  const choices = issuers.flatMap((issuer) => {
+    const securities = issuer.securities?.length ? issuer.securities : [{ name: issuer.name, ticker: '' }];
+    const tickers = new Set(securities.map((security) => normalize(security.ticker)));
+    // A sibling share class's ticker must not become an exact match for this row.
+    const aliases = (issuer.aliases ?? []).filter((alias) => !tickers.has(normalize(alias)));
+    return securities.map((security, index) => ({
+      id: `${issuer.id}-${security.ticker || index}`,
+      issuerId: issuer.id, issuerName: issuer.name,
+      securityName: security.name, securityTicker: security.ticker,
+      label: securities.length > 1 ? security.name : issuer.name,
+      detail: security.ticker, aliases,
+    }));
+  });
+  return rank(choices, value, (choice) => [choice.label, choice.issuerName,
+    choice.issuerId, choice.securityTicker, ...choice.aliases], limit);
+}
+
 /** Demo CUSIPs use the same ranking as the adjacent issuer/platform fields. */
 export function searchCusips(entries, value, limit = 18) {
   return rank(entries, value, (entry) => [entry.cusip, entry.issuerName, entry.symbol,

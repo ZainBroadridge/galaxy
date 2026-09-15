@@ -19,14 +19,51 @@ async function workspace(t) {
   return root;
 }
 
-test('all six current issuers align with source manifests and retain eighteen token mappings', async () => {
+test('six artwork presets stay aligned with source manifests while the catalogue has 33 mappings', async () => {
   assert.deepEqual(ISSUER_PRESETS.map((item) => item.id), ids);
   const artwork = JSON.parse(await read('docs/brand-sources/artwork.json'));
   assert.deepEqual(artwork.map((item) => item.id).sort(), [...ids].sort());
   assert.equal(JSON.parse(await read('docs/brand-sources/securities.json')).length, ids.length);
   const entries = tokenCatalogue().entries;
-  assert.equal(entries.length, 18);
-  for (const id of ids) assert.equal(entries.filter((entry) => entry.issuerId === id).length, 3);
+  assert.equal(entries.length, 33);
+  const mappingsPerIssuer = {
+    apple: 3, tesla: 3, nvidia: 3, alphabet: 6, spacex: 3, oracle: 3,
+    omega: 3, sid: 3, amanx: 3, teslatx: 3,
+  };
+  assert.deepEqual([...new Set(entries.map((entry) => entry.issuerId))].sort(), Object.keys(mappingsPerIssuer).sort());
+  for (const [id, count] of Object.entries(mappingsPerIssuer)) {
+    assert.equal(entries.filter((entry) => entry.issuerId === id).length, count, id);
+  }
+  for (const entry of entries) {
+    const preset = ISSUER_PRESETS.find((item) => item.id === entry.issuerId);
+    if (preset) {
+      assert.equal(entry.issuerName, preset.name, entry.id);
+      assert.equal(eventIssuerBranding(entry).issuerLogoPreset, preset.id, entry.id);
+    } else {
+      assert.equal(eventIssuerBranding(entry).issuerLogoPreset, null,
+        `${entry.id} must not acquire another issuer's bundled logo.`);
+    }
+  }
+});
+
+test('GOOGL and GOOG retain the same Alphabet issuer with distinct Class A and Class C security names', () => {
+  const alphabet = ISSUER_PRESETS.find((item) => item.id === 'alphabet');
+  const expected = {
+    GOOGL: 'Alphabet Inc. - Class A Common Stock',
+    GOOG: 'Alphabet Inc. - Class C Capital Stock',
+  };
+  for (const [ticker, securityName] of Object.entries(expected)) {
+    assert.equal(alphabet.securities.find((security) => security.ticker === ticker).name, securityName);
+    const entries = tokenCatalogue().entries.filter((entry) => entry.symbol === ticker);
+    assert.equal(entries.length, 3);
+    assert.deepEqual(entries.map((entry) => entry.platformKey), ['ISSUER', 'DINARI', 'COINBASE']);
+    for (const entry of entries) {
+      assert.equal(entry.issuerId, 'alphabet');
+      assert.equal(entry.issuerName, 'Alphabet Inc.');
+      assert.equal(entry.securityTicker, ticker);
+      assert.equal(entry.securityName, securityName);
+    }
+  }
 });
 
 test('unknown historical issuer remains readable and a custom upload remains usable without a preset', () => {
