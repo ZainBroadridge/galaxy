@@ -55,7 +55,7 @@ export default function IssuerBrandingFields({ form, setForm, file, setFile, dis
   const presetUrl = selectedIssuer ? `/issuer-logos/${selectedIssuer.logoFile}` : null;
   const logoUrl = preview || (failedPreset !== presetUrl ? presetUrl : null);
   const cusipOptions = searchCusips(entries, form.cusip).map((entry) => ({
-    id: entry.id, label: entry.cusip, detail: `${entry.issuerName} / ${entry.platform || 'Issuer sponsored'}`,
+    id: entry.id, label: entry.cusip, detail: `${entry.issuerName} / ${entry.securityTicker || entry.symbol} / ${entry.platform || 'Issuer sponsored'}`,
   }));
   return <section className="create-event-section issuer-branding-fields">
     <header className="create-event-section-heading"><h2>Issuer and tokenised security</h2>

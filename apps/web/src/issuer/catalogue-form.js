@@ -5,9 +5,16 @@ export function catalogueIssuers(catalogue) {
   const unique = new Map();
   for (const entry of catalogue?.entries ?? []) {
     if (!unique.has(entry.issuerId)) unique.set(entry.issuerId, {
-      id: entry.issuerId, name: entry.issuerName, aliases: entry.aliases ?? [],
-      securities: [{ name: entry.securityName, ticker: entry.securityTicker || entry.symbol }],
+      id: entry.issuerId, name: entry.issuerName, aliases: [], securities: [],
     });
+    const issuer = unique.get(entry.issuerId);
+    for (const alias of entry.aliases ?? []) {
+      if (!issuer.aliases.some((value) => key(value) === key(alias))) issuer.aliases.push(alias);
+    }
+    const ticker = entry.securityTicker || entry.symbol;
+    if (!issuer.securities.some((security) => key(security.ticker) === key(ticker))) {
+      issuer.securities.push({ name: entry.securityName, ticker });
+    }
   }
   return [...unique.values()];
 }
@@ -17,10 +24,19 @@ export function exactCatalogueIssuer(catalogue, value) {
   return catalogueIssuers(catalogue).find((issuer) => [issuer.name, issuer.id, ...issuer.aliases]
     .some((term) => key(term) === query)) ?? null;
 }
-export function catalogueEntry(catalogue, issuerValue, platformValue) {
+export function catalogueEntry(catalogue, issuerValue, platformValue, securityTicker = '') {
   const issuer = exactCatalogueIssuer(catalogue, issuerValue);
-  return issuer ? catalogue.entries.find((entry) => entry.issuerId === issuer.id
-    && key(entry.platform) === key(platformValue)) ?? null : null;
+  if (!issuer) return null;
+  const entries = catalogue.entries.filter((entry) => entry.issuerId === issuer.id
+    && key(entry.platform) === key(platformValue));
+  // An explicit symbol selects its share class; platform changes retain the
+  // selected class even when multiple securities have the same issuer name.
+  const explicit = entries.find((entry) => [entry.symbol, entry.securityTicker]
+    .some((symbol) => key(symbol) === key(issuerValue)));
+  if (explicit) return explicit;
+  if (key(securityTicker)) return entries.find((entry) => [entry.symbol, entry.securityTicker]
+    .some((symbol) => key(symbol) === key(securityTicker))) ?? null;
+  return entries[0] ?? null;
 }
 export function applyCatalogueEntry(form, entry) {
   return { ...form, tokenCatalogueId: entry.id, issuerName: entry.issuerName,
@@ -43,7 +59,9 @@ export function editTokenIdentity(form, patch) {
 }
 
 export function changeTokenIssuer(form, catalogue, value) {
-  const entry = catalogueEntry(catalogue, value, form.platform);
+  const sameIssuer = exactCatalogueIssuer(catalogue, form.issuerName)?.id
+    === exactCatalogueIssuer(catalogue, value)?.id;
+  const entry = catalogueEntry(catalogue, value, form.platform, sameIssuer ? form.securityTicker : '');
   if (entry) return applyCatalogueEntry(form, entry);
   return form.tokenCatalogueId
     ? clearCatalogueEntry(form, { issuerName: value })
@@ -52,7 +70,7 @@ export function changeTokenIssuer(form, catalogue, value) {
 
 export function changeTokenPlatform(form, catalogue, value) {
   if (key(form.platform) === key(value)) return { ...form, platform: value };
-  const entry = catalogueEntry(catalogue, form.issuerName, value);
+  const entry = catalogueEntry(catalogue, form.issuerName, value, form.securityTicker);
   if (entry) return applyCatalogueEntry(form, entry);
   return form.tokenCatalogueId
     ? clearCatalogueEntry(form, { platform: value })

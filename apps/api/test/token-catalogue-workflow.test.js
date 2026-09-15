@@ -49,7 +49,7 @@ const form = (id = 'aapl-issuer') => applyCatalogueEntry({
 const wallet = `0x${'a'.repeat(40)}`;
 
 test('event creation persists the selected mapping and CUSIP in the existing transaction, then queues one snapshot', async () => {
-  for (const id of ['aapl-issuer', 'aapl-dinari', 'aapl-coinbase', 'tsla-dinari', 'nvda-coinbase']) {
+  for (const { id } of tokenCatalogue().entries.filter((entry) => entry.configured)) {
     const f = fixture(); const input = form(id); const result = await f.create(wallet, input);
     assert.deepEqual(f.inspected, [input.tokenAddress]);
     assert.equal(f.inserted().token_catalogue_id, id); assert.equal(f.inserted().cusip, input.cusip);
@@ -63,7 +63,7 @@ test('event creation persists the selected mapping and CUSIP in the existing tra
 });
 
 test('placeholder or spoofed combinations cannot reach token inspection, database writes or job creation', async () => {
-  for (const input of [form('orcl-issuer'), form('spacex-coinbase'), form('googl-dinari'),
+  for (const input of [...tokenCatalogue().entries.filter((entry) => !entry.configured).map((entry) => form(entry.id)),
     { ...form(), cusip: 'DEMO99999' }, { ...form(), tokenAddress: `0x${'b'.repeat(40)}` },
     { ...form(), platform: 'Kraken' }, { ...form(), issuerName: 'Tesla, Inc.' }]) {
     const f = fixture();

@@ -7,16 +7,37 @@ import { meetingPresentation } from '../../web/src/investor/presentation.js';
 
 const inputFor = (entry) => applyCatalogueEntry({ title: 'Preserved title', tokenToVoteRatio: 2 }, entry);
 
-test('catalogue has exactly six issuers and 18 unique demo identifiers with three independently editable listings each', () => {
+const expectedAddresses = Object.freeze({
+  'omega-issuer': '0xb16c938e43ba799b42f1ed1bee470534547816cb',
+  'sid-issuer': '0x73f48c4876a1ded6e00908a3e6b26280f1ecd08d',
+  'amanx-issuer': '0x89f5f622e7027a5dfedd78768519874b52668df4',
+  'teslatx-issuer': '0x1d5e45aa3fb87594119f6f361800210bf33be76c',
+  'aapl-issuer': '0x682e82d5a3f0bbb81b7c086081bd757cd5b2c4b4',
+  'aapl-dinari': '0xa9ae8f7a5c88f0983bf9e9e2b05ec3db3249fb6b',
+  'tsla-issuer': '0xf3ba8da491a237cebef4fc0f95baa1483f2ae0dc',
+  'tsla-dinari': '0x19f7d33190d5cb282ee46a1457876f1b767e42ca',
+  'nvda-issuer': '0xe35b668b6924e695fc3f746c76c6a4c7eed4b59f',
+  'nvda-dinari': '0x2639bbaef71c0e7445cf5cff00e9892fb8cfecf6',
+  'spacex-issuer': '0x59f35f28e1e1bae8e90ffdb48ddae46a9c43ace0',
+  'googl-issuer': '0xfabf983149841b439c68dce214b8c0b42f1bf56e',
+  'googl-dinari': '0xc46aa1ca186794d775fe542fd9d73fe33a1c79c0',
+  'goog-issuer': '0xbf3e3d3f135d8d73ba6b196e16e381bfa25f0a71',
+  'goog-dinari': '0x9701018de2bf16d335883a434008a6287e2b4c40',
+  'orcl-issuer': '0x2f852e0b0509ebe08c68bb0761f0786050840740',
+  'orcl-dinari': '0x8acd62c0940ac2253157420d8183ce7667bc34ef',
+});
+
+test('catalogue has 11 securities across 10 issuers and 33 independently identified platform mappings', () => {
   const catalogue = tokenCatalogue();
   assert.equal(catalogue.chainId, 80002);
   assert.deepEqual(catalogue.platforms, ['Coinbase', 'Dinari']);
-  assert.equal(catalogue.entries.length, 18);
-  assert.equal(new Set(catalogue.entries.map((entry) => entry.id)).size, 18);
-  assert.equal(new Set(catalogue.entries.map((entry) => entry.cusip)).size, 18);
-  assert.equal(catalogueIssuers(catalogue).length, 6);
-  for (const issuer of catalogueIssuers(catalogue)) {
-    const rows = catalogue.entries.filter((entry) => entry.issuerId === issuer.id);
+  assert.deepEqual(Object.keys(TOKEN_CATALOGUE), ['AAPL', 'TSLA', 'NVDA', 'GOOGL', 'ORCL', 'SPACEX', 'GOOG', 'OMEGA', 'SID', 'AMANX', 'TESLATX']);
+  assert.equal(catalogue.entries.length, 33);
+  assert.equal(new Set(catalogue.entries.map((entry) => entry.id)).size, 33);
+  assert.equal(new Set(catalogue.entries.map((entry) => entry.cusip)).size, 33);
+  assert.equal(catalogueIssuers(catalogue).length, 10);
+  for (const symbol of Object.keys(TOKEN_CATALOGUE)) {
+    const rows = catalogue.entries.filter((entry) => entry.symbol === symbol);
     assert.deepEqual(rows.map((entry) => entry.platform), ['', 'Dinari', 'Coinbase']);
     for (const row of rows) {
       assert.match(row.cusip, /^DEMO\d{5}$/u);
@@ -25,23 +46,29 @@ test('catalogue has exactly six issuers and 18 unique demo identifiers with thre
       assert.equal(row.sponsorship, row.platform ? 'CUSTODIAL' : 'ISSUER_SPONSORED');
     }
   }
-});
-
-test('all nine configured mappings retain the supplied token addresses; other entries are non-deployable placeholders', () => {
-  const catalogue = tokenCatalogue();
-  const expected = {
-    AAPL: '0x682e82d5a3f0bbb81b7c086081bd757cd5b2c4b4',
-    TSLA: '0xf3ba8da491a237cebef4fc0f95baa1483f2ae0dc',
-    NVDA: '0xe35b668b6924e695fc3f746c76c6a4c7eed4b59f',
-  };
-  for (const entry of catalogue.entries) {
-    assert.equal(entry.tokenAddress, expected[entry.symbol] ?? UNCONFIGURED_TOKEN_ADDRESS);
-    assert.equal(entry.configured, Boolean(expected[entry.symbol]));
+  // Existing identifiers must remain stable when token addresses change.
+  for (const [index, symbol] of ['aapl', 'tsla', 'nvda', 'googl', 'orcl', 'spacex'].entries()) {
+    for (const [platformIndex, platform] of ['issuer', 'dinari', 'coinbase'].entries()) {
+      assert.equal(catalogue.entries.find((entry) => entry.id === `${symbol}-${platform}`).cusip,
+        `DEMO0${index + 1}00${platformIndex + 1}`);
+    }
   }
-  assert.equal(catalogue.entries.filter((entry) => entry.configured).length, 9);
 });
 
-test('selection validates every identity field and distinguishes mappings even when addresses temporarily match', () => {
+test('all 17 supplied addresses are assigned to the correct mappings and Coinbase remains unconfigured', () => {
+  const catalogue = tokenCatalogue();
+  for (const entry of catalogue.entries) {
+    assert.equal(entry.tokenAddress, expectedAddresses[entry.id] ?? UNCONFIGURED_TOKEN_ADDRESS, entry.id);
+    assert.equal(entry.configured, Object.hasOwn(expectedAddresses, entry.id), entry.id);
+  }
+  assert.equal(catalogue.entries.filter((entry) => entry.configured).length, 17);
+  assert.equal(new Set(catalogue.entries.filter((entry) => entry.configured).map((entry) => entry.tokenAddress)).size, 17);
+  const coinbase = catalogue.entries.filter((entry) => entry.platformKey === 'COINBASE');
+  assert.equal(coinbase.length, 11);
+  assert.ok(coinbase.every((entry) => !entry.configured && entry.tokenAddress === UNCONFIGURED_TOKEN_ADDRESS));
+});
+
+test('selection validates every identity field and rejects crossing issuer and Dinari mappings', () => {
   for (const entry of tokenCatalogue().entries.filter((item) => item.configured)) {
     const input = inputFor(entry);
     assert.equal(resolveTokenSelection(input).id, entry.id);
@@ -50,7 +77,7 @@ test('selection validates every identity field and distinguishes mappings even w
     }
   }
   const apple = tokenCatalogue().entries.filter((entry) => entry.symbol === 'AAPL');
-  assert.equal(new Set(apple.map((entry) => entry.tokenAddress)).size, 1);
+  assert.equal(new Set(apple.map((entry) => entry.tokenAddress)).size, 3);
   assert.equal(new Set(apple.map((entry) => entry.id)).size, 3);
   assert.throws(() => resolveTokenSelection({ ...inputFor(apple[0]), tokenCatalogueId: apple[1].id }), { code: 'TOKEN_MAPPING_MISMATCH' });
 });
@@ -76,10 +103,10 @@ test('responses are copies and immutable server configuration cannot be changed 
   assert.ok(Object.isFrozen(TOKEN_CATALOGUE.AAPL.listings.DINARI));
 });
 
-test('issuer and platform selection resolves all 18 rows and prefills atomically without touching event inputs', () => {
+test('issuer, security and platform selection resolves every row and preserves event inputs', () => {
   const catalogue = tokenCatalogue();
   for (const entry of catalogue.entries) {
-    const row = catalogueEntry(catalogue, entry.issuerName, entry.platform);
+    const row = catalogueEntry(catalogue, entry.issuerName, entry.platform, entry.securityTicker);
     assert.equal(row.id, entry.id);
     const before = { title: 'AGM', proposals: [{ title: 'Elect directors' }], issuerLogoId: 'custom-logo', recordDateAt: 'record' };
     const applied = applyCatalogueEntry(before, row);
@@ -159,4 +186,44 @@ test('issuer and platform changes prefill matching mappings and clear stale mapp
   const manual = editTokenIdentity(custom, { tokenAddress: `0x${'b'.repeat(40)}`, cusip: 'CUSTOM001' });
   const renamed = changeTokenIssuer(manual, catalogue, 'Renamed independent issuer');
   assert.equal(renamed.tokenAddress, manual.tokenAddress); assert.equal(renamed.cusip, manual.cusip);
+});
+
+
+test('Alphabet exposes both share classes once and exact ticker lookups select the correct token', () => {
+  const catalogue = tokenCatalogue();
+  const before = JSON.stringify(catalogue);
+  const alphabet = catalogueIssuers(catalogue).filter((issuer) => issuer.id === 'alphabet');
+  assert.equal(alphabet.length, 1);
+  assert.deepEqual(alphabet[0].securities.map((security) => security.ticker), ['GOOGL', 'GOOG']);
+  assert.ok(alphabet[0].aliases.includes('GOOG'));
+  for (const platform of ['', 'Dinari', 'Coinbase']) {
+    for (const symbol of ['GOOG', 'GOOGL']) {
+      const entry = catalogueEntry(catalogue, symbol, platform);
+      assert.equal(entry.symbol, symbol);
+      assert.equal(entry.platform, platform);
+      assert.equal(searchCusips(catalogue.entries, entry.cusip)[0].id, entry.id);
+    }
+  }
+  assert.equal(catalogueEntry(catalogue, 'SPCX', '').id, 'spacex-issuer');
+  assert.equal(searchCusips(catalogue.entries, 'GOOG')[0].symbol, 'GOOG');
+  assert.equal(searchIssuers(catalogueIssuers(catalogue), 'GOOG')[0].id, 'alphabet');
+  assert.equal(JSON.stringify(catalogue), before, 'Merging issuer options cannot mutate catalogue data.');
+});
+
+test('GOOG keeps its share class when platforms change, including a round trip through unconfigured Coinbase', () => {
+  const catalogue = tokenCatalogue();
+  let form = inputFor(catalogue.entries.find((entry) => entry.id === 'goog-issuer'));
+  for (const [platform, id] of [['Dinari', 'goog-dinari'], ['Coinbase', 'goog-coinbase'], ['', 'goog-issuer']]) {
+    form = changeTokenPlatform(form, catalogue, platform);
+    assert.equal(form.tokenCatalogueId, id);
+    assert.equal(form.securityTicker, 'GOOG');
+    assert.equal(selectedCatalogueEntry(catalogue, form).id, id);
+  }
+  form = changeTokenIssuer(form, catalogue, 'Alphabet Inc.');
+  assert.equal(form.tokenCatalogueId, 'goog-issuer');
+  form = changeTokenIssuer(form, catalogue, 'GOOGL');
+  assert.equal(form.tokenCatalogueId, 'googl-issuer');
+  form = changeTokenIssuer(form, catalogue, 'Apple');
+  assert.equal(form.tokenCatalogueId, 'aapl-issuer');
+  assert.equal(catalogueEntry(catalogue, 'Alphabet', 'Dinari', 'UNKNOWN'), null);
 });
