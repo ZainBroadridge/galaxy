@@ -6,6 +6,12 @@ import { useWallet } from '../wallet.jsx';
 
 const InvestorSessionContext = createContext(null);
 
+function isDisclaimerSignatureRejection(value) {
+  return value?.code === 'ACTION_REJECTED'
+    || value?.code === 4001
+    || value?.info?.error?.code === 4001;
+}
+
 export function InvestorSessionProvider({ children }) {
   const wallet = useWallet();
   const [session, setSession] = useState(null);
@@ -86,7 +92,8 @@ export function InvestorSessionProvider({ children }) {
       saveSession(result);
       setSession(result);
     })().catch((value) => {
-      if (operation.current === id) setError(value);
+      if (operation.current === id) setError(isDisclaimerSignatureRejection(value)
+        ? new Error('Kindly sign the disclaimer to continue.') : value);
     }).finally(() => { if (operation.current === id) setSigning(false); });
   }, [intent, signing, wallet.account, wallet.connected, wallet.signDisclaimer]);
 

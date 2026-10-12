@@ -13,6 +13,7 @@
 .issuer-login-card label { display: grid; gap: 8px; }
 .issuer-login-card small { color: #667085; line-height: 1.5; }
 .issuer-login-card > a { text-decoration: underline; }
+.issuer-login-card > .issuer-login-back { align-self: flex-start; margin: 0; font-size: 15px; font-weight: 700; line-height: 24px; }
 
 .issuer-shell { --pv-topbar-height: 84px; }
 .issuer-shell .pv-topbar { background: #fff; }

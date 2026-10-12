@@ -1,5 +1,5 @@
 import {
-  Link, NavLink, Outlet, useLocation,
+  Link, NavLink, Outlet, useLocation, useNavigate,
 } from 'react-router-dom';
 import { reownConfigured } from '../appkit.js';
 import BrandLockup, { ProxyVoteMark } from '../components/BrandLockup.jsx';
@@ -63,6 +63,7 @@ function navClass(active) {
 export default function IssuerLayout() {
   const wallet = useWallet();
   const location = useLocation();
+  const navigate = useNavigate();
   const issuer = useIssuerSession();
   const { unreadCount } = useNotifications();
   const homeRoute = location.pathname === '/issuer/home';
@@ -108,7 +109,7 @@ export default function IssuerLayout() {
             <span>{shortAddress(wallet.account)}</span>
             <ChevronIcon />
           </button>
-          <button className="issuer-exit-button" type="button" onClick={() => void issuer.logout()}
+          <button className="issuer-exit-button" type="button" onClick={() => { void issuer.logout(); navigate('/', { replace: true }); }}
             aria-label="Exit issuer interface" title="Exit issuer interface">
             <SvgIcon><path d="M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5M14 8l4 4-4 4M8 12h11" /></SvgIcon>
           </button>

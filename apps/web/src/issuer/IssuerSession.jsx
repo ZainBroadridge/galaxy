@@ -59,6 +59,7 @@ export function IssuerLogin() {
     finally { setBusy(false); }
   }
   return <div className="issuer-login-page"><ParticleBackground /><form onSubmit={submit} className="issuer-login-card">
+    <BackLink to="/" className="issuer-login-back">Back to investor sign-in</BackLink>
     <BrandLockup><ProxyVoteMark stacked /></BrandLockup>
     <h1>Issuer interface</h1><p>Enter the demonstration password to organise and manage voting events.</p>
     <label><span className="field-label">Password<RequiredMark /></span><input type="password" value={password} autoComplete="current-password" required
@@ -66,6 +67,5 @@ export function IssuerLogin() {
     {error && <p role="alert" className="investor-error">{error.message}</p>}
     <button className="button" disabled={busy || checking}>{busy ? 'Checking...' : 'Enter issuer interface'}</button>
     <small>This shared-password gate is for demonstration only, not production issuer authorization.</small>
-    <BackLink to="/">Back to investor sign-in</BackLink>
   </form></div>;
 }
