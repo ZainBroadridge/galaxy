@@ -3,7 +3,9 @@
 // Wallet keys may use lowercase or mixed case. Keep one entry per wallet.
 export const WALLET_EMAILS = Object.freeze({
   '0xca430770ACA59D44BbC4ae0abacBA52cb8E39867': 'zainnq18@gmail.com',
-  '0x2222222222222222222222222222222222222222': 'voter.two@example.com',
+  '0xf7D7b4Ca09362746Bf058e4A4BBd9C066Ebeefb6': 'sudhanvahariharan@gmail.com',
+  '0x5AabCdb7cA2195906Ca86B78097ADb28c5C0c8Cf' : 'Aman.mundra@605studios.xyz',
+  '0x8e5860DbA228DB1d0335B4B3F0fC2883Ea1c232C': 'souravsarkar312@gmail.com'
 });
 
 export function receiptRecipient(wallet, environment = process.env, mappings = WALLET_EMAILS) {
